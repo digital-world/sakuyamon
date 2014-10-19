@@ -4,21 +4,13 @@
 
 ## Original Illustrated Handbook
 
-|                     Digimon                    |
-|                    Sakuyamon                   |
-|:----------------------------------------------:|
-| ![](https://github.com/digital-world/the-book/blob/master/.book/nature/readme/brainstorm.png)|
-|:----------------------------------------------:|
-|:arrow_down_small: Level|:arrow_down_small: Type|
-|:----------------------:|:---------------------:|
-| Ultimate               | God Man               |
-|:----------------------:|:---------------------:|
-|:arrow_down_small: Special Move                 |
-|:-----------------------------------------------|
-| + blah1                                        |
-| + blah2                                        |
-|:-----------------------------------------------|
-|:arrow_down_small: Profile                      |
-|:----------------------------------------------:|
-|Blah Blah Blee Blee                             |
-
+<table>
+    <tr><td> Sakuyamon </td></tr>
+    <tr><td> <img src="https://github.com/digital-world/the-book/blob/master/.book/nature/readme/brainstorm.png"/> </td></tr>
+    <tr><td> :arrow_down_small: Level </td> <td> :arrow_down_small: Type </td></tr>
+    <tr><td> Ultimate </td> <td>  God Man </td></tr>
+    <tr><td> :arrow_down_small: Special Move </td></tr>
+    <tr><td> <ul> <li> Blah1 </li> <li> Blah2 </li> </ul> </td></tr>
+    <tr><td> :arrow_down_small: Profile </td></tr>
+    <tr><td> Blah Blah Blee Blee </td></tr>
+</table>
