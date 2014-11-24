@@ -1,7 +1,7 @@
 # Sakuyamon
 
 Be in charge of `gyoudmon.org`. <p align="center"> <img
-src="/island/stone/brainstorm.png" /> </p>
+src="/.book/island/stone/brainstorm.png" /> </p>
 
 ## Project Conventions
 
