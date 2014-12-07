@@ -4,4 +4,4 @@
 
 (define version "Baby I")
 
-(define pkg-desc "Be in charge of `gyoudmon.org`.")
+(define pkg-desc "Be in charge of [gyoudmon.org](http://gyoudmon.org).")
