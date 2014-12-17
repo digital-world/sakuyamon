@@ -3,6 +3,10 @@
 Be in charge of [gyoudmon.org](http://gyoudmon.org). <p align="center">
 <img src="/island/stone/brainstorm.png" /> </p>
 
+## The **Digivice** Scripts
+* [**skymn-realize.rkt**](digivice/skymn-realize.rkt): Launch the Web
+  Server.
+
 ## Project Conventions
 
 How to build a _Digital World_? Okay, we don't start with the _File
@@ -13,8 +17,6 @@ Island_, but we own some concepts from the _Digimon Series_.
 **Note** Project or Subprojects are organized as the _digimons_ within
 **village**. Each project may be separated into several repositories
 within **island**, **tamer**, and so on.
-* **The Root Directory** is a mystery that sets up all essentials of the
-  world.
 * **village** is the birth place of _digimons_. Namely it works like
   `src`.
 * **digitama** is the egg of _digimons_. Namely it works like
