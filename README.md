@@ -3,10 +3,6 @@
 Be in charge of [gyoudmon.org](http://gyoudmon.org). <p align="center">
 <img src="/stone/brainstorm.png" /> </p>
 
-## The **Digivice** Scripts
-* [**sakuyamon-realize.rkt**](digivice/sakuyamon-realize.rkt): Launch
-  the Web Server.
-
 ## Project Conventions
 
 How to build a _Digital World_? Okay, we don't start with the _File
