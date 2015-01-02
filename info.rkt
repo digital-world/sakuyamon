@@ -6,7 +6,8 @@
 
 (define pkg-desc "Be in charge of [gyoudmon.org](http://gyoudmon.org).")
 
-(define compile-omit-paths (list "makefile.rkt" "info.rkt" "stone"))
+(define compile-omit-paths (list "makefile.rkt" "info.rkt" "stone" "tamer" "village"))
+(define test-omit-paths (list "makefile.rkt" "info.rkt" "stone" "digitama" "digivice" "island" "village"))
 
 (define skymn-config-port #false)
 (define skymn-config-ssl #false)
