@@ -6,7 +6,6 @@ Thumbs.db
 # Hide some auto-generating files
 compiled/
 **/handbook/*.html
-!**/handbook/index.html
 
 # Hide some free snapshots
 grand-theft-wumpus.png
