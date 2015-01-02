@@ -52,7 +52,8 @@
   
   (for ([handbook (in-list (map {lambda [type] (build-path tmrsdir type "handbook.scrbl")} (list "behavior")))]
         #:when (file-exists? handbook))
-    (parameterize ([current-namespace (make-base-namespace)])
+    (parameterize ([current-directory (path-only handbook)]
+                   [current-namespace (make-base-namespace)])
         (namespace-require 'scribble/render)
         (eval '(require (prefix-in html: scribble/html-render)))
         (eval `(render (list ,(dynamic-require handbook 'doc)) (list ,(file-name-from-path handbook))
