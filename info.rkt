@@ -2,12 +2,15 @@
 
 (define collection "Sakuyamon")
 
-(define version "Baby I")
+(define version "Baby")
 
 (define pkg-desc "Be in charge of [gyoudmon.org](http://gyoudmon.org).")
 
-(define compile-omit-paths (list "makefile.rkt" "info.rkt" "stone" "tamer" "village"))
-(define test-omit-paths (list "makefile.rkt" "info.rkt" "stone" "digitama" "digivice" "island" "village"))
+(define compile-omit-paths (list "makefile.rkt" "submake.rkt" "info.rkt" "stone" "tamer"))
+(define test-omit-paths (list "makefile.rkt" "submake.rkt" "info.rkt" "stone" "digivice" "digitama" "terminus"))
+
+(define racket-launcher-names (list "sakuyamon"))
+(define racket-launcher-libraries (list "digivice/sakuyamon.rkt"))
 
 (define skymn-config-port #false)
 (define skymn-config-ssl #false)
