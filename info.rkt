@@ -4,7 +4,7 @@
 
 (define version "Baby")
 
-(define pkg-desc "Manage and protect [gyoudmon.org](http://gyoudmon.org).")
+(define pkg-desc "Manage and protect http://gyoudmon.org.")
 
 (define compile-omit-paths (list "stone"))
 (define test-omit-paths 'all)
