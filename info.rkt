@@ -6,8 +6,8 @@
 
 (define pkg-desc "Be in charge of [gyoudmon.org](http://gyoudmon.org).")
 
-(define compile-omit-paths (list "makefile.rkt" "submake.rkt" "info.rkt" "stone" "tamer"))
-(define test-omit-paths (list "makefile.rkt" "submake.rkt" "info.rkt" "stone" "digivice" "digitama" "terminus"))
+(define compile-omit-paths (list "stone"))
+(define test-omit-paths 'all)
 
 (define racket-launcher-names (list "sakuyamon"))
 (define racket-launcher-libraries (list "digivice/sakuyamon.rkt"))
