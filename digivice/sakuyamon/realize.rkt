@@ -4,8 +4,7 @@
 
 (define desc "Launch the Web Server")
 
-{module sakuyamon racket/base
-  (require racket/unit)
+{module sakuyamon racket
   (require racket/async-channel)
   
   (require net/tcp-sig)
@@ -23,12 +22,12 @@
   (define-values/invoke-unit/infer sakuyamon@)
 
   (let* ([ping (make-async-channel #false)]
-         [shutdown (parameterize ([error-display-handler void])
+         [shutdown (parameterize ([error-display-handler {λ [brief netexn] (eprintf "~a~n" brief)}])
                      (serve #:confirmation-channel ping))]
          [pinged (async-channel-get ping)])
-    (cond [(exn? pinged) (printf "~a~n" (exn-message pinged))] 
-          [else (dynamic-wind {λ _ (printf "sakuyamon: mission start~n")}
-                              {λ _ (with-handlers ([exn:break? {λ _ (newline)}])
-                                     #|do-not-return|# (async-channel-get ping))}
-                              {λ _ (printf "sakuyamon: mission complete!~n")})])
-    (void (shutdown)))}
+    (dynamic-wind void
+                  {λ _ (cond [(exn:fail:network:errno? pinged) (exit (car (exn:fail:network:errno-errno pinged)))] 
+                             [else (with-handlers ([exn:break? {λ _ (newline)}])
+                                     (printf "sakuyamon: mission start~n")
+                                     #|do-not-return|# (async-channel-get ping))])}
+                  shutdown))}
