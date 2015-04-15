@@ -1,6 +1,6 @@
 #lang typed/racket
 
-(require "../../DigiGnome/digitama/runtime.typed.rkt")
+(require "../../DigiGnome/digitama/digicore.typed.rkt")
 
 (define show-help-and-exit : {[#:erract (Option String)] -> Void}
   {lambda [#:erract [error-action #false]]
