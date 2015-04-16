@@ -1,11 +1,17 @@
 # [🏡<sub>🐈</sub>](http://sakuyamon.gyoudmon.org)Tamer's Handbook: Sakuyamon
 
-> _Sakuyamon_ is the manager and protector of .
+> _Sakuyamon_ is the manager and protector of
+> [gyoudmon.org](http://gyoudmon.org).
 
 I am sorry meanwhile I could not tell more details.
 
 ---
 
-> 📌No particular example!
+> + 📚Behaviors and Features
+>     + 📖
+[sakuyamon.rkt](http://sakuyamon.gyoudmon.org/sakuyamon.rkt)
+>       - 💚 1 - Sakuyamon, Realize!
 >
-> [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://sakuyamon.gyoudmon.org)
+> 📌1 example, 0 failures, 0 errors, 100.00% Okay.
+>
+> [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://sakuyamon.gyoudmon.org)
