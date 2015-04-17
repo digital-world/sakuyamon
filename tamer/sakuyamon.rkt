@@ -38,9 +38,6 @@ hence we only need to recall the @deftech{action}s:
 @handbook-scenario{Sakuyamon, Realize!}
 
 @chunk[|<sakuyamon, realize!>|
-       (define-values {outin stdout} (make-pipe #false 'outin 'stdout))
-       (define-values {errin stderr} (make-pipe #false 'errin 'stderr))
-       
        (define-tamer-case realize "Sakuyamon, Realize!" |<testcase: realize>|)]
 
 Technically, @itech{Sakuyamon} is hard to cooperate with by simulating a real world.
@@ -64,6 +61,8 @@ otherwise she should tell us what is wrong.
 @tamer-note['realize]
 
 @chunk[|<testcase: realize>|
+       (define-values {outin stdout} (make-pipe #false 'outin 'stdout))
+       (define-values {errin stderr} (make-pipe #false 'errin 'stderr))
        (define send-status (curry thread-send (current-thread)))
        (define taming (thread {λ _ (parameterize ([current-output-port stdout]
                                                   [current-error-port stderr]
@@ -72,7 +71,8 @@ otherwise she should tell us what is wrong.
        (define which (sync/timeout 0.618 outin (thread-receive-evt)))
        (for-each close-output-port (list stdout stderr))
        (define errmsg (if which (port->string errin) "sakuyamon is delayed."))
-       (cond [(eq? which outin) (check-pred void? (break-thread taming 'terminate))]
+       (cond [(eq? which outin)
+              => {λ _ (and (kill-thread taming) (check-pred thread-dead? taming))}]
              [(regexp-match #px"(?<=errno=)\\d+" errmsg)
               => {λ [eno] (check = (thread-receive) (string->number (car eno)))}]
              [else (fail errmsg)])]

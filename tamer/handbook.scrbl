@@ -6,7 +6,7 @@
 
 @handbook-title[]
 
-@margin-note{@deftech{Sakuyamon} is the manager and protector of @hyperlink["http://gyoudmon.org"]{gyoudmon.org}.}
+@margin-note{@deftech{Sakuyamon} is the Queen of @hyperlink["http://gyoudmon.org"]{gyoudmon.org}.}
 
 I am sorry meanwhile I could not tell more details.
 
