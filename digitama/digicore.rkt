@@ -1,9 +1,9 @@
 #lang at-exp typed/racket
 
-@require{../../DigiGnome/digitama/digicore.typed.rkt}
+@require{../../DigiGnome/digitama/digicore.rkt}
 
 (provide (all-defined-out))
-(provide (all-from-out "../../DigiGnome/digitama/digicore.typed.rkt"))
+(provide (all-from-out "../../DigiGnome/digitama/digicore.rkt"))
 
 (current-digimon "sakuyamon")
 
