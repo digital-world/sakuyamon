@@ -9,9 +9,11 @@ I am sorry meanwhile I could not tell more details.
 > + 📚Behaviors and Features
 >     + 📖
 [sakuyamon.rkt](http://gyoudmon.org/~wargrey/.sakuyamon/sakuyamon.rkt)
->       - 💚 1 - Sakuyamon, Realize!
+>       + 📑Sakuyamon, Realize!
+>         - 💚 1 - realize --port 8080 [1st binding]
+>         - 💚 2 - realize --port 8080 [2nd binding]
 >
-> 📌1 example, 0 failures, 0 errors, 100.00% Okay.
+> 📌2 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)

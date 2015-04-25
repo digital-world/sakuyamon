@@ -4,83 +4,64 @@
 
 @(require (for-syntax "tamer.rkt"))
 
-@(tamer-story (tamer-story->libpath "sakuyamon.rkt"))
-@(define partner (tamer-partner->libpath "digivice/sakuyamon.rkt"))
-@(tamer-zone (make-tamer-zone))
-
 @handbook-story{Hello, Sakuyamon!}
 
 As the @deftech{digimon tamer}s, our story always starts with checking the @deftech{digivice}
 in order to make sure we could talk with the @deftech{digimon}s as expected.
 
-The basic testing on @itech{digivice} has already performed
-@hyperlink[(format "http://~a.gyoudmon.org/digivice.rkt" (digimon-gnome))]{here},
-hence we only need to recall the @deftech{action}s:
-
-@tamer-action[(parameterize ([current-command-line-arguments (vector)]
-                             [exit-handler void])
-                ((dynamic-require/expose (tamer-story) 'sakuyamon)))]
+@margin-note{The basic testing on @itech{digivice} has already performed
+                                  @hyperlink[(format "http://~a.gyoudmon.org/digivice.rkt" (digimon-gnome))]{here}.}
 
 @tamer-smart-summary[]
 
-@chunk[|<digivice taming start>|
+@chunk[|<sakuyamon taming start>|
        (require "tamer.rkt")
        
-       (tamer-story (tamer-story->libpath "sakuyamon.rkt"))
+       (tamer-taming-start)
        (define partner (tamer-partner->libpath "digivice/sakuyamon.rkt"))
        (define sakuyamon (parameterize ([current-command-line-arguments (vector)]
                                         [current-output-port /dev/null]
                                         [exit-handler void])
-                           (dynamic-require/expose partner 'main)))
-
-       |<digivice:*>|]
+                                  (dynamic-require/expose partner 'main)))
+       
+       |<sakuyamon:*>|]
 
 @handbook-scenario{Sakuyamon, Realize!}
 
-@chunk[|<sakuyamon, realize!>|
-       (define-tamer-case realize "Sakuyamon, Realize!" |<testcase: realize>|)]
+Once @italic{sakuyamon} has realized she would keep doing her duty before @racketidfont{shutdown}ing manually.
+All the options are designed for taming rather than real world surviving, so the default port is @racket[0]
+which means she can always be talked with via @racketidfont{sendrecv} as long as she@literal{'}s ready.
 
-Technically, @itech{Sakuyamon} is hard to cooperate with by simulating a real world.
-For the sake of simplicity, all optional parameters are defined in
-@hyperlink[(build-path (digimon-zone) "info.rkt")]{@filepath{info.rkt}}.
+@tamer-action[(define {realize-with-flush . arglist}
+                (call-with-values {λ _ (apply sakuyamon-realize arglist)}
+                                  {λ [shutdown sendrecv]
+                                    (let ([$? (shutdown)])
+                                      (when (pair? sendrecv)
+                                        (cond [(zero? $?) (printf "~a~n" (car sendrecv))]
+                                              [else (eprintf "~a~n" (cdr sendrecv))])))}))
+              (code:comment @#,t{@racketidfont{@racketcommentfont{sendrecv}} will hold the output and error messages.})
+              (realize-with-flush "--help")
+              (realize-with-flush "--SSL")
+              (code:comment @#,t{@hyperlink["https://letsencrypt.org"]{@racketcommentfont{Let@literal{'}s Encrypt}} is a kind of service})
+              (code:comment @#,t{that allow administrator enabling HTTPS esaily, freely and automatically.})]
 
-@margin-note{Meanwhile I do not care about HTTPS since HTTP and its age of plaintext transmission
-             is almost over. @hyperlink["https://letsencrypt.org"]{Let@literal{'}s Encrypt} is a kind of
-             service that allow network administrator enabling HTTPS esaily, freely and automatically.}
-
-@tamer-action[(define info-ref (get-info/full (digimon-zone)))
-              (info-ref 'sakuyamon-config-ssl {λ _ #false})
-              (info-ref 'sakuyamon-config-port {λ _ #false})
-              (parameterize ([exit-handler void])
-                ((dynamic-require/expose (tamer-story) 'sakuyamon) "realize" "--help"))]
-
-Once @italic{sakuyamon} has realized she would keep doing her duty,
-however this should be stopped in the current situation;
-otherwise she should tell us what is wrong.
+So, as usual @racket[sakuyamon-realize] itself should be checked first:
 
 @tamer-note['realize]
 
 @chunk[|<testcase: realize>|
-       (define-values {outin stdout} (make-pipe #false 'outin 'stdout))
-       (define-values {errin stderr} (make-pipe #false 'errin 'stderr))
-       (define send-status (curry thread-send (current-thread)))
-       (define taming (thread {λ _ (parameterize ([current-output-port stdout]
-                                                  [current-error-port stderr]
-                                                  [exit-handler send-status])
-                                     (sakuyamon "realize"))}))
-       (define which (sync/timeout 0.618 outin (thread-receive-evt)))
-       (for-each close-output-port (list stdout stderr))
-       (define errmsg (if which (port->string errin) "sakuyamon is delayed."))
-       (cond [(eq? which outin)
-              => {λ _ (and (kill-thread taming) (check-pred thread-dead? taming))}]
-             [(regexp-match #px"(?<=errno=)\\d+" errmsg)
-              => {λ [eno] (check = (thread-receive) (string->number (car eno)))}]
-             [else (fail errmsg)])]
+       (let-values ([{shutdown sendrecv} (sakuyamon-realize "-p" "8080")]
+                    [{errno stdmsg} (sakuyamon-realize "-p" "8080")])
+         (list (test-spec "realize --port 8080 [1st binding]"
+                          (check-pred procedure? sendrecv)
+                          (check-pred zero? (shutdown)))
+               (test-spec "realize --port 8080 [2nd binding]"
+                          (check-pred pair? stdmsg)
+                          (check-regexp-match (pregexp (format "errno=~a" (errno))) (cdr stdmsg)))))]
 
 @handbook-appendix[]
 
-@chunk[|<digivice:*>|
+@chunk[|<sakuyamon:*>|
+       {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
-         |<sakuyamon, realize!>|}
-
-       {module+ main (call-as-normal-termination tamer-prove)}]
+         (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)}]
