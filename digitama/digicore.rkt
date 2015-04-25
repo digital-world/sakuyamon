@@ -20,5 +20,3 @@
 
 (define sakuyamon-webroot : {-> Path-String} (cast (procedure-rename digimon-terminus 'sakuyamon-webroot) {-> Path-String}))
 (define sakuyamon-config : {-> Path-String} (cast (procedure-rename digimon-stone 'sakuyamon-config) {-> Path-String}))
-
-(define |tamer:use at your risk| : (Parameterof (Option Place-Channel)) (make-parameter #false))

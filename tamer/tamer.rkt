@@ -4,6 +4,8 @@
 @require{../digitama/digicore.rkt}
 @require{../../DigiGnome/digitama/tamer.rkt}
 
+(require (submod "../digivice/sakuyamon/realize.rkt" digitama))
+
 (require web-server/test)
 (require net/http-client)
 
@@ -15,9 +17,9 @@
 (define sakuyamon-realize
   {lambda arglist
     (define-values {sakuyamon place-in place-out place-err}
-      {place* #:in #false #:out #false #:err #false ping
-              (parameterize ([current-command-line-arguments (place-channel-get ping)]
-                             [|tamer:use at your risk| ping])
+      {place* #:in #false #:out #false #:err #false pipe
+              (parameterize ([current-command-line-arguments (place-channel-get pipe)]
+                             [tamer-pipe pipe])
                 (dynamic-require `(submod ,(build-path (digimon-digivice) "sakuyamon/realize.rkt") sakuyamon) #false))})
     (place-channel-put sakuyamon (list->vector (if (member "-p" arglist) arglist (list* "-p" "0" arglist))))
     (define {shutdown #:kill? [kill? #false]}
