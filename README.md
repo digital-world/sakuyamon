@@ -10,10 +10,11 @@ I am sorry meanwhile I could not tell more details.
 >     + 📖
 [sakuyamon.rkt](http://gyoudmon.org/~wargrey/.sakuyamon/sakuyamon.rkt)
 >       + 📑Sakuyamon, Realize!
->         - 💚 1 - realize --port 8080 [1st binding]
->         - 💚 2 - realize --port 8080 [2nd binding]
+>         - 💚 1 - realize --port 8080 [fresh]
+>         - 💚 2 - realize --port 8080 [already in use]
+>         - 💚 3 - realize --port 8080 [fresh again]
 >
-> 📌2 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌3 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)

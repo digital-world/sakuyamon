@@ -25,7 +25,7 @@
                 (for-each close-input-port (list place-out place-err))
                 (when kill? (place-kill sakuyamon))
                 (place-wait sakuyamon))})
-    (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown (exn-message b)) #false))}])
+    (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown #:kill? #true) (cons "" (exn-message b))))}])
       (match (sync/timeout/enable-break 1.618 (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt}) (handle-evt sakuyamon (curry cons sakuyamon)))
         [{? false?} (values (shutdown #:kill? #true) (cons "" "sakuyamon is delayed!"))]
         ['dead-evt (values (shutdown) (cons (port->string place-out) (port->string place-err)))]
