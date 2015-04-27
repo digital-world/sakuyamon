@@ -52,16 +52,14 @@ So, as usual @racket[sakuyamon-realize] itself should be checked first:
 @chunk[|<testcase: realize>|
        (let-values ([{shutdown sendrecv} (sakuyamon-realize "-p" "8080")]
                     [{errno stdmsg} (sakuyamon-realize "-p" "8080")])
-         (list (test-spec "realize --port 8080 [fresh]"
-                          (check-pred procedure? sendrecv)
-                          (check-pred zero? (shutdown)))
-               (test-spec "realize --port 8080 [already in use]"
-                          (check-pred pair? stdmsg)
-                          (check-regexp-match (pregexp (format "errno=~a" (errno))) (cdr stdmsg)))
-               (let-values ([{shutdown sendrecv} (sakuyamon-realize "-p" "8080")])
-                 (test-spec "realize --port 8080 [fresh again]"
-                          (check-pred procedure? sendrecv)
-                          (check-pred zero? (shutdown))))))]
+         (test-spec "realize --port 8080 [fresh]"
+                    |<check: realized>|)
+         (test-spec "realize --port 8080 [already in use]"
+                    (check-pred pair? stdmsg)
+                    (check-regexp-match (pregexp (format "errno=~a" (errno))) (cdr stdmsg))))
+       (let-values ([{shutdown sendrecv} (sakuyamon-realize "-p" "8080")])
+         (test-spec "realize --port 8080 [fresh again]"
+                    |<check: realized>|))]
 
 @handbook-appendix[]
 
@@ -69,3 +67,7 @@ So, as usual @racket[sakuyamon-realize] itself should be checked first:
        {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
          (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)}]
+
+@chunk[|<check: realized>|
+       (check-pred procedure? sendrecv)
+       (check-pred zero? (shutdown))]

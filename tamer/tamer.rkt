@@ -16,19 +16,22 @@
 
 (define sakuyamon-realize
   {lambda arglist
-    (define-values {sakuyamon place-in place-out place-err}
-      {place* #:in #false #:out #false #:err #false pipe
-              (parameterize ([current-command-line-arguments (place-channel-get pipe)]
-                             [tamer-pipe pipe])
-                (dynamic-require `(submod ,(build-path (digimon-digivice) "sakuyamon/realize.rkt") sakuyamon) #false))})
-    (place-channel-put sakuyamon (list->vector (if (member "-p" arglist) arglist (list* "-p" "0" arglist))))
-    (define {shutdown #:kill? [kill? #false]}
-      {λ _ (and (close-output-port place-in)
-                (for-each close-input-port (list place-out place-err))
-                (when kill? (place-kill sakuyamon))
-                (place-wait sakuyamon))})
-    (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown #:kill? #true) (cons "" (exn-message b))))}])
-      (match (sync/timeout/enable-break 1.618 (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt}) (handle-evt sakuyamon (curry cons sakuyamon)))
-        [{? false?} (values (shutdown #:kill? #true) (cons "" "sakuyamon is delayed!"))]
-        ['dead-evt (values (shutdown) (cons (port->string place-out) (port->string place-err)))]
-        [{list-no-order _ {? boolean? ssl?} {? number? port}} (values (shutdown) {λ [url] (http-sendrecv "127.0.0.1" url #:ssl? ssl? #:port port)})]))})
+    (parameterize ([current-custodian (make-custodian)])
+      (define-values {sakuyamon place-in place-out place-err}
+        {place* #:in #false #:out #false #:err #false pipe
+                (parameterize ([current-command-line-arguments (place-channel-get pipe)]
+                               [tamer-pipe pipe])
+                  (dynamic-require `(submod ,(build-path (digimon-digivice) "sakuyamon/realize.rkt") sakuyamon) #false))})
+      (place-channel-put sakuyamon (list->vector (if (member "-p" arglist) arglist (list* "-p" "0" arglist))))
+      (define {shutdown #:kill? [kill? #false]}
+        (let ([sakuyamon-zone (make-custodian)]) ; place also be managed by custodian
+          {λ _ (dynamic-wind {λ _ (close-output-port place-in)}
+                             {λ _ (and (when kill? (place-kill sakuyamon))
+                                       (place-wait sakuyamon))}
+                             {λ _ (custodian-shutdown-all sakuyamon-zone)})}))
+      (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown #:kill? #true) (cons "" (exn-message b))))}])
+        (match (sync/timeout/enable-break 1.618 (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt}) (handle-evt sakuyamon (curry cons sakuyamon)))
+          [#false (values (shutdown #:kill? #true) (cons "" "sakuyamon is delayed!"))]
+          ['dead-evt (values (shutdown) (cons (port->string place-out) (port->string place-err)))]
+          [{list-no-order _ {? boolean? ssl?} {? number? port}} (values (shutdown) {λ [url] (http-sendrecv "127.0.0.1" url #:ssl? ssl? #:port port)})]
+          [whatever (values (shutdown #:kill? #true) (cons "" (format "~a" whatever)))])))})
