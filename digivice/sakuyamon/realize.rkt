@@ -33,9 +33,9 @@
     (define-values/invoke-unit/infer sakuyamon@)
 
     (define sakuyamon-pipe (make-async-channel #false))
-    (define shutdown (serve #:confirmation-channel sakuyamon-pipe))
+    (define shutdown (parameterize ([error-display-handler void]) (serve #:confirmation-channel sakuyamon-pipe)))
     (define confirmation (async-channel-get sakuyamon-pipe))
-    (dynamic-wind void
+    (dynamic-wind {λ _ (void)}
                   {λ _ (cond [(and (exn:fail:network:errno? confirmation) confirmation)
                               => (compose1 exit {λ _ (car (exn:fail:network:errno-errno confirmation))} (curry eprintf "~a~n") exn-message)] 
                              [else (with-handlers ([exn:break? {λ _ (unless (port-closed? (current-output-port)) (newline))}])
@@ -45,7 +45,7 @@
                                      (let do-not-return ([stdin (current-input-port)])
                                        (unless (eof-object? (read-line stdin))
                                          (sync/enable-break (handle-evt stdin do-not-return)))))])}
-                  shutdown))
+                  {λ _ (shutdown)}))
 
   (call-as-normal-termination
    {λ _ (parse-command-line "sakuyamon realize"
@@ -57,7 +57,9 @@
                                                  {"Maximum number of clients can be waiting for acceptance." "mw"}]
                                          [{"-t"} ,{λ [flag ict] (sakuyamon-connection-timeout (string->number ict))}
                                                  {"Initial connection timeout." "ict"}]
-                                         [{"--SSL"} ,{λ [flag] (sakuyamon-ssl? #true)} {"Enable SSL with 443 as default port."}]}}
+                                         [{"--SSL"} ,{λ [flag] (sakuyamon-ssl? #true)} {"Enable SSL with 443 as default port."}]
+                                         [{"--USER"} ,{λ [flag] (sakuyamon-user-terminus? #true)} {"Enable Per-User Terminus."}]
+                                         [{"--DIGIMON"} ,{λ [flag] (sakuyamon-digimon-terminus? #true)} {"Enable Per-Project Terminus."}]}}
                             {λ [! . arglist] (if (null? arglist) (serve-forever) (raise-user-error 'sakuyamon "I don't need arguments: ~a" arglist))}
                             null
                             {λ [--help] (exit (display (string-replace --help #px"  -- : .+?-h --'\\s*" "")))})})}

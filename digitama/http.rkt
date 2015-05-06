@@ -11,6 +11,7 @@
 (define-type Response response)
 
 (require/typed/provide web-server/http
+                       [headers-assq* (-> Bytes (Listof Header) (Option Header))]
                        [#:struct header {[field : Bytes]
                                          [value : Bytes]}
                                  #:extra-constructor-name make-header]
@@ -39,7 +40,7 @@
                                            [output : (-> Output-Port Void)]}])
 
 (require/typed/provide web-server/configuration/responders
-                       [file-response (-> Natural Bytes Path-String (Listof Header) Response)]
+                       [file-response (-> Natural Bytes Path-String Header * Response)]
                        [servlet-loading-responder (-> URL exn Response)]
                        [gen-servlet-not-found (-> Path-String (-> URL Response))]
                        [servlet-error-responder (-> URL exn Response)]
@@ -50,3 +51,11 @@
                        [gen-protocol-responder (-> Path-String (-> URL Response))]
                        [gen-file-not-found-responder (-> Path-String (-> Request Response))]
                        [gen-collect-garbage-responder (-> Path-String (-> Response))])
+
+(define response:404 : (-> Path-String Header * Response)
+  {lambda [!found.html . headers]
+    (apply file-response 404 #"File Not Found" !found.html headers)})
+
+(define response:exn : (-> URL exn Response)
+  {lambda [uri exception . headers]
+    (servlet-loading-responder uri exception)})

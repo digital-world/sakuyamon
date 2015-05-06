@@ -6,13 +6,14 @@
 
 (require (submod "../digivice/sakuyamon/realize.rkt" digitama))
 
-(require web-server/test)
+(require net/head)
 (require net/http-client)
+(require web-server/test)
 
 (provide (all-defined-out))
 (provide (all-from-out "../digitama/digicore.rkt"))
 (provide (all-from-out "../../DigiGnome/digitama/tamer.rkt"))
-(provide (all-from-out net/http-client web-server/test))
+(provide (all-from-out net/head net/http-client web-server/test))
 
 (define sakuyamon-realize
   {lambda arglist
@@ -24,14 +25,18 @@
                   (dynamic-require `(submod ,(build-path (digimon-digivice) "sakuyamon/realize.rkt") sakuyamon) #false))})
       (place-channel-put sakuyamon (list->vector (if (member "-p" arglist) arglist (list* "-p" "0" arglist))))
       (define {shutdown #:kill? [kill? #false]}
-        (let ([sakuyamon-zone (make-custodian)]) ; place also be managed by custodian
+        (let ([sakuyamon-zone (current-custodian)]) ; place is also managed by custodian
           {λ _ (dynamic-wind {λ _ (close-output-port place-in)}
                              {λ _ (and (when kill? (place-kill sakuyamon))
                                        (place-wait sakuyamon))}
                              {λ _ (custodian-shutdown-all sakuyamon-zone)})}))
+      (define {sendrecv ssl? port}
+        {λ [uri #:method [method #"GET"] #:headers [headers null] #:data [data #false]]
+          (http-sendrecv "::1" uri #:ssl? ssl? #:port port #:method method #:headers headers #:data data)})
       (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown #:kill? #true) (cons "" (exn-message b))))}])
-        (match (sync/timeout/enable-break 1.618 (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt}) (handle-evt sakuyamon (curry cons sakuyamon)))
+        (match ((curry sync/timeout/enable-break 1.618) (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt})
+                                                        (handle-evt sakuyamon (curry cons sakuyamon)))
           [#false (values (shutdown #:kill? #true) (cons "" "sakuyamon is delayed!"))]
           ['dead-evt (values (shutdown) (cons (port->string place-out) (port->string place-err)))]
-          [{list-no-order _ {? boolean? ssl?} {? number? port}} (values (shutdown) {λ [url] (http-sendrecv "127.0.0.1" url #:ssl? ssl? #:port port)})]
+          [{list-no-order _ {? boolean? ssl?} {? number? port}} (values (shutdown) (sendrecv ssl? port))]
           [whatever (values (shutdown #:kill? #true) (cons "" (format "~a" whatever)))])))})

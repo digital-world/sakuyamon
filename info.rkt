@@ -12,6 +12,9 @@
 (define racket-launcher-names (list "sakuyamon"))
 (define racket-launcher-libraries (list "digivice/sakuyamon.rkt"))
 
+(define sakuyamon-terminus-user? #true)
+(define sakuyamon-terminus-digimon? #true)
+
 (define sakuyamon-config-ssl? #false)
 (define sakuyamon-config-port #false)
 (define sakuyamon-config-max-waiting 511)
