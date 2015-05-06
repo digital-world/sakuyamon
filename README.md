@@ -18,8 +18,8 @@ Each instance has 3 types of _termini_, or _htdocs_ or _webroot_:
 * _**Main Terminus**_: The major and default one shipped with the
   instance.
 
-* _**Per-User Terminus**_: The one made for system users in their home
-  directories.
+* _**Per-User Terminus**_: The one made for system users locates in
+  their home directories.
 
 * _**Per-Digimon Terminus**_: The one made for project wikis like
   [Github
@@ -35,23 +35,23 @@ Each instance has 3 types of _termini_, or _htdocs_ or _webroot_:
 >         - 💚 2 - realize --port 8080 [already in use]
 >         + 📑Dispatch Rules!
 >           + 📑Main Terminus
->             - 💔 1 - /
->             - 💔 2 - /~
->             - 💔 3 - /wargrey/.sakuyamon
->             - 💔 4 - /.sakuyamon/~wargrey
+>             - 💚 1 - /
+>             - 💚 2 - /~
+>             - 💚 3 - /wargrey/.sakuyamon
+>             - 💚 4 - /.sakuyamon/~wargrey
 >           + 📑Per-User Terminus
->             - 💔 1 - /~wargrey
->             - 💔 2 - /~bin/.
->             - 💔 3 - /~root/default.rkt
+>             - 💚 1 - /~wargrey
+>             - 💚 2 - /~bin/.
+>             - 💚 3 - /~root/default.rkt
 >           + 📑Per-Digimon Terminus
->             - 💔 1 - /~bin/.sakuyamon
->             - 💔 2 - /~nobody/.DigiGnome/index.html
->     + 📖
-[racket.rkt](http://gyoudmon.org/~wargrey/.sakuyamon/racket.rkt)
+>             - 💚 1 - /~bin/.sakuyamon
+>             - 💚 2 - /~nobody/.DigiGnome/index.html
+>           + 📑Function URLs
+>             - 💚 1 - /conf/collect-garbage
 >       + 📑Typed Racket Libraries!
 >         - 💚 1 - Web Application
 >
-> 📌12 examples, 9 failures, 0 errors, 25.00% Okay.
+> 📌13 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
-[🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)
+[🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)

@@ -12,6 +12,7 @@
 
 (require/typed/provide web-server/http
                        [headers-assq* (-> Bytes (Listof Header) (Option Header))]
+                       [response/xexpr (-> Any [#:code Natural] [#:message Bytes] Response)]
                        [#:struct header {[field : Bytes]
                                          [value : Bytes]}
                                  #:extra-constructor-name make-header]
@@ -56,6 +57,16 @@
   {lambda [!found.html . headers]
     (apply file-response 404 #"File Not Found" !found.html headers)})
 
+(define response:gc : (-> Response)
+  {lambda []
+    (define bbyte (current-memory-use))
+    (collect-garbage)
+    (define mb (/ (- bbyte (current-memory-use)) 1024.0 1024.0))
+    (define message (format "~aMB garbage has been collected" (~r mb #:precision '{= 3})))
+    (response/xexpr #:code 200 #:message (string->bytes/utf-8 message)
+                    `(html (head (title "Garbage Collected"))
+                           (body (p ,message))))})
+
 (define response:exn : (-> URL exn Response)
-  {lambda [uri exception . headers]
+  {lambda [uri exception]
     (servlet-loading-responder uri exception)})

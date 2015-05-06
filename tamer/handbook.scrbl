@@ -18,7 +18,7 @@ simple but also ready for large-scale extension.
 Each instance has 3 types of @deftech[#:key "terminus"]{termini}, or @italic{htdocs} or @italic{webroot}:
 @(itemlist #:style 'compact
            @item{@deftech{@bold{Main Terminus}}: The major and default one shipped with the instance.}
-           @item{@deftech{@bold{Per-User Terminus}}: The one made for system users in their home directories.}
+           @item{@deftech{@bold{Per-User Terminus}}: The one made for system users locates in their home directories.}
            @item{@deftech{@bold{Per-Digimon Terminus}}: The one made for project wikis like
                   @hyperlink["https://help.github.com/articles/what-are-github-pages/"]{Github Pages}.})
 
@@ -26,5 +26,3 @@ Each instance has 3 types of @deftech[#:key "terminus"]{termini}, or @italic{htd
 @handbook-smart-table[]
 
 @include-section[(submod "sakuyamon.rkt" doc)]
-
-@include-section[(submod "racket.rkt" doc)]

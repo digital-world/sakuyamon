@@ -48,26 +48,37 @@
         (define read-request http:read-request)
         
         (define dispatch-cache (make-hash)) ; hash has its own semaphor as well as catch-table for ref set! and remove!
-        (define dispatch {λ [conn req] (with-handlers ([exn? {λ [e] ((dispatch-exception (request-uri req) e) conn req)}])
-                                         (define ->host {λ [host] (string->symbol (string-downcase (if (bytes? host) (bytes->string/utf-8 host) host)))})
-                                         (define host (cond [(url-host (request-uri req)) => ->host]
-                                                            [(headers-assq* #"Host" (request-headers/raw req)) => (compose1 ->host header-value)]
-                                                            [else 'none]))
-                                         (define paths (url-path (request-uri req)))
-                                         (define-values {user? digimon?}
-                                           (values (and (false? (null? paths)) (let ([p (path/param-path (car paths))]) (regexp-match? #"^[~].+" p) p))
-                                                   (and (false? (null? (cdr paths))) (let ([p (path/param-path (cadr paths))]) (regexp-match? #"^\\..+" p) p))))
-                                         ((hash-ref! dispatch-cache (list host user? digimon?)
-                                                     {λ _ (parameterize ([current-custodian (current-server-custodian)])
-                                                            (dispatch-terminus host (make-header #"Terminus" (cond [digimon? #"Per-Digimon"]
-                                                                                                                   [user? #"Per-User"]
-                                                                                                                   [else #"Main"]))))})
-                                            conn req))})
+        (define dispatch
+          {lambda [conn req]
+            (with-handlers ([exn? {λ [e] ((dispatch-exception (request-uri req) e) conn req)}])
+              (define ->host {λ [host] (string->symbol (string-downcase (if (bytes? host) (bytes->string/utf-8 host) host)))})
+              (define host (cond [(url-host (request-uri req)) => ->host]
+                                 [(headers-assq* #"Host" (request-headers/raw req)) => (compose1 ->host header-value)]
+                                 [else 'none]))
+              (define paths (url-path (request-uri req)))
+              (define-values {user? digimon?}
+                (values (and (false? (null? paths)) (let ([p (path/param-path (car paths))]) (and (string? p) (regexp-match? #"^[~].+$" p) p)))
+                        (and (false? (null? (cdr paths))) (let ([p (path/param-path (cadr paths))]) (and (string? p) (regexp-match? #"^\\..+$" p) p)))))
+              ((hash-ref! dispatch-cache (list host user? digimon?)
+                          {λ _ (parameterize ([current-custodian (current-server-custodian)])
+                                 (define terminus-header (make-header #"Terminus" (cond [(and user? digimon?) #"Per-Digimon"]
+                                                                                        [user? #"Per-User"]
+                                                                                        [else #"Main"])))
+                                 (sequencer:make (timeout:make initial-connection-timeout)
+                                                 (log:make #:format (log:log-format->format 'extended)
+                                                           #:log-path (build-path (sakuyamon-config) "access.log"))
+                                                 (let ([main (dispatch-main)])
+                                                   (cond [(and user? digimon?) (dispatch-digimon user? digimon?)]
+                                                         [user? (dispatch-user user?)]
+                                                         [(regexp-match? #px"^(::1)|(127)" (request-client-ip req)) (dispatch-manager main)]
+                                                         [else main]))
+                                                 (lift:make {λ [req] (response:404 (build-path (sakuyamon-config) "file-not-found.html")
+                                                                                   terminus-header)})))})
+               conn req))})
         
-        (define {dispatch-terminus hostname terminus-header}
-          (sequencer:make (timeout:make initial-connection-timeout)
-                          (log:make #:format (log:log-format->format 'extended) #:log-path (build-path (sakuyamon-config) "access.log"))
-                          ;(path-procedure:make #px"/conf/collect-garbage" {λ _ (when (string=? "127.0.0.1" hostname) (collect-garbage))})
+        (define dispatch-digimon
+          {lambda [user digimon]
+          ;(path-procedure:make #px"/conf/collect-garbage" {λ _ (when (string=? "127.0.0.1" hostname) (collect-garbage))})
                           #|(let-values ([{clear-cache! url->servlet} (servlets:make-cached-url->servlet
                                                       (filter-url->path #rx"\\.(ss|scm|rkt|rktd)$"
                                                                         (make-url->valid-path (make-url->path (paths-servlet (host-paths host-info)))))
@@ -83,7 +94,61 @@
                           ;(files:make #:url->path (make-url->path (paths-htdocs (host-paths host-info)))
                            ;           #:path->mime-type (make-path->mime-type (paths-mime-types (host-paths host-info)))
                             ;          #:indices (host-indices host-info))
-                          (lift:make {λ [req] (response:404 (build-path (sakuyamon-config) "file-not-found.html") terminus-header)})))
+            (sequencer:make)})
 
+        (define dispatch-user
+          {lambda [user]
+          ;(path-procedure:make #px"/conf/collect-garbage" {λ _ (when (string=? "127.0.0.1" hostname) (collect-garbage))})
+                          #|(let-values ([{clear-cache! url->servlet} (servlets:make-cached-url->servlet
+                                                      (filter-url->path #rx"\\.(ss|scm|rkt|rktd)$"
+                                                                        (make-url->valid-path (make-url->path (paths-servlet (host-paths host-info)))))
+                                                      (make-default-path->servlet #:make-servlet-namespace config:make-servlet-namespace
+                                                                                  #:timeouts-default-servlet (timeouts-default-servlet (host-timeouts host-info))))])
+             (sequencer:make (path-procedure:make "/conf/refresh-servlets" {λ _
+                                                                             (clear-cache!)
+                                                                             ((responders-servlets-refreshed (host-responders host-info)))})
+                             (sequencer:make (timeout:make (timeouts-servlet-connection (host-timeouts host-info)))
+                                             (servlets:make url->servlet
+                                                            #:responders-servlet-loading (responders-servlet-loading (host-responders host-info))
+                                                            #:responders-servlet (responders-servlet (host-responders host-info))))))|#
+                          ;(files:make #:url->path (make-url->path (paths-htdocs (host-paths host-info)))
+                           ;           #:path->mime-type (make-path->mime-type (paths-mime-types (host-paths host-info)))
+                            ;          #:indices (host-indices host-info))
+            (sequencer:make)})
+
+        (define dispatch-main
+          {lambda []
+          ;(path-procedure:make #px"/conf/collect-garbage" {λ _ (when (string=? "127.0.0.1" hostname) (collect-garbage))})
+          #|(let-values ([{clear-cache! url->servlet} (servlets:make-cached-url->servlet
+                                                      (filter-url->path #rx"\\.(ss|scm|rkt|rktd)$"
+                                                                        (make-url->valid-path (make-url->path (paths-servlet (host-paths host-info)))))
+                                                      (make-default-path->servlet #:make-servlet-namespace config:make-servlet-namespace
+                                                                                  #:timeouts-default-servlet (timeouts-default-servlet (host-timeouts host-info))))])
+             (sequencer:make (path-procedure:make "/conf/refresh-servlets" {λ _
+                                                                             (clear-cache!)
+                                                                             ((responders-servlets-refreshed (host-responders host-info)))})
+                             (sequencer:make (timeout:make (timeouts-servlet-connection (host-timeouts host-info)))
+                                             (servlets:make url->servlet
+                                                            #:responders-servlet-loading (responders-servlet-loading (host-responders host-info))
+                                                            #:responders-servlet (responders-servlet (host-responders host-info))))))|#
+                          ;(files:make #:url->path (make-url->path (paths-htdocs (host-paths host-info)))
+                           ;           #:path->mime-type (make-path->mime-type (paths-mime-types (host-paths host-info)))
+                            ;          #:indices (host-indices host-info))
+            (sequencer:make)})
+
+        (define dispatch-manager
+          {lambda [next]
+            (sequencer:make (path-procedure:make "/conf/collect-garbage" {λ _ (response:gc)})
+                            #|(let-values ([{clear-cache! url->servlet} (servlets:make-cached-url->servlet
+                                                                       (filter-url->path #rx"\\.(ss|scm|rkt|rktd)$"
+                                                                                         (make-url->valid-path (make-url->path (paths-servlet (host-paths host-info)))))
+                                                                       (make-default-path->servlet #:make-servlet-namespace config:make-servlet-namespace
+                                                                                                   #:timeouts-default-servlet (timeouts-default-servlet (host-timeouts host-info))))])
+                              (sequencer:make (path-procedure:make "/conf/refresh-servlets" {λ _
+                                                                                              (clear-cache!)
+                                                                                              ((responders-servlets-refreshed (host-responders host-info)))})))
+                            |#
+                            next)})
+        
         (define {dispatch-exception url exception}
           (lift:make {λ [req] (parameterize ([error-display-handler void]) (response:exn url exception))}))})

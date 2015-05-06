@@ -72,7 +72,7 @@ since they are system wide @itech[#:key "Terminus"]{Termini}.
        (for/list ([path (in-list (list "/" "/~" "/wargrey/.sakuyamon" "/.sakuyamon/~wargrey"))])
          (test-case path (let-values ([{status headers /dev/net/stdin} (sendrecv path)])
                            |<check: dispatch-!5xx>|
-                           (check-equal? #"Main" (ormap (curry extract-field #"Terminus") headers)))))]
+                           (check-equal? #"Main" |<extract terminus>|))))]
 
 @handbook-rule{The @itech{Per-User Terminus} is the one whose first @italic{path element} starts with @litchar{~} followed by valid chars.}
 
@@ -80,7 +80,7 @@ since they are system wide @itech[#:key "Terminus"]{Termini}.
        (for/list ([path (in-list (list "/~wargrey" "/~bin/." "/~root/default.rkt"))])
          (test-case path (let-values ([{status headers /dev/net/stdin} (sendrecv path)])
                            |<check: dispatch-!5xx>|
-                           (check-equal? #"Per-User" (ormap (curry extract-field #"Terminus") headers)))))]
+                           (check-equal? #"Per-User" |<extract terminus>|))))]
 
 @handbook-rule{The @itech{Per-Digimon Terminus} is the one within a @itech{Per-User Terminus}
                    whose second @italic{path element} starts with @litchar{.} followed by valid chars.}
@@ -89,7 +89,32 @@ since they are system wide @itech[#:key "Terminus"]{Termini}.
        (for/list ([path (in-list (list "/~bin/.sakuyamon" "/~nobody/.DigiGnome/index.html"))])
          (test-case path (let-values ([{status headers /dev/net/stdin} (sendrecv path)])
                            |<check: dispatch-!5xx>|
-                           (check-equal? #"Per-Digimon" (ormap (curry extract-field #"Terminus") headers)))))]
+                           (check-equal? #"Per-Digimon" |<extract terminus>|))))]
+
+@handbook-rule{The @itech{Main Terminus} dispatches these @deftech{function URL}s only when the client is @litchar{localhost}.}
+
+@chunk[|<testcase: request-funtion-URLs>|
+       (let ([gc "/conf/collect-garbage"])
+         (test-case gc (let-values ([{status headers /dev/net/stdin} (sendrecv gc)])
+                         (check-regexp-match #px"^.+?\\s+200\\s+" (bytes->string/utf-8 status))
+                         (check-regexp-match #px"Garbage Collected" (port->string /dev/net/stdin)))))]
+
+@handbook-scenario{Hello, Racket!}
+
+This scenario is designed for detecting the status of features and bugs of @bold{Racket} itself.
+
+@subsection{Typed Libraries}
+
+@tamer-note['typed-libraries]
+
+@chunk[|<testcase: typed-libraries>|
+       (test-exn "Web Application"
+                 exn:fail:filesystem:missing-module?
+                 {λ _ (dynamic-require 'typed/web-server/http 'response/full)})]
+
+@subsection{Typed Submodules}
+
+@tamer-action[(namespace-variable-value 'digimon-zone)]
 
 @handbook-appendix[]
 
@@ -105,9 +130,16 @@ since they are system wide @itech[#:key "Terminus"]{Termini}.
                          #:after {λ _ (shutdown)}
                          (test-suite "Main Terminus" |<testcase: request-main>|)
                          (test-suite "Per-User Terminus" |<testcase: request-user>|)
-                         (test-suite "Per-Digimon Terminus" |<testcase: request-digimon>|))))}]
+                         (test-suite "Per-Digimon Terminus" |<testcase: request-digimon>|)
+                         (test-suite "Function URLs" |<testcase: request-funtion-URLs>|))))
+
+         (define-tamer-suite typed-libraries "Typed Racket Libraries!"
+           |<testcase: typed-libraries>|)}]
 
 @chunk[|<check: dispatch-!5xx>|
        (check-regexp-match #px"^HTTP.+?\\s+[^5]\\d{2}\\s+"
                            (bytes->string/utf-8 status)
                            (port->string /dev/net/stdin))]
+
+@chunk[|<extract terminus>|
+       (ormap (curry extract-field #"Terminus") headers)]
