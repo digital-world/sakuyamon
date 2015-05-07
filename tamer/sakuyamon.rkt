@@ -53,56 +53,11 @@ So, as usual @racket[sakuyamon-realize] itself should be checked first:
                       (check-pred pair? recv-stdmsg)
                       (check-regexp-match (pregexp (format "errno=~a" $?)) (cdr recv-stdmsg)))))]
 
-@subsection{Dispatch Rules}
-
-The @bold{Racket} @deftech{Web Server} is just a configuration of a dispatching server,
-and @itech{Sakuyamon} redefines all the default dispatchers to match the @itech[#:key "Terminus"]{Termini}.
-
-By default, @itech{Per-User Terminus} and @itech{Per-Digimon Terminus} are disabled
-since they are system wide @itech[#:key "Terminus"]{Termini}.
-
-@handbook-rule{The first two @italic{path element}s of the @racket[url] are used to detect the types of @itech[#:key "Terminus"]{termini}.
-                             All @itech[#:key "Terminus"]{termini} except @itech{Per-User Terminus}
-                             and @itech{Per-Digimon Terminus} are the @itech{Main Terminus}.}
-
-@chunk[|<testcase: request-main>|
-       (for/list ([path (in-list (list "/" "/~" "/error.css" "/user/.digimon" "/.digimon/~user"))])
-         (test-case path (let-values ([{status headers /dev/net/stdin} (sendrecv path)])
-                           |<check: dispatch-!5xx>|
-                           (check-equal? #"Main" |<extract terminus>|))))]
-
-@handbook-rule{The @itech{Per-User Terminus} is the one whose first @italic{path element} starts with @litchar{~} followed by valid chars.}
-
-@chunk[|<testcase: request-user>|
-       (for/list ([path (in-list (list "/~user" "/~user/." "/~user/style.css"))])
-         (test-case path (let-values ([{status headers /dev/net/stdin} (sendrecv path)])
-                           |<check: dispatch-!5xx>|
-                           (check-equal? #"Per-User" |<extract terminus>|))))]
-
-@handbook-rule{The @itech{Per-Digimon Terminus} is the one within a @itech{Per-User Terminus}
-                   whose second @italic{path element} starts with @litchar{.} followed by valid chars.}
-
-@chunk[|<testcase: request-digimon>|
-       (for/list ([path (in-list (list "/~user/.digimon" "/~user/.digimon/404.html"))])
-         (test-case path (let-values ([{status headers /dev/net/stdin} (sendrecv path)])
-                           |<check: dispatch-!5xx>|
-                           (check-equal? #"Per-Digimon" |<extract terminus>|))))]
-
-@handbook-rule{The @itech{Main Terminus} dispatches these @deftech{function URL}s only when the client is @litchar{::1}.}
-
-@chunk[|<testcase: request-funtion-URLs>|
-       (let ([gc "/conf/collect-garbage"])
-         (test-case (format "[::1]~a" gc)
-                    (let-values ([{status headers /dev/net/stdin} (sendrecv gc)])
-                      (check-regexp-match #px"^.+?\\s+200\\s+" (bytes->string/utf-8 status))
-                      (check-regexp-match #px".+?MB = .+?MB - .+?MB" (port->string /dev/net/stdin))))
-         (test-case (format "[127.0.0.1]~a" gc)
-                    (let-values ([{status headers /dev/net/stdin} (sendrecv gc #:host "127.0.0.1")])
-                      (check-regexp-match #px"^.+?\\s+404\\s+" (bytes->string/utf-8 status)))))]
-
 @handbook-scenario{Hello, Racket!}
 
 This scenario is designed for detecting the status of features and bugs of @bold{Racket} itself.
+
+@italic{@bold{You should ignore this.}}
 
 @subsection{Typed Libraries}
 
@@ -122,25 +77,5 @@ This scenario is designed for detecting the status of features and bugs of @bold
 @chunk[|<sakuyamon:*>|
        {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
-         (define-tamer-suite realize "Sakuyamon, Realize!"
-           |<testcase: realize>|
-           (let-values ([{shutdown sendrecv} (sakuyamon-realize)])
-             (test-suite "Dispatch Rules!"
-                         #:before {λ _ (when (pair? sendrecv)
-                                         (raise-result-error 'realize "procedure?" sendrecv))}
-                         #:after {λ _ (shutdown)}
-                         (test-suite "Main Terminus" |<testcase: request-main>|)
-                         (test-suite "Per-User Terminus" |<testcase: request-user>|)
-                         (test-suite "Per-Digimon Terminus" |<testcase: request-digimon>|)
-                         (test-suite "Function URLs" |<testcase: request-funtion-URLs>|))))
-
-         (define-tamer-suite typed-libraries "Typed Racket Libraries!"
-           |<testcase: typed-libraries>|)}]
-
-@chunk[|<check: dispatch-!5xx>|
-       (check-regexp-match #px"^HTTP.+?\\s+[^5]\\d{2}\\s+"
-                           (bytes->string/utf-8 status)
-                           (port->string /dev/net/stdin))]
-
-@chunk[|<extract terminus>|
-       (ormap (curry extract-field #"Terminus") headers)]
+         (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)
+         (define-tamer-suite typed-libraries "Typed Racket Libraries!" |<testcase: typed-libraries>|)}]

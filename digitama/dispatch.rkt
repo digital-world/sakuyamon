@@ -87,11 +87,12 @@
                                                                           (find-relative-path (digimon-zone) (digimon-tamer))
                                                                           (car (use-compiled-file-paths))
                                                                           "handbook"))
-                                               (define paths (filter-map {λ [pa] (let ([p (path/param-path pa)])
-                                                                                   (and (false? (string=? p ""))
-                                                                                        (string-replace p #px"\\.rkt$" "_rkt.html")))}
-                                                                         (drop (url-path URL) 2)))
-                                               (values (apply build-path htdocs paths) null))})})
+                                               (define felems (filter-map {λ [pa] (match (path/param-path pa)
+                                                                                    ['up ".."]
+                                                                                    [{or 'same ""} #false]
+                                                                                    [p (string-replace p #px"\\.rkt$" "_rkt.html")])}
+                                                                          (drop (url-path URL) 2)))
+                                               (values (apply build-path htdocs felems) felems))})})
 
         (define dispatch-user
           {lambda [user]

@@ -20,7 +20,7 @@
   (require (submod ".." digitama))
   
   (require "../../digitama/digicore.rkt")
-  (require "../../digitama/configuration.rkt")
+  (require "../../digitama/dispatch.rkt")
 
   (define {serve-forever}
     (define-compound-unit sakuyamon@
