@@ -37,21 +37,23 @@ Each instance has 3 types of _termini_, or _htdocs_ or _webroot_:
 >           + 📑Main Terminus
 >             - 💚 1 - /
 >             - 💚 2 - /~
->             - 💚 3 - /wargrey/.sakuyamon
->             - 💚 4 - /.sakuyamon/~wargrey
+>             - 💚 3 - /error.css
+>             - 💚 4 - /user/.digimon
+>             - 💚 5 - /.digimon/~user
 >           + 📑Per-User Terminus
->             - 💚 1 - /~wargrey
->             - 💚 2 - /~bin/.
->             - 💚 3 - /~root/default.rkt
+>             - 💚 1 - /~user
+>             - 💚 2 - /~user/.
+>             - 💚 3 - /~user/style.css
 >           + 📑Per-Digimon Terminus
->             - 💚 1 - /~bin/.sakuyamon
->             - 💚 2 - /~nobody/.DigiGnome/index.html
+>             - 💚 1 - /~user/.digimon
+>             - 💚 2 - /~user/.digimon/404.html
 >           + 📑Function URLs
->             - 💚 1 - /conf/collect-garbage
+>             - 💚 1 - [::1]/conf/collect-garbage
+>             - 💚 2 - [127.0.0.1]/conf/collect-garbage
 >       + 📑Typed Racket Libraries!
 >         - 💚 1 - Web Application
 >
-> 📌13 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌15 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)

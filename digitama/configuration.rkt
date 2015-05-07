@@ -21,7 +21,7 @@
 (require (prefix-in passwords: web-server/dispatchers/dispatch-passwords))
 (require (prefix-in files: web-server/dispatchers/dispatch-files))
 (require (prefix-in servlets: web-server/dispatchers/dispatch-servlets))
-(require (prefix-in path-procedure: web-server/dispatchers/dispatch-pathprocedure))
+(require (prefix-in path: web-server/dispatchers/dispatch-pathprocedure))
 (require (prefix-in log: web-server/dispatchers/dispatch-log))
 (require (prefix-in filter: web-server/dispatchers/dispatch-filter))
 (require (prefix-in lift: web-server/dispatchers/dispatch-lift))
@@ -48,6 +48,7 @@
         (define read-request http:read-request)
         
         (define dispatch-cache (make-hash)) ; hash has its own semaphor as well as catch-table for ref set! and remove!
+        (define stone/ (curry build-path (sakuyamon-config)))
         (define dispatch
           {lambda [conn req]
             (with-handlers ([exn? {λ [e] ((dispatch-exception (request-uri req) e) conn req)}])
@@ -57,49 +58,44 @@
                                  [else 'none]))
               (define paths (url-path (request-uri req)))
               (define-values {user? digimon?}
-                (values (and (false? (null? paths)) (let ([p (path/param-path (car paths))]) (and (string? p) (regexp-match? #"^[~].+$" p) p)))
-                        (and (false? (null? (cdr paths))) (let ([p (path/param-path (cadr paths))]) (and (string? p) (regexp-match? #"^\\..+$" p) p)))))
+                (values (and (sakuyamon-user-terminus?) (false? (null? paths))
+                             (let ([p (path/param-path (car paths))]) (and (string? p) (regexp-match? #"^[~].+$" p) p)))
+                        (and (sakuyamon-digimon-terminus?) (false? (null? (cdr paths)))
+                             (let ([p (path/param-path (cadr paths))]) (and (string? p) (regexp-match? #"^\\..+$" p) p)))))
               ((hash-ref! dispatch-cache (list host user? digimon?)
                           {λ _ (parameterize ([current-custodian (current-server-custodian)])
-                                 (define terminus-header (make-header #"Terminus" (cond [(and user? digimon?) #"Per-Digimon"]
-                                                                                        [user? #"Per-User"]
-                                                                                        [else #"Main"])))
+                                 (define theader (make-header #"Terminus" (cond [(and user? digimon?) #"Per-Digimon"]
+                                                                                [user? #"Per-User"]
+                                                                                [else #"Main"])))
                                  (sequencer:make (timeout:make initial-connection-timeout)
                                                  (log:make #:format (log:log-format->format 'extended)
                                                            #:log-path (build-path (sakuyamon-config) "access.log"))
-                                                 (let ([main (dispatch-main)])
-                                                   (cond [(and user? digimon?) (dispatch-digimon user? digimon?)]
-                                                         [user? (dispatch-user user?)]
-                                                         [(regexp-match? #px"^(::1)|(127)" (request-client-ip req)) (dispatch-manager main)]
-                                                         [else main]))
-                                                 (lift:make {λ [req] (response:404 (build-path (sakuyamon-config) "file-not-found.html")
-                                                                                   terminus-header)})))})
+                                                 (cond [(and user? digimon?) (dispatch-digimon user? digimon?)]
+                                                       [(and user?) (dispatch-user user?)]
+                                                       [(false? (string=? "::1" (request-client-ip req))) (dispatch-main)]
+                                                       [else (dispatch-manager dispatch-main)])
+                                                 (path:make "/error.css" {λ _ (file-response 200 #"Okay" (stone/ "error.css") theader)})
+                                                 (lift:make {λ [req] (response:404 (stone/ "file-not-found.html") theader)})))})
                conn req))})
         
         (define dispatch-digimon
           {lambda [user digimon]
-          ;(path-procedure:make #px"/conf/collect-garbage" {λ _ (when (string=? "127.0.0.1" hostname) (collect-garbage))})
-                          #|(let-values ([{clear-cache! url->servlet} (servlets:make-cached-url->servlet
-                                                      (filter-url->path #rx"\\.(ss|scm|rkt|rktd)$"
-                                                                        (make-url->valid-path (make-url->path (paths-servlet (host-paths host-info)))))
-                                                      (make-default-path->servlet #:make-servlet-namespace config:make-servlet-namespace
-                                                                                  #:timeouts-default-servlet (timeouts-default-servlet (host-timeouts host-info))))])
-             (sequencer:make (path-procedure:make "/conf/refresh-servlets" {λ _
-                                                                             (clear-cache!)
-                                                                             ((responders-servlets-refreshed (host-responders host-info)))})
-                             (sequencer:make (timeout:make (timeouts-servlet-connection (host-timeouts host-info)))
-                                             (servlets:make url->servlet
-                                                            #:responders-servlet-loading (responders-servlet-loading (host-responders host-info))
-                                                            #:responders-servlet (responders-servlet (host-responders host-info))))))|#
-                          ;(files:make #:url->path (make-url->path (paths-htdocs (host-paths host-info)))
-                           ;           #:path->mime-type (make-path->mime-type (paths-mime-types (host-paths host-info)))
-                            ;          #:indices (host-indices host-info))
-            (sequencer:make)})
+            (files:make #:path->mime-type (make-path->mime-type (stone/ "mime.types"))
+                        #:url->path {λ [URL] (with-handlers ([exn? {λ [e] (next-dispatcher)}])
+                                               (define htdocs (build-path (expand-user-path user) "DigitalWorld"
+                                                                          (string-trim digimon #px"\\." #:right? #false)
+                                                                          (find-relative-path (digimon-zone) (digimon-tamer))
+                                                                          (car (use-compiled-file-paths))
+                                                                          "handbook"))
+                                               (define paths (filter-map {λ [pa] (let ([p (path/param-path pa)])
+                                                                                   (and (false? (string=? p ""))
+                                                                                        (string-replace p #px"\\.rkt$" "_rkt.html")))}
+                                                                         (drop (url-path URL) 2)))
+                                               (values (apply build-path htdocs paths) null))})})
 
         (define dispatch-user
           {lambda [user]
-          ;(path-procedure:make #px"/conf/collect-garbage" {λ _ (when (string=? "127.0.0.1" hostname) (collect-garbage))})
-                          #|(let-values ([{clear-cache! url->servlet} (servlets:make-cached-url->servlet
+            #|(let-values ([{clear-cache! url->servlet} (servlets:make-cached-url->servlet
                                                       (filter-url->path #rx"\\.(ss|scm|rkt|rktd)$"
                                                                         (make-url->valid-path (make-url->path (paths-servlet (host-paths host-info)))))
                                                       (make-default-path->servlet #:make-servlet-namespace config:make-servlet-namespace
@@ -115,10 +111,9 @@
                            ;           #:path->mime-type (make-path->mime-type (paths-mime-types (host-paths host-info)))
                             ;          #:indices (host-indices host-info))
             (sequencer:make)})
-
+        
         (define dispatch-main
           {lambda []
-          ;(path-procedure:make #px"/conf/collect-garbage" {λ _ (when (string=? "127.0.0.1" hostname) (collect-garbage))})
           #|(let-values ([{clear-cache! url->servlet} (servlets:make-cached-url->servlet
                                                       (filter-url->path #rx"\\.(ss|scm|rkt|rktd)$"
                                                                         (make-url->valid-path (make-url->path (paths-servlet (host-paths host-info)))))
@@ -137,8 +132,8 @@
             (sequencer:make)})
 
         (define dispatch-manager
-          {lambda [next]
-            (sequencer:make (path-procedure:make "/conf/collect-garbage" {λ _ (response:gc)})
+          {lambda [fnext-dispatcher]
+            (sequencer:make (path:make "/conf/collect-garbage" {λ _ (response:gc)})
                             #|(let-values ([{clear-cache! url->servlet} (servlets:make-cached-url->servlet
                                                                        (filter-url->path #rx"\\.(ss|scm|rkt|rktd)$"
                                                                                          (make-url->valid-path (make-url->path (paths-servlet (host-paths host-info)))))
@@ -148,7 +143,9 @@
                                                                                               (clear-cache!)
                                                                                               ((responders-servlets-refreshed (host-responders host-info)))})))
                             |#
-                            next)})
+                            (fnext-dispatcher))})
         
-        (define {dispatch-exception url exception}
-          (lift:make {λ [req] (parameterize ([error-display-handler void]) (response:exn url exception))}))})
+        (define dispatch-exception
+          {lambda [url exception]
+            (lift:make {λ [req] (parameterize ([error-display-handler void])
+                                  (response:exn url exception))})})})

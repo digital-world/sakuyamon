@@ -59,13 +59,17 @@
 
 (define response:gc : (-> Response)
   {lambda []
-    (define bbyte (current-memory-use))
-    (collect-garbage)
-    (define mb (/ (- bbyte (current-memory-use)) 1024.0 1024.0))
-    (define message (format "~aMB garbage has been collected" (~r mb #:precision '{= 3})))
+    (define ~mb : (-> Integer String) {λ [b] (~r (/ b 1024.0 1024.0) #:precision '{= 3})})
+    (define bb : Nonnegative-Integer (current-memory-use))
+    (define ab : Nonnegative-Integer (let ([_ (collect-garbage)]) (current-memory-use)))
+    (define message : String (format "[~aMB = ~aMB - ~aMB]" (~mb (- bb ab)) (~mb bb) (~mb ab)))
     (response/xexpr #:code 200 #:message (string->bytes/utf-8 message)
-                    `(html (head (title "Garbage Collected"))
-                           (body (p ,message))))})
+                    `(html (head (title "Garbage Collected")
+                                 (link ([rel "stylesheet"] [href "/error.css"])))
+                           (body (div ([class "section"])
+                                      (div ([class "title"]) "Sakuyamon")
+                                      (p "The garbage collector has run:"
+                                         (pre ,message))))))})
 
 (define response:exn : (-> URL exn Response)
   {lambda [uri exception]

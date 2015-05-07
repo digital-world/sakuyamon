@@ -9,9 +9,6 @@
 As the @deftech{digimon tamer}s, our story always starts with checking the @deftech{digivice}
 in order to make sure we could talk with the @deftech{digimon}s as expected.
 
-@margin-note{The basic testing on @itech{digivice} has already performed
-                                  @hyperlink[(format "http://~a.gyoudmon.org/digivice.rkt" (digimon-gnome))]{here}.}
-
 @tamer-smart-summary[]
 
 @chunk[|<sakuyamon taming start>|
@@ -69,7 +66,7 @@ since they are system wide @itech[#:key "Terminus"]{Termini}.
                              and @itech{Per-Digimon Terminus} are the @itech{Main Terminus}.}
 
 @chunk[|<testcase: request-main>|
-       (for/list ([path (in-list (list "/" "/~" "/wargrey/.sakuyamon" "/.sakuyamon/~wargrey"))])
+       (for/list ([path (in-list (list "/" "/~" "/error.css" "/user/.digimon" "/.digimon/~user"))])
          (test-case path (let-values ([{status headers /dev/net/stdin} (sendrecv path)])
                            |<check: dispatch-!5xx>|
                            (check-equal? #"Main" |<extract terminus>|))))]
@@ -77,7 +74,7 @@ since they are system wide @itech[#:key "Terminus"]{Termini}.
 @handbook-rule{The @itech{Per-User Terminus} is the one whose first @italic{path element} starts with @litchar{~} followed by valid chars.}
 
 @chunk[|<testcase: request-user>|
-       (for/list ([path (in-list (list "/~wargrey" "/~bin/." "/~root/default.rkt"))])
+       (for/list ([path (in-list (list "/~user" "/~user/." "/~user/style.css"))])
          (test-case path (let-values ([{status headers /dev/net/stdin} (sendrecv path)])
                            |<check: dispatch-!5xx>|
                            (check-equal? #"Per-User" |<extract terminus>|))))]
@@ -86,18 +83,22 @@ since they are system wide @itech[#:key "Terminus"]{Termini}.
                    whose second @italic{path element} starts with @litchar{.} followed by valid chars.}
 
 @chunk[|<testcase: request-digimon>|
-       (for/list ([path (in-list (list "/~bin/.sakuyamon" "/~nobody/.DigiGnome/index.html"))])
+       (for/list ([path (in-list (list "/~user/.digimon" "/~user/.digimon/404.html"))])
          (test-case path (let-values ([{status headers /dev/net/stdin} (sendrecv path)])
                            |<check: dispatch-!5xx>|
                            (check-equal? #"Per-Digimon" |<extract terminus>|))))]
 
-@handbook-rule{The @itech{Main Terminus} dispatches these @deftech{function URL}s only when the client is @litchar{localhost}.}
+@handbook-rule{The @itech{Main Terminus} dispatches these @deftech{function URL}s only when the client is @litchar{::1}.}
 
 @chunk[|<testcase: request-funtion-URLs>|
        (let ([gc "/conf/collect-garbage"])
-         (test-case gc (let-values ([{status headers /dev/net/stdin} (sendrecv gc)])
-                         (check-regexp-match #px"^.+?\\s+200\\s+" (bytes->string/utf-8 status))
-                         (check-regexp-match #px"Garbage Collected" (port->string /dev/net/stdin)))))]
+         (test-case (format "[::1]~a" gc)
+                    (let-values ([{status headers /dev/net/stdin} (sendrecv gc)])
+                      (check-regexp-match #px"^.+?\\s+200\\s+" (bytes->string/utf-8 status))
+                      (check-regexp-match #px".+?MB = .+?MB - .+?MB" (port->string /dev/net/stdin))))
+         (test-case (format "[127.0.0.1]~a" gc)
+                    (let-values ([{status headers /dev/net/stdin} (sendrecv gc #:host "127.0.0.1")])
+                      (check-regexp-match #px"^.+?\\s+404\\s+" (bytes->string/utf-8 status)))))]
 
 @handbook-scenario{Hello, Racket!}
 
