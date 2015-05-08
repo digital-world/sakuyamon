@@ -6,6 +6,8 @@
 
 (define pkg-desc "Manage and protect http://gyoudmon.org.")
 
+(define build-deps '{"base" "typed-racket-lib" "scribble-lib" "web-server-lib"})
+
 (define compile-omit-paths (list "stone" "info.rkt"))
 (define test-omit-paths 'all)
 

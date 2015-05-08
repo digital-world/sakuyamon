@@ -107,6 +107,7 @@
 
 (define response:exn : (-> exn Header * Response)
   {lambda [exception . headers]
+    (define tr : (-> String String) {λ [str] (string-replace str (digimon-world) "")})
     (response/xexpr #:code 500 #:message (string->bytes/utf-8 (exn-message exception)) #:headers headers
                     `(html (head (title "Uncaught Exception Handler")
                                  (link ([rel "stylesheet"] [href "/error.css"])))
@@ -114,13 +115,11 @@
                                       (div ([class "title"]) "Sakuyamon")
                                       (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ")"
                                          ,(format " '~a" (object-name exception)) ")"
-                                         (pre ,(format "» ~a~n" (exn-message exception))
+                                         (pre ,(format "» ~a~n" (tr (exn-message exception)))
                                               ,@(filter-map {λ [[stack : (Pairof (Option Symbol) Any)]]
                                                               (and (cdr stack)
                                                                    (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
                                                                      (and srcinfo
                                                                           (regexp-match? #px"^[^/]" srcinfo)
-                                                                          (format "»»» ~a: ~a~n"
-                                                                                  (string-replace srcinfo (digimon-world) "")
-                                                                                  (or (car stack) 'λ)))))}
+                                                                          (format "»»» ~a: ~a~n" (tr srcinfo) (or (car stack) 'λ)))))}
                                                             (continuation-mark-set->context (exn-continuation-marks exception)))))))))})

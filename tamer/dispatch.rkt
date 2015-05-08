@@ -31,8 +31,8 @@ are relative to @racket[digimon-terminus].
 
 @chunk[|<testcase: dispatch-main>|
        (for/list ([path (in-list (list "/" "/~" "/user/.digimon" "/.digimon/~user"))])
-         (test-case path (let-values ([{code brief headers /dev/net/stdin} (sendrecv path)])
-                           (check < code 500 brief)
+         (test-case path (let-values ([{status brief headers /dev/net/stdin} (sendrecv path)])
+                           (check < status 500 brief)
                            (check-equal? #"Main" |<extract terminus>|))))]
 
 For the sake of security, these @deftech{function URL}s are dispatched only when the client is @litchar{::1}.
@@ -40,12 +40,12 @@ For the sake of security, these @deftech{function URL}s are dispatched only when
 @chunk[|<testcase: dispatch-funtion-URLs>|
        (let ([gc "/d-arc/collect-garbage"])
          (test-case (format "[::1]~a" gc)
-                    (let-values ([{code brief headers /dev/net/stdin} (sendrecv gc)])
-                      (check-eq? code 200 brief)
+                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv gc)])
+                      (check-eq? status 200 brief)
                       (check-regexp-match #px".+?MB = .+?MB - .+?MB" (port->string /dev/net/stdin))))
          (test-case (format "[127.0.0.1]~a" gc)
-                    (let-values ([{code brief headers /dev/net/stdin} (sendrecv gc #:host "127.0.0.1")])
-                      (check-eq? code 403 brief))))]
+                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv gc #:host "127.0.0.1")])
+                      (check-eq? status 403 brief))))]
 
 @handbook-scenario{Per-User Terminus}
 
@@ -57,8 +57,8 @@ URL paths always start with @litchar{~username}.
 
 @chunk[|<testcase: dispatch-user>|
        (for/list ([path (in-list (list "/~user" "/~user/."))])
-         (test-case path (let-values ([{code brief headers /dev/net/stdin} (sendrecv path)])
-                           (check < code 500 brief)
+         (test-case path (let-values ([{status brief headers /dev/net/stdin} (sendrecv path)])
+                           (check < status 500 brief)
                            (check-equal? #"Per-User" |<extract terminus>|))))]
 
 @handbook-scenario{Per-Digimon Terminus}
@@ -73,8 +73,8 @@ URL paths always start with @litchar{~username} followed by the @italic{path ele
 
 @chunk[|<testcase: dispatch-digimon>|
        (for/list ([path (in-list (list "/~user/.digimon"))])
-         (test-case path (let-values ([{code brief headers /dev/net/stdin} (sendrecv path)])
-                           (check < code 500 brief)
+         (test-case path (let-values ([{status brief headers /dev/net/stdin} (sendrecv path)])
+                           (check < status 500 brief)
                            (check-equal? #"Per-Digimon" |<extract terminus>|))))]
 
 This @itech{Terminus} is the simplest one since it only serves the static content.
@@ -89,11 +89,14 @@ Nonetheless, these paths would always be navigated by auto-generated navigators.
 making sure it works properly.
 
 @chunk[|<testcase: rewrite-url>|
-       (for ([path (in-list (list "/.." "/../../handbook.scrbl" "/placeholder/../sakuyamon.rkt"))]
-             [expect (in-list (list 418 418 200))])
+       (for ([path (in-list (list "/.." "/?/../" "/../../tamer.rkt" "/!/../dispatch.rkt"))]
+             [expect (in-list (list 418 200 418 200))])
          (test-case (format "~a: ~a" expect path)
-                    (let-values ([{code brief headers /dev/net/stdin} (sendrecv (~htdocs path))])
-                      (check-eq? code expect brief))))]
+                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv (~htdocs path))]
+                                 [{lfile} (format "~a/compiled/handbook~a" (digimon-tamer) path)])
+                      (with-handlers ([exn:test:check? {λ [f] (cond [(file-exists? lfile) (raise f)]
+                                                                    [else (check-eq? status 404 brief)])}])
+                        (check-eq? status expect brief)))))]
 
 @handbook-appendix[]
 

@@ -4,7 +4,7 @@
 
 @handbook-title[]
 
-@margin-note{@deftech{Sakuyamon} is the Queen of @hyperlink["http://gyoudmon.org"]{gyoudmon.org}.}
+@margin-note{@deftech{@bold{Sakuyamon}} is the Queen of @hyperlink["http://gyoudmon.org"]{gyoudmon.org}.}
 
 Please do not ask me why I choose @hyperlink["http://www.racket-lang.org"]{@bold{Racket}} to build my website.
 Meanwhile I don@literal{'}t know more than you about whether it is suitable for this kind of tasks since its

@@ -40,15 +40,15 @@ So, as usual @racket[sakuyamon-realize] itself should be checked first:
 @tamer-note['realize]
 
 @chunk[|<testcase: realize>|
-       (let*-values ([{shutdown sendrecv} (sakuyamon-realize "-p" "8080")]
-                     [{shutdown-errno recv-stdmsg} (sakuyamon-realize "-p" "8080")]
-                     [{shutdown resendrecv} (and (shutdown) (sakuyamon-realize "-p" "8080"))])
-         (test-spec "realize --port 8080 [fresh]"
+       (let*-values ([{shutdown sendrecv} (sakuyamon-realize "-p" "8443")]
+                     [{shutdown-errno recv-stdmsg} (sakuyamon-realize "-p" "8443")]
+                     [{shutdown resendrecv} (and (shutdown) (sakuyamon-realize "-p" "8443"))])
+         (test-spec "realize --port 8443 [fresh]"
                     (let ([$? (shutdown)])
                       (check-pred procedure? sendrecv)
                       (check-pred procedure? resendrecv)
                       (check-pred zero? $?)))
-         (test-spec "realize --port 8080 [already in use]"
+         (test-spec "realize --port 8443 [already in use]"
                     (let ([$? (shutdown-errno)])
                       (check-pred pair? recv-stdmsg)
                       (check-regexp-match (pregexp (format "errno=~a" $?)) (cdr recv-stdmsg)))))]
