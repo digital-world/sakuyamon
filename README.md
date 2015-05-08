@@ -1,6 +1,6 @@
 # [🏡<sub>🐈</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)Tamer's Handbook: Sakuyamon
 
-> _Sakuyamon_ is the Queen of [gyoudmon.org](http://gyoudmon.org).
+> _**Sakuyamon**_ is the Queen of [gyoudmon.org](http://gyoudmon.org).
 
 Please do not ask me why I choose **Racket** to build my website.
 Meanwhile I don't know more than you about whether it is suitable for
@@ -19,8 +19,8 @@ Keep it simple but also ready for large-scale extension.
 >     + 📖
 [sakuyamon.rkt](http://gyoudmon.org/~wargrey/.sakuyamon/sakuyamon.rkt)
 >       + 📑Sakuyamon, Realize!
->         - 💚 1 - realize --port 8080 [fresh]
->         - 💚 2 - realize --port 8080 [already in use]
+>         - 💚 1 - realize --port 8443 [fresh]
+>         - 💚 2 - realize --port 8443 [already in use]
 >       + 📑Typed Racket Libraries!
 >         - 💚 1 - Web Application
 >     + 📖
@@ -40,10 +40,11 @@ Keep it simple but also ready for large-scale extension.
 >         - 💚 1 - /~user/.digimon
 >         + 📑Rewrite URL
 >           - 💚 1 - 418: /..
->           - 💚 2 - 418: /../../handbook.scrbl
->           - 💔 3 - 200: /placeholder/../sakuyamon.rkt
+>           - 💚 2 - 200: /?/../
+>           - 💚 3 - 418: /../../tamer.rkt
+>           - 💚 4 - 200: /!/../dispatch.rkt
 >
-> 📌15 examples, 1 failure, 0 errors, 93.33% Okay.
+> 📌16 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
-[🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)
+[🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)
