@@ -28,19 +28,22 @@ Keep it simple but also ready for large-scale extension.
 >       + 📑Main Terminus
 >         - 💚 1 - /
 >         - 💚 2 - /~
->         - 💚 3 - /error.css
->         - 💚 4 - /user/.digimon
->         - 💚 5 - /.digimon/~user
+>         - 💚 3 - /user/.digimon
+>         - 💚 4 - /.digimon/~user
 >         + 📑Function URLs
->           - 💚 1 - [::1]/conf/collect-garbage
->           - 💚 2 - [127.0.0.1]/conf/collect-garbage
+>           - 💚 1 - [::1]/d-arc/collect-garbage
+>           - 💚 2 - [127.0.0.1]/d-arc/collect-garbage
 >       + 📑Per-User Terminus
 >         - 💚 1 - /~user
 >         - 💚 2 - /~user/.
 >       + 📑Per-Digimon Terminus
 >         - 💚 1 - /~user/.digimon
+>         + 📑Rewrite URL
+>           - 💚 1 - 418: /..
+>           - 💚 2 - 418: /../../handbook.scrbl
+>           - 💔 3 - 200: /placeholder/../sakuyamon.rkt
 >
-> 📌13 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌15 examples, 1 failure, 0 errors, 93.33% Okay.
 >
 >
-[🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)
+[🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)
