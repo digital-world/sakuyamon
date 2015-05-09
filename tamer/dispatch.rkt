@@ -30,36 +30,36 @@ are relative to @racket[digimon-terminus].
 @tamer-note['dispatch-main]
 
 @chunk[|<testcase: dispatch-main>|
-       (for/list ([path (in-list (list "/" "/~" "/user/.digimon" "/.digimon/~user"))])
-         (test-case path (let-values ([{status brief headers /dev/net/stdin} (sendrecv path)])
-                           (check < status 500 brief)
-                           (check-equal? #"Main" |<extract terminus>|))))]
+       (for ([rpath (in-list (list ".digimon/~user/readme.t"))])
+         (let ([lpath (build-path (digimon-terminus) rpath)]) 
+           (test-spec rpath |<dispatch: setup and teardown>| |<dispatch: check>|)))]
 
 For the sake of security, these @deftech{function URL}s are dispatched only when the client is @litchar{::1}.
 
 @chunk[|<testcase: dispatch-funtion-URLs>|
-       (let ([gc "/d-arc/collect-garbage"])
-         (test-case (format "[::1]~a" gc)
-                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv gc)])
-                      (check-eq? status 200 brief)
-                      (check-regexp-match #px".+?MB = .+?MB - .+?MB" (port->string /dev/net/stdin))))
-         (test-case (format "[127.0.0.1]~a" gc)
-                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv gc #:host "127.0.0.1")])
+       (for ([d-arc (in-list (list "/d-arc/collect-garbage" "/d-arc/refresh-servlet"))])
+         (test-case (format "[::1]~a" d-arc)
+                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv d-arc)])
+                      (check-eq? status 200 brief)))
+         (test-case (format "[127.0.0.1]~a" d-arc)
+                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv d-arc #:host "127.0.0.1")])
                       (check-eq? status 403 brief))))]
 
 @handbook-scenario{Per-User Terminus}
 
 @deftech{Per-User Terminus} is designed for system users to share and discuss their works on the internet
 if they store the content in the directory @litchar{$HOME/Public/DigitalWorld}.
-URL paths always start with @litchar{~username}.
+URL paths always start with @litchar{~user}.
 
 @tamer-note['dispatch-user]
 
 @chunk[|<testcase: dispatch-user>|
-       (for/list ([path (in-list (list "/~user" "/~user/."))])
-         (test-case path (let-values ([{status brief headers /dev/net/stdin} (sendrecv path)])
-                           (check < status 500 brief)
-                           (check-equal? #"Per-User" |<extract terminus>|))))]
+       (for ([path (in-list (list "readme.t"))])
+         (let ([rpath (format "/~~~a/~a" (getenv "USER") path)]
+               [lpath (build-path (find-system-path 'home-dir) "Public" "DigitalWorld" path)]) 
+           (test-spec path |<dispatch: setup and teardown>| |<dispatch: check>|)))]
+
+@bold{Note that this @itech{Terminus} do support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].}
 
 @handbook-scenario{Per-Digimon Terminus}
 
@@ -67,20 +67,19 @@ URL paths always start with @litchar{~username}.
 @hyperlink["https://help.github.com/articles/what-are-github-pages/"]{Github Pages}. Public projects
 should be stored in directory @litchar{$HOME/DigitalWorld} and follow
 @hyperlink["https://github.com/digital-world/DigiGnome"]{my project convientions}.
-URL paths always start with @litchar{~username} followed by the @italic{path element} @litchar{.projectname}.
+URL paths always start with @litchar{~user} followed by the @italic{path element} @litchar{.digimon},
+and the rest parts are relative to @litchar{compiled/handbook} within @racket[digimon-tamer]
+where stores the auto-generated @itech{htdocs}.
 
 @tamer-note['dispatch-digimon]
 
 @chunk[|<testcase: dispatch-digimon>|
-       (for/list ([path (in-list (list "/~user/.digimon"))])
-         (test-case path (let-values ([{status brief headers /dev/net/stdin} (sendrecv path)])
-                           (check < status 500 brief)
-                           (check-equal? #"Per-Digimon" |<extract terminus>|))))]
+       (for ([path (in-list (list "readme.t"))])
+         (let ([rpath (format "/~~~a/.~a/~a" (getenv "USER") (current-digimon) path)]
+               [lpath (build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook" path)]) 
+           (test-spec path |<dispatch: setup and teardown>| |<dispatch: check>|)))]
 
-This @itech{Terminus} is the simplest one since it only serves the static content.
-All paths are relative to @racket[digimon-tamer]@litchar{/compiled/handbook}
-where stores the auto-generated @itech{htdocs}.
-
+This @itech{Terminus} is the simplest one since it only serves static content.
 By default, users should ignore the name convention of @bold{Scribble},
 so paths reference to any @litchar{*.rkt} will be transformed to their @litchar{*.html} counterparts
 iff they are valid @secref["scribble_lp2_Language" #:doc '(lib "scribblings/scribble/scribble.scrbl")]s.
@@ -104,22 +103,33 @@ making sure it works properly.
        {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
          (define-tamer-suite dispatch-main "Main Terminus"
-           |<check: before>|
+           |<dispatch: check #:before>|
            |<testcase: dispatch-main>|
            (test-suite "Function URLs" |<testcase: dispatch-funtion-URLs>|))
 
          (define-tamer-suite dispatch-user "Per-User Terminus"
-           |<check: before>|
+           |<dispatch: check #:before>|
            |<testcase: dispatch-user>|)
 
          (define-tamer-suite dispatch-digimon "Per-Digimon Terminus"
-           |<check: before>| #:after {λ _ (shutdown)}
+           |<dispatch: check #:before>| #:after {λ _ (shutdown)}
            |<testcase: dispatch-digimon>|
            (let ([~htdocs (curry format "/~~~a/.~a/~a" (getenv "USER") (current-digimon))])
              (test-suite "Rewrite URL" |<testcase: rewrite-url>|)))}]
 
-@chunk[|<check: before>|
+@chunk[|<dispatch: check #:before>|
        #:before {λ _ (when (pair? sendrecv) (raise-result-error 'realize "procedure?" sendrecv))}]
 
-@chunk[|<extract terminus>|
-       (ormap (curry extract-field #"Terminus") headers)]
+@chunk[|<dispatch: setup and teardown>|
+       #:before {λ _ (void (make-parent-directory* lpath)
+                           (display-to-file lpath lpath))}
+       #:after {λ _ (void (delete-file lpath)
+                          (with-handlers ([exn? void])
+                            (let rmdir ([dir (path-only lpath)])
+                              (delete-directory dir)
+                              (rmdir (build-path dir 'up)))))}]
+
+@chunk[|<dispatch: check>|
+       (let-values ([{status brief headers /dev/net/stdin} (sendrecv rpath)])
+         (check-eq? status 200 brief)
+         (check-equal? (read-line /dev/net/stdin) (path->string lpath)))]

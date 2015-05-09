@@ -62,33 +62,33 @@
   {lambda headers
     (response/xexpr #:code 403 #:message #"Access Denied" #:headers headers
                     `(html (head (title "Access Denied")
-                                 (link ([rel "stylesheet"] [href "/error.css"])))
+                                 (link ([rel "stylesheet"] [href "/stone/error.css"])))
                            (body (div ([class "section"])
                                       (div ([class "title"]) "Sakuyamon")
                                       (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                         "(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*)(*))"
+                                         "(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*)(*))" ")"
                                          (pre "» 403 - Access Denied!"))))))})
 
 (define response:404 : (-> Header * Response)
   {lambda headers
     (response/xexpr #:code 404 #:message #"File Not Found" #:headers headers
                     `(html (head (title "File Not Found")
-                                 (link ([rel "stylesheet"] [href "/error.css"])))
+                                 (link ([rel "stylesheet"] [href "/stone/error.css"])))
                            (body (div ([class "section"])
                                       (div ([class "title"]) "Sakuyamon")
                                       (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                         "(*(+(*)(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))))(+(*)(*)(*)(*)))"
+                                         "(*(+(*)(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))))(+(*)(*)(*)(*)))" ")"
                                          (pre "» 404 - Resource Not Found!"))))))})
 
 (define response:418 : (-> Header * Response)
   {lambda headers
     (response/xexpr #:code 418 #:message #"I am a teapot" #:headers headers
                     `(html (head (title "I am a teapot")
-                                 (link ([rel "stylesheet"] [href "/error.css"])))
+                                 (link ([rel "stylesheet"] [href "/stone/error.css"])))
                            (body (div ([class "section"])
                                       (div ([class "title"]) "Sakuyamon")
                                       (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                         "(+(*(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*)))"
+                                         "(+(*(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*))" ")"
                                          (pre "» 418 - Have a cup of tea?"))))))})
 
 (define response:gc : (-> Header * Response)
@@ -99,29 +99,42 @@
     (define message : String (format "[~aMB = ~aMB - ~aMB]" (~mb (- bb ab)) (~mb bb) (~mb ab)))
     (response/xexpr #:code 200 #:message (string->bytes/utf-8 message) #:headers headers
                     `(html (head (title "Collect Garbage")
-                                 (link ([rel "stylesheet"] [href "/error.css"])))
+                                 (link ([rel "stylesheet"] [href "/stone/error.css"])))
                            (body (div ([class "section"])
                                       (div ([class "title"]) "Sakuyamon")
                                       (p "> (" (a ([href "http://racket-lang.org"]) "collect-garbage") ")"
                                          (pre "» " ,message))))))})
 
-(define response:exn : (-> exn Header * Response)
-  {lambda [exception . headers]
-    (define tr : (-> String String) {λ [str] (string-replace str (digimon-world) "")})
-    (response/xexpr #:code 500 #:headers headers
-                    #:message (bytes-join ((inst call-with-input-string (Listof Bytes)) (exn-message exception) port->bytes-lines)
-                                          (string->bytes/utf-8 (string cat#))) ; replace #newline with cat# 
-                    `(html (head (title "Uncaught Exception Handler")
-                                 (link ([rel "stylesheet"] [href "/error.css"])))
+(define response:rs : (-> (-> Void) Header * Response)
+  {lambda [refresh-servlet! . headers]
+    (refresh-servlet!)
+    (response/xexpr #:code 200 #:message #"Servlet Refreshed" #:headers headers
+                    `(html (head (title "Refresh Servlet")
+                                 (link ([rel "stylesheet"] [href "/stone/error.css"])))
                            (body (div ([class "section"])
                                       (div ([class "title"]) "Sakuyamon")
-                                      (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ")"
-                                         "(*(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)))(+(*)(*)(*)(*)(*)))"
-                                         (pre ,(format "» ~a: ~a~n" (object-name exception) (tr (exn-message exception)))
-                                              ,@(filter-map {λ [[stack : (Pairof (Option Symbol) Any)]]
-                                                              (and (cdr stack)
-                                                                   (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
-                                                                     (and srcinfo
-                                                                          (regexp-match? #px"^[^/]" srcinfo)
-                                                                          (format "»»» ~a: ~a~n" (tr srcinfo) (or (car stack) 'λ)))))}
-                                                            (continuation-mark-set->context (exn-continuation-marks exception)))))))))})
+                                      (p "> (" (a ([href "http://racket-lang.org"]) "refresh-servlet!") ")"
+                                         (pre))))))})
+
+(define response:exn : (-> (Option URL) exn Bytes Header * Response)
+  {lambda [url x stage . headers]
+    (cond [(exn:fail:user? x) (response:418)]
+          [(exn? x) (let ([tr : (-> String String) {λ [str] (string-replace str (digimon-world) "")}])
+                      (response/xexpr #:code 500 #:headers headers
+                                      #:message (let ([msgs ((inst call-with-input-string (Listof Bytes)) (exn-message x) port->bytes-lines)])
+                                                  (bytes-append stage #": " (bytes-join msgs (string->bytes/utf-8 (string cat#)))))
+                                      `(html (head (title ,(format "Uncaught Exception when ~a" stage))
+                                                   (link ([rel "stylesheet"] [href "/stone/error.css"])))
+                                             (body (div ([class "section"])
+                                                        (div ([class "title"]) "Sakuyamon")
+                                                        (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
+                                                           ,(if url (url->string url) "#false") (br)
+                                                           "   " "(*(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)))(+(*)(*)(*)(*)(*)))" ")"
+                                                           (pre ,(format "» ~a: ~a~n" (object-name x) (tr (exn-message x)))
+                                                                ,@(filter-map {λ [[stack : (Pairof (Option Symbol) Any)]]
+                                                                                (and (cdr stack)
+                                                                                     (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
+                                                                                       (and srcinfo (regexp-match? #px"^[^/]" srcinfo)
+                                                                                            (format "»»» ~a: ~a~n" (tr srcinfo) (or (car stack) 'λ)))))}
+                                                                              (continuation-mark-set->context (exn-continuation-marks x))))))))))]
+          [else (raise x)])})

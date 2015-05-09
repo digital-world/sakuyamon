@@ -26,25 +26,23 @@ Keep it simple but also ready for large-scale extension.
 >     + 📖
 [dispatch.rkt](http://gyoudmon.org/~wargrey/.sakuyamon/dispatch.rkt)
 >       + 📑Main Terminus
->         - 💚 1 - /
->         - 💚 2 - /~
->         - 💚 3 - /user/.digimon
->         - 💚 4 - /.digimon/~user
+>         - 💚 1 - .digimon/~user/readme.t
 >         + 📑Function URLs
 >           - 💚 1 - [::1]/d-arc/collect-garbage
 >           - 💚 2 - [127.0.0.1]/d-arc/collect-garbage
+>           - 💚 3 - [::1]/d-arc/refresh-servlet
+>           - 💚 4 - [127.0.0.1]/d-arc/refresh-servlet
 >       + 📑Per-User Terminus
->         - 💚 1 - /~user
->         - 💚 2 - /~user/.
+>         - 💚 1 - readme.t
 >       + 📑Per-Digimon Terminus
->         - 💚 1 - /~user/.digimon
+>         - 💚 1 - readme.t
 >         + 📑Rewrite URL
 >           - 💚 1 - 200: ?/../
 >           - 💚 2 - 418: ../index.html
 >           - 💚 3 - 418: ../../tamer.rkt
 >           - 💚 4 - 200: !/../dispatch.rkt
 >
-> 📌16 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌14 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)
