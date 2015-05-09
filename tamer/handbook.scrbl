@@ -8,7 +8,7 @@
 
 Please do not ask me why I choose @hyperlink["http://www.racket-lang.org"]{@bold{Racket}} to build my website.
 Meanwhile I don@literal{'}t know more than you about whether it is suitable for this kind of tasks since its
-real world applications are damn harder to be found than heard of. So you get it, I mean I like it and just
+real world applications are damn harder to be found than to be heard of. So you get it, I mean I like it and just
 for fun, maybe also paid for it.
 
 Due to my poor knowledge on @bold{Racket}, infrasturctures are designed as lightweight as possible. Instances

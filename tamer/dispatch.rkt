@@ -89,11 +89,11 @@ Nonetheless, these paths would always be navigated by auto-generated navigators.
 making sure it works properly.
 
 @chunk[|<testcase: rewrite-url>|
-       (for ([path (in-list (list "/.." "/?/../" "/../../tamer.rkt" "/!/../dispatch.rkt"))]
-             [expect (in-list (list 418 200 418 200))])
-         (test-case (format "~a: ~a" expect path)
-                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv (~htdocs path))]
-                                 [{lfile} (format "~a/compiled/handbook~a" (digimon-tamer) path)])
+       (for ([rpath (in-list (list "?/../" "../index.html" "../../tamer.rkt" "!/../dispatch.rkt"))]
+             [expect (in-list (list 200 418 418 200))])
+         (test-case (format "~a: ~a" expect rpath)
+                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv (~htdocs rpath))]
+                                 [{lfile} (format "~a/compiled/handbook/~a" (digimon-tamer) rpath)])
                       (with-handlers ([exn:test:check? {λ [f] (cond [(file-exists? lfile) (raise f)]
                                                                     [else (check-eq? status 404 brief)])}])
                         (check-eq? status expect brief)))))]
@@ -115,7 +115,7 @@ making sure it works properly.
          (define-tamer-suite dispatch-digimon "Per-Digimon Terminus"
            |<check: before>| #:after {λ _ (shutdown)}
            |<testcase: dispatch-digimon>|
-           (let ([~htdocs (curry format "/~~~a/.~a~a" (getenv "USER") (current-digimon))])
+           (let ([~htdocs (curry format "/~~~a/.~a/~a" (getenv "USER") (current-digimon))])
              (test-suite "Rewrite URL" |<testcase: rewrite-url>|)))}]
 
 @chunk[|<check: before>|

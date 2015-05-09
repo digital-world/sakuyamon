@@ -49,9 +49,15 @@
         
         (define dispatch-cache (make-hash)) ; hash has its own semaphor as well as catch-table for ref set! and remove!
         (define path->mime (make-path->mime-type (collection-file-path "mime.types" "web-server" "default-web-root")))
-        (define ..->path {λ [base prest] (let-values ([{ups es} (partition symbol? prest)])
-                                           (cond [(<= (length ups) (length es)) (simplify-path (apply build-path base prest) #false)]
-                                                 [else (raise-user-error 'path->url "Escaped from htdocs!")]))})
+        (define ..->path {λ [base pas [--> values]] (let-values ([{ps ?} (for/fold ([ps null] [? -1]) ([pa (in-list pas)])
+                                                                          (match (path/param-path pa)
+                                                                            [{or 'up ".."} (values (cons 'up ps) (sub1 ?))]
+                                                                            [{or 'same "."} (values ps ?)]
+                                                                            ["" (values ps (add1 ?))]
+                                                                            [p (values (cons (--> p) ps) (add1 ?))]))])
+                                                      (define pieces (reverse ps))
+                                                      (cond [(negative? ?) (raise-user-error 'path->url "Escaped from htdocs!")]
+                                                            [else (values (simplify-path (apply build-path base pieces) #false) pieces)]))})
         
         (define dispatch
           {lambda [conn req]
@@ -85,28 +91,20 @@
           {lambda [user digimon]
             (files:make #:path->mime-type path->mime
                         #:url->path {λ [URL] (with-handlers ([exn:fail:filesystem? {λ [e] (next-dispatcher)}])
-                                               (define htdocs (build-path (expand-user-path user) "DigitalWorld"
-                                                                          (string-trim digimon #px"\\." #:right? #false)
-                                                                          (find-relative-path (digimon-zone) (digimon-tamer))
-                                                                          (car (use-compiled-file-paths))
-                                                                          "handbook"))
-                                               (define prest (filter-map {λ [pa] (match (path/param-path pa)
-                                                                                   ['up 'up]
-                                                                                   [{or 'same ""} #false]
-                                                                                   [p (string-replace p #px"\\.rkt$" "_rkt.html")])}
-                                                                         (drop (url-path URL) 2)))
-                                               (values (..->path htdocs prest) prest))})})
+                                               (..->path (build-path (expand-user-path user) "DigitalWorld"
+                                                                     (string-trim digimon #px"\\." #:right? #false)
+                                                                     (find-relative-path (digimon-zone) (digimon-tamer))
+                                                                     (car (use-compiled-file-paths))
+                                                                     "handbook")
+                                                         (drop (url-path URL) 2)
+                                                         (curryr string-replace #px"\\.rkt$" "_rkt.html")))})})
 
         (define dispatch-user
           {lambda [user]
             (chain:make (files:make #:path->mime-type path->mime
                                     #:url->path {λ [URL] (with-handlers ([exn:fail:filesystem? {λ [e] (next-dispatcher)}])
-                                                           (define htdocs (build-path (expand-user-path user) "Public" "DigitalWorld"))
-                                                           (define prest (filter-map {λ [pa] (match (path/param-path pa)
-                                                                                               [{or 'same ""} #false]
-                                                                                               [p p])}
-                                                                                     (drop (url-path URL) 1)))
-                                                           (values (..->path htdocs prest) prest))}))})
+                                                           (..->path (build-path (expand-user-path user) "Public" "DigitalWorld")
+                                                                     (drop (url-path URL) 1)))}))})
         #|(let-values ([{clear-cache! url->servlet} (servlets:make-cached-url->servlet
                                                       (filter-url->path #rx"\\.(ss|scm|rkt|rktd)$"
                                                                         (make-url->valid-path (make-url->path (paths-servlet (host-paths host-info)))))
