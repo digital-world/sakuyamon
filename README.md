@@ -29,11 +29,14 @@ Keep it simple but also ready for large-scale extension.
 >         - 💚 1 - .digimon/~user/readme.t
 >         + 📑Function URLs
 >           - 💚 1 - [::1]/d-arc/collect-garbage
->           - 💚 2 - [127.0.0.1]/d-arc/collect-garbage
+>           - 💚 2 - [127]/d-arc/collect-garbage
 >           - 💚 3 - [::1]/d-arc/refresh-servlet
->           - 💚 4 - [127.0.0.1]/d-arc/refresh-servlet
+>           - 💚 4 - [127]/d-arc/refresh-servlet
 >       + 📑Per-User Terminus
 >         - 💚 1 - readme.t
+>         + 📑Function URLs
+>           - 💚 1 - [::1]/d-arc/refresh-servlet
+>           - 💚 2 - [127]/d-arc/refresh-servlet
 >       + 📑Per-Digimon Terminus
 >         - 💚 1 - readme.t
 >         + 📑Rewrite URL
@@ -42,7 +45,7 @@ Keep it simple but also ready for large-scale extension.
 >           - 💚 3 - 418: ../../tamer.rkt
 >           - 💚 4 - 200: !/../dispatch.rkt
 >
-> 📌14 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌16 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)

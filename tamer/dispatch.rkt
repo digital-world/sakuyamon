@@ -37,12 +37,12 @@ are relative to @racket[digimon-terminus].
 For the sake of security, these @deftech{function URL}s are dispatched only when the client is @litchar{::1}.
 
 @chunk[|<testcase: dispatch-funtion-URLs>|
-       (for ([d-arc (in-list (list "/d-arc/collect-garbage" "/d-arc/refresh-servlet"))])
-         (test-case (format "[::1]~a" d-arc)
-                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv d-arc)])
+       (for ([d-arc (in-list (list "d-arc/collect-garbage" "d-arc/refresh-servlet"))])
+         (test-case (format "[::1]/~a" d-arc)
+                    (let-values ([{status brief _ __} (sendrecv (~htdocs d-arc))])
                       (check-eq? status 200 brief)))
-         (test-case (format "[127.0.0.1]~a" d-arc)
-                    (let-values ([{status brief headers /dev/net/stdin} (sendrecv d-arc #:host "127.0.0.1")])
+         (test-case (format "[127]/~a" d-arc)
+                    (let-values ([{status brief _ __} (sendrecv (~htdocs d-arc) #:host "127.0.0.1")])
                       (check-eq? status 403 brief))))]
 
 @handbook-scenario{Per-User Terminus}
@@ -59,11 +59,21 @@ URL paths always start with @litchar{~user}.
                [lpath (build-path (find-system-path 'home-dir) "Public" "DigitalWorld" path)]) 
            (test-spec path |<dispatch: setup and teardown>| |<dispatch: check>|)))]
 
-@bold{Note that this @itech{Terminus} do support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].}
+Note that @itech{Per-User Terminus} do support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].
+So users should be responsible for their own @itech{function URL}s through @litchar{::1}.
+
+@chunk[|<testcase: dispatch-user-funtion-URLs>|
+       (for ([d-arc (in-list (list "d-arc/refresh-servlet"))])
+         (test-case (format "[::1]/~a" d-arc)
+                    (let-values ([{status brief _ __} (sendrecv (~htdocs d-arc))])
+                      (check-eq? status 200 brief)))
+         (test-case (format "[127]/~a" d-arc)
+                    (let-values ([{status brief _ __} (sendrecv (~htdocs d-arc) #:host "127.0.0.1")])
+                      (check-eq? status 403 brief))))]
 
 @handbook-scenario{Per-Digimon Terminus}
 
-@deftech{@bold{Per-Digimon Terminus}} is designed for system users to publish their project wikis like
+@deftech{Per-Digimon Terminus} is designed for system users to publish their project wikis like
 @hyperlink["https://help.github.com/articles/what-are-github-pages/"]{Github Pages}. Public projects
 should be stored in directory @litchar{$HOME/DigitalWorld} and follow
 @hyperlink["https://github.com/digital-world/DigiGnome"]{my project convientions}.
@@ -79,7 +89,7 @@ where stores the auto-generated @itech{htdocs}.
                [lpath (build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook" path)]) 
            (test-spec path |<dispatch: setup and teardown>| |<dispatch: check>|)))]
 
-This @itech{Terminus} is the simplest one since it only serves static content.
+@itech{Per-Digimon Terminus} is the simplest one since it only serves static content.
 By default, users should ignore the name convention of @bold{Scribble},
 so paths reference to any @litchar{*.rkt} will be transformed to their @litchar{*.html} counterparts
 iff they are valid @secref["scribble_lp2_Language" #:doc '(lib "scribblings/scribble/scribble.scrbl")]s.
@@ -105,11 +115,14 @@ making sure it works properly.
          (define-tamer-suite dispatch-main "Main Terminus"
            |<dispatch: check #:before>|
            |<testcase: dispatch-main>|
-           (test-suite "Function URLs" |<testcase: dispatch-funtion-URLs>|))
+           (let ([~htdocs (curry format "/~a")])
+            (test-suite "Function URLs" |<testcase: dispatch-funtion-URLs>|)))
 
          (define-tamer-suite dispatch-user "Per-User Terminus"
            |<dispatch: check #:before>|
-           |<testcase: dispatch-user>|)
+           |<testcase: dispatch-user>|
+           (let ([~htdocs (curry format "/~~~a/~a" (getenv "USER"))])
+             (test-suite "Function URLs" |<testcase: dispatch-user-funtion-URLs>|)))
 
          (define-tamer-suite dispatch-digimon "Per-Digimon Terminus"
            |<dispatch: check #:before>| #:after {λ _ (shutdown)}

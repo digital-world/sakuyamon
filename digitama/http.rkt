@@ -13,7 +13,8 @@
 (define-type Response response)
 
 (require/typed racket/base
-               [srcloc->string (-> srcloc (Option String))])
+               [srcloc->string (-> srcloc (Option String))]
+               [current-memory-use (->* [] [(Option Custodian)] Nonnegative-Integer)])
 
 (require/typed/provide web-server/http
                        [headers-assq* (-> Bytes (Listof Header) (Option Header))]
@@ -57,6 +58,14 @@
                        [gen-protocol-responder (-> Path-String (-> URL Response))]
                        [gen-file-not-found-responder (-> Path-String (-> Request Response))]
                        [gen-collect-garbage-responder (-> Path-String (-> Response))])
+
+(require/typed/provide web-server/private/web-server-structs
+                       [current-server-custodian (Parameterof Custodian)]
+                       [make-servlet-custodian (-> Custodian)])
+
+(require/typed/provide web-server/private/mime-types
+                       [read-mime-types (-> Path-String (HashTable Symbol Bytes))]
+                       [make-path->mime-type (-> Path-String (-> Path (Option Bytes)))])
 
 (define response:403 : (-> Header * Response)
   {lambda headers
@@ -118,25 +127,25 @@
 
 (define response:exn : (-> (Option URL) exn Bytes Header * Response)
   {lambda [url x stage . headers]
-    (cond [(exn:fail:user? x) (response:418)]
-          [(exn? x) (let ([tr : (-> String String) {λ [str] (string-replace str (digimon-world) "")}])
-                      (response/xexpr #:code 500 #:headers headers
-                                      #:message (let ([msgs ((inst call-with-input-string (Listof Bytes)) (exn-message x) port->bytes-lines)])
-                                                  (bytes-append stage #": " (bytes-join msgs (string->bytes/utf-8 (string cat#)))))
-                                      `(html (head (title ,(format "Uncaught Exception when ~a" stage))
-                                                   (link ([rel "stylesheet"] [href "/stone/error.css"])))
-                                             (body (div ([class "section"])
-                                                        (div ([class "title"]) "Sakuyamon")
-                                                        (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                                           "(*(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)))(+(*)(*)(*)(*)(*)))" ")"
-                                                           (pre ,@(map {λ [v] (format "» ~a~n" v)}
-                                                                       (list (if url (tr (url->string url)) "#false")
-                                                                             (object-name x)
-                                                                             (tr (exn-message x))))
-                                                                ,@(filter-map {λ [[stack : (Pairof (Option Symbol) Any)]]
-                                                                                (and (cdr stack)
-                                                                                     (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
-                                                                                       (and srcinfo (regexp-match? #px"^[^/]" srcinfo)
-                                                                                            (format "»»» ~a: ~a~n" (tr srcinfo) (or (car stack) 'λ)))))}
-                                                                              (continuation-mark-set->context (exn-continuation-marks x))))))))))]
-          [else (raise x)])})
+    (cond [(false? (exn? x)) (raise x)]
+          [(exn:fail:user? x) (response:418)]
+          [else (let ([tr : (-> String String) {λ [str] (string-replace str (digimon-world) "")}])
+                  (response/xexpr #:code 500 #:headers headers
+                                  #:message (let ([msgs ((inst call-with-input-string (Listof Bytes)) (exn-message x) port->bytes-lines)])
+                                              (bytes-append stage #": " (bytes-join msgs (string->bytes/utf-8 (string cat#)))))
+                                  `(html (head (title ,(format "Uncaught Exception when ~a" stage))
+                                               (link ([rel "stylesheet"] [href "/stone/error.css"])))
+                                         (body (div ([class "section"])
+                                                    (div ([class "title"]) "Sakuyamon")
+                                                    (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
+                                                       "(*(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)))(+(*)(*)(*)(*)(*)))" ")"
+                                                       (pre ,@(map {λ [v] (format "» ~a~n" v)}
+                                                                   (list (if url (tr (url->string url)) "#false")
+                                                                         (object-name x)
+                                                                         (tr (exn-message x))))
+                                                            ,@(filter-map {λ [[stack : (Pairof (Option Symbol) Any)]]
+                                                                            (and (cdr stack)
+                                                                                 (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
+                                                                                   (and srcinfo (regexp-match? #px"^[^/]" srcinfo)
+                                                                                        (format "»»» ~a: ~a~n" (tr srcinfo) (or (car stack) 'λ)))))}
+                                                                          (continuation-mark-set->context (exn-continuation-marks x))))))))))])})
