@@ -32,10 +32,11 @@
                              {λ _ (custodian-shutdown-all sakuyamon-zone)})}))
       (define {sendrecv ssl? port}
         {λ [uri #:host [host "::1"] #:method [method #"GET"] #:headers [headers null] #:data [data #false]]
-          (define-values {status recv-headers /dev/net/stdin}
+          (define-values {status net-headers /dev/net/stdin}
             (http-sendrecv host uri #:ssl? ssl? #:port port #:method method #:headers headers #:data data))
           (define parts (regexp-match #px".+?\\s+(\\d+)\\s+(.+)\\s*$" (bytes->string/utf-8 status)))
-          (values (string->number (list-ref parts 1)) (list-ref parts 2) recv-headers /dev/net/stdin)})
+          (values (string->number (list-ref parts 1)) (string-join (string-split (list-ref parts 2) (string cat#)) (string #\newline))
+                  net-headers /dev/net/stdin)})
       (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown #:kill? #true) (cons "" (exn-message b))))}])
         (match ((curry sync/timeout/enable-break 1.618) (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt})
                                                         (handle-evt sakuyamon (curry cons sakuyamon)))

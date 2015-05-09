@@ -108,14 +108,16 @@
 (define response:exn : (-> exn Header * Response)
   {lambda [exception . headers]
     (define tr : (-> String String) {λ [str] (string-replace str (digimon-world) "")})
-    (response/xexpr #:code 500 #:message (string->bytes/utf-8 (exn-message exception)) #:headers headers
+    (response/xexpr #:code 500 #:headers headers
+                    #:message (bytes-join ((inst call-with-input-string (Listof Bytes)) (exn-message exception) port->bytes-lines)
+                                          (string->bytes/utf-8 (string cat#))) ; replace #newline with cat# 
                     `(html (head (title "Uncaught Exception Handler")
                                  (link ([rel "stylesheet"] [href "/error.css"])))
                            (body (div ([class "section"])
                                       (div ([class "title"]) "Sakuyamon")
                                       (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ")"
-                                         ,(format " '~a" (object-name exception)) ")"
-                                         (pre ,(format "» ~a~n" (tr (exn-message exception)))
+                                         "(*(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)))(+(*)(*)(*)(*)(*)))"
+                                         (pre ,(format "» ~a: ~a~n" (object-name exception) (tr (exn-message exception)))
                                               ,@(filter-map {λ [[stack : (Pairof (Option Symbol) Any)]]
                                                               (and (cdr stack)
                                                                    (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
