@@ -128,9 +128,11 @@
                                              (body (div ([class "section"])
                                                         (div ([class "title"]) "Sakuyamon")
                                                         (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                                           ,(if url (url->string url) "#false") (br)
-                                                           "   " "(*(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)))(+(*)(*)(*)(*)(*)))" ")"
-                                                           (pre ,(format "» ~a: ~a~n" (object-name x) (tr (exn-message x)))
+                                                           "(*(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)))(+(*)(*)(*)(*)(*)))" ")"
+                                                           (pre ,@(map {λ [v] (format "» ~a~n" v)}
+                                                                       (list (if url (tr (url->string url)) "#false")
+                                                                             (object-name x)
+                                                                             (tr (exn-message x))))
                                                                 ,@(filter-map {λ [[stack : (Pairof (Option Symbol) Any)]]
                                                                                 (and (cdr stack)
                                                                                      (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])

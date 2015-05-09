@@ -92,8 +92,8 @@ making sure it works properly.
              [expect (in-list (list 200 418 418 200))])
          (test-case (format "~a: ~a" expect rpath)
                     (let-values ([{status brief headers /dev/net/stdin} (sendrecv (~htdocs rpath))]
-                                 [{lfile} (format "~a/compiled/handbook/~a" (digimon-tamer) rpath)])
-                      (with-handlers ([exn:test:check? {λ [f] (cond [(file-exists? lfile) (raise f)]
+                                 [{lpath} (format "~a/compiled/handbook/~a" (digimon-tamer) rpath)])
+                      (with-handlers ([exn:test:check? {λ [f] (cond [(file-exists? lpath) (raise f)]
                                                                     [else (check-eq? status 404 brief)])}])
                         (check-eq? status expect brief)))))]
 

@@ -58,7 +58,7 @@
                                                                             ["" (values ps (add1 ?))]
                                                                             [p (values (cons (--> p) ps) (add1 ?))]))])
                                                       (define pieces (reverse ps))
-                                                      (cond [(negative? ?) (raise-user-error 'path->url "Escaped from htdocs!")]
+                                                      (cond [(and (false? (null? pas)) (negative? ?)) (raise-user-error 'path->url "Escaped from htdocs!")]
                                                             [else (values (simplify-path (apply build-path base pieces) #false) pieces)]))})
         
         (define path->servlet {λ [->path mods] (let ([fns (make-make-servlet-namespace #:to-be-copied-module-specs mods)]
