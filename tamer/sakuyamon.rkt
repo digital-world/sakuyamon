@@ -63,7 +63,7 @@ This scenario is designed for detecting the status of features and bugs of @bold
 
 @tamer-note['typed-libraries]
 
-@chunk[|<testcase: typed-libraries>|
+@chunk[|<testcase: typed libraries>|
        (test-exn "Web Application"
                  exn:fail:filesystem:missing-module?
                  {λ _ (dynamic-require 'typed/web-server/http 'response/full)})]
@@ -78,4 +78,4 @@ This scenario is designed for detecting the status of features and bugs of @bold
        {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
          (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)
-         (define-tamer-suite typed-libraries "Typed Racket Libraries!" |<testcase: typed-libraries>|)}]
+         (define-tamer-suite typed-libraries "Typed Racket Libraries!" |<testcase: typed libraries>|)}]

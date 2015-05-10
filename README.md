@@ -40,12 +40,15 @@ Keep it simple but also ready for large-scale extension.
 >       + 📑Per-Digimon Terminus
 >         - 💚 1 - readme.t
 >         + 📑Rewrite URL
->           - 💚 1 - 200: ?/../
->           - 💚 2 - 418: ../index.html
->           - 💚 3 - 418: ../../tamer.rkt
->           - 💚 4 - 200: !/../dispatch.rkt
+>           - 💚 1 - 302: !/../.
+>           - 💚 2 - 200: !/../dispatch.rkt
+>           - 💚 3 - 418: ./../../tamer.rkt
+>         + 📑Basic Authentication
+>           - 💚 1 - 200: [::1]guest
+>           - 💚 2 - 401: [127]guest
+>           - 💚 3 - 200: [127]tamer
 >
-> 📌16 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌18 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)
