@@ -14,7 +14,7 @@
 (require (prefix-in http: web-server/http/request))
 (require (prefix-in chain: web-server/dispatchers/dispatch-sequencer))
 (require (prefix-in timeout: web-server/dispatchers/dispatch-timeout))
-(require (prefix-in password: web-server/dispatchers/dispatch-passwords))
+(require (prefix-in pwd: web-server/dispatchers/dispatch-passwords))
 (require (prefix-in file: web-server/dispatchers/dispatch-files))
 (require (prefix-in servlet: web-server/dispatchers/dispatch-servlets))
 (require (prefix-in path: web-server/dispatchers/dispatch-pathprocedure))
@@ -46,19 +46,18 @@
         (define dispatch-cache (make-hash)) ; hash has its own semaphor as well as catch-table for ref set! and remove!
         (define path->mime (make-path->mime-type (collection-file-path "mime.types" "web-server" "default-web-root")))
 
-        (define ~->path {λ [~user] (with-handlers ([exn:fail:filesystem? {λ _ (find-system-path 'temp-dir)}]) (expand-user-path ~user))})
-        
-        (define ..->path {λ [base pas [--> values]] (let-values ([{ps ?} (for/fold ([ps null] [? -1])
-                                                                                   ([pa (in-list (if (directory-exists? base) pas null))])
-                                                                          (match (path/param-path pa)
-                                                                            [{or 'up ".."} (values (cons 'up ps) (sub1 ?))]
-                                                                            [{or 'same "."} (values ps ?)]
-                                                                            ["" (values ps (add1 ?))]
-                                                                            [p (values (cons (--> p) ps) (add1 ?))]))])
-                                                      (cond [(false? (directory-exists? base)) (values base null)]
-                                                            [(and (false? (null? pas)) (negative? ?)) (raise-user-error 'path->url "Escaped from htdocs!")]
-                                                            [else (let ([pieces (reverse ps)])
-                                                                    (values (simplify-path (apply build-path base pieces) #false) pieces))]))})
+        (define ~user {λ [~username] (with-handlers ([exn:fail:filesystem? {λ _ (find-system-path 'temp-dir)}]) (expand-user-path ~username))})
+        (define ~path {λ [base pas [--> values]] (cond [(false? (directory-exists? base)) (values base null)]
+                                                       [else (with-handlers ([exn? {λ _ (raise-user-error 'url->path "Found Escaping `..`!")}])
+                                                               (let travel ([pieces null] [prst (map path/param-path pas)])
+                                                                 (match prst
+                                                                   [{cons {or 'up ".."} rst} (travel (cdr pieces) rst)]
+                                                                   [{cons {or 'same "." ""} rst} (travel pieces rst)]
+                                                                   [{list plast} (travel (cons (--> plast) pieces) null)]
+                                                                   [{list plast {or 'same "." ""}} (travel (cons (--> plast) pieces) null)]
+                                                                   [{cons pdir rst} (travel (cons pdir pieces) rst)]
+                                                                   [_ (let ([ps (reverse pieces)])
+                                                                        (values (simplify-path (apply build-path base ps) #false) ps))])))])})
         
         (define path->servlet {λ [->path mods] (let ([fns (make-make-servlet-namespace #:to-be-copied-module-specs mods)]
                                                      [tds (sakuyamon-timeout-default-servlet)])
@@ -86,29 +85,34 @@
                                  (chain:make (timeout:make initial-connection-timeout)
                                              (log:make #:format (log:log-format->format 'extended)
                                                        #:log-path (build-path (digimon-stone) "access.log"))
-                                             (cond [(and user? digimon?) (dispatch-digimon user? digimon?)]
+                                             (cond [(and user? digimon?) (dispatch-digimon user? digimon? ::1?)]
                                                    [(and user?) (dispatch-user user? ::1?)]
                                                    [else (dispatch-main ::1?)])
                                              (lift:make {λ [req] (response:404)})))})
                conn req))})
         
         (define dispatch-digimon
-          {lambda [~user .digimon]
+          {lambda [user digimon ::1?]
             ;[(false? (directory-exists? htdocs)) (chain:make)] ; don't do this since the target will exists in the future.
-            (file:make #:path->mime-type path->mime
-                       #:url->path {λ [URL] (..->path (build-path (~->path ~user) "DigitalWorld"
-                                                                  (string-trim .digimon #px"\\." #:right? #false)
-                                                                  (find-relative-path (digimon-zone) (digimon-tamer))
-                                                                  (car (use-compiled-file-paths)) "handbook")
-                                                      (drop (url-path URL) 2)
-                                                      (curryr string-replace #px"\\.rkt$" "_rkt.html"))})})
+            (define ./htdocs (build-path "DigitalWorld" (string-trim digimon #px"\\." #:right? #false)
+                                         (find-relative-path (digimon-zone) (digimon-tamer))
+                                         (car (use-compiled-file-paths)) "handbook"))
+            (chain:make (cond [::1? (chain:make)]
+                              [else (pwd:make {λ [req] (let ([tamers.sexp (build-path (~user user) ./htdocs 'up 'up "tamers.sexp")])
+                                                         (define-values {_ authorize} (pwd:password-file->authorized? tamers.sexp))
+                                                         ((pwd:make-basic-denied?/path authorize) req))}
+                                              #:authentication-responder (λ [url header] (response:401 url header)))])
+                        (file:make #:path->mime-type path->mime
+                                   #:url->path {λ [URL] (~path (build-path (~user user) ./htdocs)
+                                                               (drop (url-path URL) 2)
+                                                               (curryr string-replace #px"\\.rkt$" "_rkt.html"))}))})
 
         (define dispatch-user
-          {lambda [~user ::1?]
-            (define /d-arc/ (string-append "/" ~user "/d-arc/"))
+          {lambda [user ::1?]
+            (define /d-arc/ (string-append "/" user "/d-arc/"))
+            (define ./htdocs (build-path "Public" "DigitalWorld" "terminus"))
             ;[(false? (directory-exists? htdocs)) (chain:make)] ; the same above
-            (let*-values ([{url->path} {λ [URL] (..->path (build-path (~->path ~user) "Public" "DigitalWorld")
-                                                          (drop (url-path URL) 1))}]
+            (let*-values ([{url->path} {λ [URL] (~path (build-path (~user user) ./htdocs) (drop (url-path URL) 1))}]
                           [{refresh! url->servlet} (path->servlet url->path null)])
               (chain:make (filter:make (pregexp /d-arc/) (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
                                                                [else (path:make (string-append /d-arc/ "refresh-servlet")
@@ -123,7 +127,7 @@
         (define dispatch-main
           {lambda [::1?]
             (define htdocs (digimon-terminus))
-            (define url->path {λ [URL] (..->path htdocs (url-path URL))})
+            (define url->path {λ [URL] (~path htdocs (url-path URL))})
             (define-values {refresh! url->servlet} (path->servlet url->path null))
             (chain:make (filter:make #px"^/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
                                                          [else (chain:make (path:make "/d-arc/collect-garbage" {λ _ (response:gc)})

@@ -12,13 +12,15 @@
 (define-type Request request)
 (define-type Response response)
 
+(define-type Digest-Credentials (Listof (Pairof Symbol Symbol)))
+(define-type Username*Realm->Password (-> String String String))
+(define-type Username*Realm->Digest-HA1 (-> String String Bytes))
+
 (require/typed racket/base
                [srcloc->string (-> srcloc (Option String))]
                [current-memory-use (->* [] [(Option Custodian)] Nonnegative-Integer)])
 
 (require/typed/provide web-server/http
-                       [headers-assq* (-> Bytes (Listof Header) (Option Header))]
-                       [response/xexpr (-> Any [#:code Natural] [#:message Bytes] [#:headers (Listof Header)] Response)]
                        [#:struct header {[field : Bytes]
                                          [value : Bytes]}
                                  #:extra-constructor-name make-header]
@@ -44,7 +46,13 @@
                                            [seconds : Natural]
                                            [mime : (Option Bytes)]
                                            [headers : (Listof Header)]
-                                           [output : (-> Output-Port Void)]}])
+                                           [output : (-> Output-Port Void)]}]
+                       [headers-assq* (-> Bytes (Listof Header) (Option Header))]
+                       [response/xexpr (-> Any [#:code Natural] [#:message Bytes] [#:headers (Listof Header)] Response)]
+                       [make-digest-auth-header (-> String String String Header)]
+                       [request->digest-credentials (-> Request (Option Digest-Credentials))]
+                       [make-check-digest-credentials (-> Username*Realm->Digest-HA1 (-> String Digest-Credentials Boolean))]
+                       [password->digest-HA1 (-> Username*Realm->Password Username*Realm->Digest-HA1)])
 
 (require/typed/provide web-server/configuration/responders
                        [file-response (-> Natural Bytes Path-String Header * Response)]
@@ -77,6 +85,18 @@
                                       (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
                                          "(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*)(*))" ")"
                                          (pre "» 403 - Access Denied!"))))))})
+
+
+(define response:401 : (-> URL Header * Response)
+  {lambda [url . headers]
+    (response/xexpr #:code 401 #:message #"Unauthorized" #:headers headers
+                    `(html (head (title "Authentication Failed")
+                                 (link ([rel "stylesheet"] [href "/stone/error.css"])))
+                           (body (div ([class "section"])
+                                      (div ([class "title"]) "Sakuyamon")
+                                      (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
+                                         "(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*))" ")"
+                                         (pre "» 401 - Authentication Failed!"))))))})
 
 (define response:404 : (-> Header * Response)
   {lambda headers

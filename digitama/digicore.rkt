@@ -25,7 +25,5 @@
 
 (define sakuyamon-timeout-default-servlet : (Parameterof Natural)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-timeout-default-servlet {λ _ 30}) Natural)))
-;(define sakuyamon-timeout-password : (Parameterof Natural)
- ; (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-timeout-password {λ _ 300}) Natural)))
 (define sakuyamon-timeout-servlet-connection : (Parameterof Natural)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-timeout-servlet-connection {λ _ 86400}) Natural)))
