@@ -53,29 +53,9 @@ So, as usual @racket[sakuyamon-realize] itself should be checked first:
                       (check-pred pair? recv-stdmsg)
                       (check-regexp-match (pregexp (format "errno=~a" $?)) (cdr recv-stdmsg)))))]
 
-@handbook-scenario{Hello, Racket!}
-
-This scenario is designed for detecting the status of features and bugs of @bold{Racket} itself.
-
-@italic{@bold{You should ignore this.}}
-
-@subsection{Typed Libraries}
-
-@tamer-note['typed-libraries]
-
-@chunk[|<testcase: typed libraries>|
-       (test-exn "Web Application"
-                 exn:fail:filesystem:missing-module?
-                 {λ _ (dynamic-require 'typed/web-server/http 'response/full)})]
-
-@subsection{Typed Submodules}
-
-@tamer-action[(namespace-variable-value 'digimon-zone)]
-
 @handbook-appendix[]
 
 @chunk[|<sakuyamon:*>|
        {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
-         (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)
-         (define-tamer-suite typed-libraries "Typed Racket Libraries!" |<testcase: typed libraries>|)}]
+         (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)}]

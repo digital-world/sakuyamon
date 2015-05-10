@@ -21,8 +21,6 @@ Keep it simple but also ready for large-scale extension.
 >       + 📑Sakuyamon, Realize!
 >         - 💚 1 - realize --port 8443 [fresh]
 >         - 💚 2 - realize --port 8443 [already in use]
->       + 📑Typed Racket Libraries!
->         - 💚 1 - Web Application
 >     + 📖
 [dispatch.rkt](http://gyoudmon.org/~wargrey/.sakuyamon/dispatch.rkt)
 >       + 📑Main Terminus
@@ -49,7 +47,7 @@ Keep it simple but also ready for large-scale extension.
 >           - 💚 2 - 401: [127]guest
 >           - 💚 3 - 200: [127]tamer
 >
-> 📌19 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌18 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)
