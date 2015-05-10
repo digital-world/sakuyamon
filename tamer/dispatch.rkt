@@ -104,14 +104,14 @@ Nonetheless, these paths would always be navigated by auto-generated navigators.
 making sure it works properly.
 
 @chunk[|<testcase: rewrite url>|
-       (for ([rpath (in-list (list "!/../."  "!/../dispatch.rkt" "./../../tamer.rkt"))]
-             [expect (in-list (list 302 200 418))])
+       (for ([rpath (in-list (list "!/../."  "!/../dispatch.rkt" "dir/lp.rkt" "./../../tamer.rkt"))]
+             [px (in-list (list #px"/$" #px"_rkt(/|\\.html)$" #px"dir_lp_rkt(/|\\.html)$" #false))]
+             [expect (in-list (list 302 302 302 418))])
          (test-case (format "~a: ~a" expect rpath)
-                    (match-let ([{list status reason _ _} (sendrecv (~htdocs rpath))]
-                                [lpath (format "~a/compiled/handbook/~a" (digimon-tamer) rpath)])
-                      (with-handlers ([exn:test:check? {λ [f] (cond [(file-exists? lpath) (raise f)]
-                                                                    [else (check-eq? status 404 reason)])}])
-                        (check-eq? status expect reason)))))]
+                    (match-let ([{list status reason headers _} (sendrecv (~htdocs rpath))])
+                      (check-eq? status expect reason)
+                      (when (and (= expect 302) (regexp? px))
+                        (check-regexp-match px (bytes->string/utf-8 (dict-ref headers #"Location")))))))]
 
 Sometimes, users may want to hide their private projects, although this is not recommended.
 Nonetheless, @itech{Per-Digimon Terminus} do support

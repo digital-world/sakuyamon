@@ -41,14 +41,15 @@ Keep it simple but also ready for large-scale extension.
 >         - 💚 1 - readme.t
 >         + 📑Rewrite URL
 >           - 💚 1 - 302: !/../.
->           - 💚 2 - 200: !/../dispatch.rkt
->           - 💚 3 - 418: ./../../tamer.rkt
+>           - 💚 2 - 302: !/../dispatch.rkt
+>           - 💚 3 - 302: dir/lp.rkt
+>           - 💚 4 - 418: ./../../tamer.rkt
 >         + 📑Basic Authentication
 >           - 💚 1 - 200: [::1]guest
 >           - 💚 2 - 401: [127]guest
 >           - 💚 3 - 200: [127]tamer
 >
-> 📌18 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌19 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)

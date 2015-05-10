@@ -60,7 +60,7 @@
       [{301} (let ([m (string->symbol (string-downcase (format "~a" method)))])
                (cond [(member m '{get head}) (re-sendrecv (dict-ref net-headers #"Location"))]
                      [else status]))]
-      [{302} (re-sendrecv (dict-ref net-headers #"Location"))]
+      [{302 307} (re-sendrecv (dict-ref net-headers #"Location"))]
       [{401} (with-handlers ([exn? {λ _ status}])
                (re-sendrecv #:username #false #:password #false
                             #:add-headers (list (bytes-append #"Authorization: Basic "

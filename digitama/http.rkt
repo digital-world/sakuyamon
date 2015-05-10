@@ -21,6 +21,7 @@
                [current-memory-use (->* [] [(Option Custodian)] Nonnegative-Integer)])
 
 (require/typed/provide web-server/http
+                       [#:opaque Redirection-Status redirection-status?]
                        [#:struct header {[field : Bytes]
                                          [value : Bytes]}
                                  #:extra-constructor-name make-header]
@@ -49,6 +50,7 @@
                                            [output : (-> Output-Port Void)]}]
                        [headers-assq* (-> Bytes (Listof Header) (Option Header))]
                        [response/xexpr (-> Any [#:code Natural] [#:message Bytes] [#:headers (Listof Header)] Response)]
+                       [redirect-to (->* {String} {Redirection-Status #:headers (Listof Header)} Response)]
                        [make-digest-auth-header (-> String String String Header)]
                        [request->digest-credentials (-> Request (Option Digest-Credentials))]
                        [make-check-digest-credentials (-> Username*Realm->Digest-HA1 (-> String Digest-Credentials Boolean))]
