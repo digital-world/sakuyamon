@@ -22,9 +22,9 @@ since they are system-wide @itech[#:key "Terminus"]{Termini}.
 @chunk[|<dispatch taming start>|
        (require "tamer.rkt")
        (tamer-taming-start)
-       (define-values {shutdown sendrecv} (sakuyamon-realize))
-       (define {127-sendrecv uri #:method [method #"GET"] #:headers [headers null] #:data [data #false]}
-         (sendrecv uri #:host "127.0.0.1" #:method method #:headers headers #:data data))
+       (define-values {shutdown curl} (sakuyamon-realize))
+       (define {127.curl uri #:method [method #"GET"] #:headers [headers null] #:data [data #false]}
+         (curl uri #:host "127.0.0.1" #:method method #:headers headers #:data data))
        |<dispatch:*>|]
 
 @handbook-scenario{Main Terminus}
@@ -41,7 +41,7 @@ are relative to @racket[digimon-terminus].
            (test-spec rpath |<dispatch: setup and teardown>| |<check: dispatch>|)))]
 
 @chunk[|<check: dispatch>|
-       (match-let ([{list status reason _ /dev/net/stdin} (sendrecv rpath)])
+       (match-let ([{list status reason _ /dev/net/stdin} (curl rpath)])
          (check-eq? status 200 reason)
          (check-equal? (read-line /dev/net/stdin) (path->string lpath)))]
 
@@ -53,10 +53,10 @@ are relative to @racket[digimon-terminus].
 
 @chunk[|<check: function url>|
        (test-case (format "200: /~a@::1" d-arc)
-                  (match-let ([{list status reason _ _} (sendrecv (~htdocs d-arc))])
+                  (match-let ([{list status reason _ _} (curl (~htdocs d-arc))])
                     (check-eq? status 200 reason)))
        (test-case (format "403: /~a@127" d-arc)
-                  (match-let ([{list status reason _ _} (127-sendrecv (~htdocs d-arc))])
+                  (match-let ([{list status reason _ _} (127.curl (~htdocs d-arc))])
                     (check-eq? status 403 reason)))]
 
 @handbook-scenario{Per-User Terminus}
@@ -109,14 +109,15 @@ Nonetheless, these paths would always be navigated by auto-generated navigators.
 making sure it works properly.
 
 @chunk[|<testcase: rewrite url>|
-       (for ([rpath (in-list (list "!/../."  "!/../dispatch.rktl" "t/h.lp.rktl" "./../../tamer.rkt"))]
-             [px (in-list (list #px"/$" #px"_rktl(/|\\.html)$" #px"t_h_lp_rktl(/|\\.html)$" #false))]
-             [expect (in-list (list 302 302 302 418))])
+       (for ([rpath (in-list (list "!/../." "./t/h.lp.rktl" "../../tamer.rkt"))]
+             [px (in-list (list #px"/$" #px"t_h_lp_rktl(/|\\.html)$" #false))]
+             [expect (in-list (list 302 302 418))])
          (test-case (format "~a: ~a" expect rpath)
-                    (match-let ([{list status reason headers _} (sendrecv (~htdocs rpath))])
+                    (match-let ([{list status reason headers _} (curl (~htdocs rpath))])
                       (check-eq? status expect reason)
                       (when (and (= expect 302) (regexp? px))
-                        (check-regexp-match px (bytes->string/utf-8 (dict-ref headers #"Location")))))))]
+                        (let ([location (dict-ref headers #"Location")])
+                          (check-regexp-match px (bytes->string/utf-8 location)))))))]
 
 Sometimes, users may want to hide their private projects, although this is not recommended.
 Nonetheless, @itech{Per-Digimon Terminus} do support
@@ -125,9 +126,11 @@ Just put a @racket[read]able @italic{data file} @litchar{realm.rktd} in the @rac
 @secref["dispatch-passwords" #:doc '(lib "web-server/scribblings/web-server-internal.scrbl")].
 
 @chunk[|<testcase: basic access authentication>|
-       (let* ([realm.rktd (build-path (digimon-tamer) "realm.rktd")]
-              [client {λ [sendrecv #:username [user #false] #:password [pwd #false]]
-                        (sakuyamon-agent sendrecv (~htdocs ".") #"GET" #:username user #:password pwd)}])
+       (let ([realm.rktd (build-path (digimon-tamer) "realm.rktd")]
+             [client {λ [curl . lines]
+                       (let ([>> {λ _ (map displayln lines)}]
+                             [<< {λ _ (sakuyamon-agent curl (~htdocs ".") #"GET")}])
+                         (with-input-from-bytes (with-output-to-bytes >>) <<))}])
          (test-suite "Basic Authentication"
                      #:before {λ _ (with-output-to-file realm.rktd #:exists 'error
                                      {λ _ (printf "'~s~n" '{{"realm" "(#px)?/.+"
@@ -135,16 +138,15 @@ Just put a @racket[read]able @italic{data file} @litchar{realm.rktd} in the @rac
                                                                      [tamer "opensource"]}})})}
                      #:after {λ _ (delete-file realm.rktd)}
                      (test-case "200: guest@::1"
-                                (match-let ([{list status reason _ _} (client sendrecv)])
+                                (match-let ([{list status reason _ _} (client curl)])
                                   (check-eq? status 200 reason)))
                      (test-case "401: guest@127"
-                                (match-let ([{list status reason _ _} (client 127-sendrecv)])
+                                (match-let ([{list status reason _ _} (client 127.curl)])
                                   (check-eq? status 401 reason)))
                      (test-case "200: tamer@127"
-                                (match-let ([{list status reason _ _} (client 127-sendrecv
-                                                                              #:username #"tamer"
-                                                                              #:password #"opensource")])
-                                  (check-eq? status 200 reason)))))]
+                                (let ([curl:user:pwd (list 127.curl 'tamer "opensource")])
+                                  (match-let ([{list status reason _ _} (apply client curl:user:pwd)])
+                                    (check-eq? status 200 reason))))))]
 
 By the way, as you may guess, users don@literal{'}t need to refresh passwords manually
 since the @litchar{realm.rktd} is checked every request.
@@ -174,7 +176,7 @@ since the @litchar{realm.rktd} is checked every request.
                    |<testcase: basic access authentication>|)))}]
 
 @chunk[|<dispatch: check #:before>|
-       #:before {λ _ (when (pair? sendrecv) (raise-result-error 'realize "procedure?" sendrecv))}]
+       #:before {λ _ (when (pair? curl) (raise-result-error 'realize "procedure?" curl))}]
 
 @chunk[|<dispatch: setup and teardown>|
        #:before {λ _ (void (make-parent-directory* lpath)

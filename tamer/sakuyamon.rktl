@@ -20,16 +20,16 @@ in order to make sure we could talk with the @deftech{digimon}s as expected.
 
 Once @itech{sakuyamon} has realized she would keep doing her duty before @racketidfont{shutdown}ing manually.
 All the options are designed for taming rather than real world surviving, so the default port is @racket[0]
-which means she can always be talked with via @racketidfont{sendrecv} as long as she@literal{'}s ready.
+which means she can always be talked with via @racketidfont{curl} as long as she@literal{'}s ready.
 
 @tamer-action[(define {realize-with-flush . arglist}
                 (call-with-values {λ _ (apply sakuyamon-realize arglist)}
-                                  {λ [shutdown sendrecv]
+                                  {λ [shutdown curl]
                                     (let ([$? (shutdown)])
-                                      (when (pair? sendrecv)
-                                        (cond [(zero? $?) (printf "~a~n" (car sendrecv))]
-                                              [else (eprintf "~a~n" (cdr sendrecv))])))}))
-              (code:comment @#,t{@racketidfont{@racketcommentfont{sendrecv}} will hold the output and error messages.})
+                                      (when (pair? curl)
+                                        (cond [(zero? $?) (printf "~a~n" (car curl))]
+                                              [else (eprintf "~a~n" (cdr curl))])))}))
+              (code:comment @#,t{@racketidfont{@racketcommentfont{curl}} will hold the output and error messages.})
               (realize-with-flush "--help")
               (realize-with-flush "--SSL")
               (code:comment @#,t{@hyperlink["https://letsencrypt.org"]{@racketcommentfont{Let@literal{'}s Encrypt}} is a kind of service})
@@ -42,11 +42,11 @@ So, as usual @racket[sakuyamon-realize] itself should be checked first:
 @chunk[|<testcase: realize>|
        (let*-values ([{shutdown sendrecv} (sakuyamon-realize "-p" "8443")]
                      [{shutdown-errno recv-stdmsg} (sakuyamon-realize "-p" "8443")]
-                     [{shutdown resendrecv} (and (shutdown) (sakuyamon-realize "-p" "8443"))])
+                     [{shutdown curl} (and (shutdown) (sakuyamon-realize "-p" "8443"))])
          (test-spec "realize --port 8443 [fresh]"
                     (let ([$? (shutdown)])
                       (check-pred procedure? sendrecv)
-                      (check-pred procedure? resendrecv)
+                      (check-pred procedure? curl)
                       (check-pred zero? $?)))
          (test-spec "realize --port 8443 [already in use]"
                     (let ([$? (shutdown-errno)])
