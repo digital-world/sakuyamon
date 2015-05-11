@@ -4,7 +4,7 @@
 
 (require typed/net/url)
 
-(provide (all-defined-out))
+(provide (except-out (all-defined-out) response:ddd))
 (provide (all-from-out typed/net/url))
 
 (define-type Header header)
@@ -77,50 +77,38 @@
                        [read-mime-types (-> Path-String (HashTable Symbol Bytes))]
                        [make-path->mime-type (-> Path-String (-> Path (Option Bytes)))])
 
-(define response:403 : (-> Header * Response)
-  {lambda headers
-    (response/xexpr #:code 403 #:message #"Access Denied" #:headers headers
-                    `(html (head (title "Access Denied")
+(define response:ddd : (-> Any Bytes String (Listof Header) Response)
+  {lambda [code-sexp message desc headers]
+    (define status-code : Natural (cast (car.eval code-sexp (module->namespace 'racket/base)) Natural))
+    (response/xexpr #:code status-code #:message message #:headers headers
+                    `(html (head (title ,(bytes->string/utf-8 message))
                                  (link ([rel "stylesheet"] [href "/stone/error.css"])))
                            (body (div ([class "section"])
                                       (div ([class "title"]) "Sakuyamon")
                                       (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                         "(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*)(*))" ")"
-                                         (pre "» 403 - Access Denied!"))))))})
-
+                                         ,(string-replace (format "~a" code-sexp) #px"\\s+" "" #:all? #true) ")"
+                                         (pre "» " ,(number->string status-code)
+                                              " - " ,desc))))))})
 
 (define response:401 : (-> URL Header * Response)
   {lambda [url . headers]
-    (response/xexpr #:code 401 #:message #"Unauthorized" #:headers headers
-                    `(html (head (title "Authentication Failed")
-                                 (link ([rel "stylesheet"] [href "/stone/error.css"])))
-                           (body (div ([class "section"])
-                                      (div ([class "title"]) "Sakuyamon")
-                                      (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                         "(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*))" ")"
-                                         (pre "» 401 - Authentication Failed!"))))))})
+    (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*))
+                  #"Unauthorized" "Authentication Failed!" headers)})
+
+(define response:403 : (-> Header * Response)
+  {lambda headers
+    (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*)(*))
+                  #"Forbidden" "Access Denied!" headers)})
 
 (define response:404 : (-> Header * Response)
   {lambda headers
-    (response/xexpr #:code 404 #:message #"File Not Found" #:headers headers
-                    `(html (head (title "File Not Found")
-                                 (link ([rel "stylesheet"] [href "/stone/error.css"])))
-                           (body (div ([class "section"])
-                                      (div ([class "title"]) "Sakuyamon")
-                                      (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                         "(*(+(*)(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))))(+(*)(*)(*)(*)))" ")"
-                                         (pre "» 404 - Resource Not Found!"))))))})
-
+    (response:ddd '(*(+(*)(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))))(+(*)(*)(*)(*)))
+                  #"File Not Found" "Resource Not Found!" headers)})
+                  
 (define response:418 : (-> Header * Response)
   {lambda headers
-    (response/xexpr #:code 418 #:message #"I am a teapot" #:headers headers
-                    `(html (head (title "I am a teapot")
-                                 (link ([rel "stylesheet"] [href "/stone/error.css"])))
-                           (body (div ([class "section"])
-                                      (div ([class "title"]) "Sakuyamon")
-                                      (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                         "(+(*(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*))" ")"
-                                         (pre "» 418 - Have a cup of tea?"))))))})
+    (response:ddd '(+(*(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*))
+                  #"I am a teapot" "Have a cup of tea?" headers)})
 
 (define response:gc : (-> Header * Response)
   {lambda headers
