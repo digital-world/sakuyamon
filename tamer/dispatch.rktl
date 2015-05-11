@@ -15,6 +15,10 @@ since they are system-wide @itech[#:key "Terminus"]{Termini}.
 
 @tamer-smart-summary[]
 
+@margin-note{For the two @hyperlink["http://en.wikipedia.org/wiki/Localhost"]{loopback addresses},
+                    @itech{Sakuyamon} always trust @deftech[#:key "trustable"]@litchar{::1} and treat
+                    @litchar{127.0.0.1} as a public address.}
+
 @chunk[|<dispatch taming start>|
        (require "tamer.rkt")
        (tamer-taming-start)
@@ -41,17 +45,17 @@ are relative to @racket[digimon-terminus].
          (check-eq? status 200 reason)
          (check-equal? (read-line /dev/net/stdin) (path->string lpath)))]
 
-For the sake of security, these @deftech{function URL}s are dispatched only when the client is @litchar{::1}.
+@deftech{Function URL}s are dispatched only when the request comes from @itech{trustable} clients.
 
 @chunk[|<testcase: dispatch funtion URLs>|
        (for ([d-arc (in-list (list "d-arc/collect-garbage" "d-arc/refresh-servlet"))])
          |<check: function url>|)]
 
 @chunk[|<check: function url>|
-       (test-case (format "[::1]/~a" d-arc)
+       (test-case (format "200: /~a@::1" d-arc)
                   (match-let ([{list status reason _ _} (sendrecv (~htdocs d-arc))])
                     (check-eq? status 200 reason)))
-       (test-case (format "[127]/~a" d-arc)
+       (test-case (format "403: /~a@127" d-arc)
                   (match-let ([{list status reason _ _} (127-sendrecv (~htdocs d-arc))])
                     (check-eq? status 403 reason)))]
 
@@ -71,7 +75,7 @@ and the rest parts are relative to @litchar{terminus}.
            (test-spec path |<dispatch: setup and teardown>| |<check: dispatch>|)))]
 
 Note that @itech{Per-User Terminus} do support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].
-So users should be responsible for their own @itech{function URL}s through @litchar{::1}.
+So users should be responsible for their own @itech{function URL}s.
 
 @chunk[|<testcase: dispatch-user-funtion-URLs>|
        (for ([d-arc (in-list (list "d-arc/refresh-servlet"))])
@@ -95,11 +99,11 @@ where stores the auto-generated @itech{htdocs}.
                [lpath (build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook" path)]) 
            (test-spec path |<dispatch: setup and teardown>| |<check: dispatch>|)))]
 
-@itech{Per-Digimon Terminus} is the simplest one since it only serves static content.
-By default, users should ignore the name convention of @bold{Scribble},
-so paths reference to any @litchar{*.rktl} will be redirected to their @litchar{*.html} counterparts.
-Here @litchar{l} stands for @secref["scribble_lp2_Language" #:doc '(lib "scribblings/scribble/scribble.scrbl")]
-rather than @secref["load-lang" #:doc '(lib "scribblings/reference/reference.scrbl")].
+@itech{Per-Digimon Terminus} only serves static content that usually be generated from the
+@secref["scribble_lp2_Language" #:doc '(lib "scribblings/scribble/scribble.scrbl")].
+So paths reference to any @litchar{*.rktl} will be redirected to their @litchar{*.html} counterparts.
+Here @litchar{l} stands for @secref["lp" #:doc '(lib "scribblings/scribble/scribble.scrbl")] 
+rather than its original intention: @secref["load-lang" #:doc '(lib "scribblings/reference/reference.scrbl")].
 
 Nonetheless, these paths would always be navigated by auto-generated navigators. All we need do is
 making sure it works properly.
@@ -117,9 +121,8 @@ making sure it works properly.
 Sometimes, users may want to hide their private projects, although this is not recommended.
 Nonetheless, @itech{Per-Digimon Terminus} do support
 @hyperlink["http://en.wikipedia.org/wiki/Basic_access_authentication"]{HTTP Basic Access Authentication}.
-Just put a file @litchar{realm.rktd} in the @racket[digimon-tamer] to work with
+Just put a @racket[read]able @italic{data file} @litchar{realm.rktd} in the @racket[digimon-tamer] to work with
 @secref["dispatch-passwords" #:doc '(lib "web-server/scribblings/web-server-internal.scrbl")].
-Here @litchar{d} stands for @italic{data} and works with @racket[read].
 
 @chunk[|<testcase: basic access authentication>|
        (let* ([realm.rktd (build-path (digimon-tamer) "realm.rktd")]
@@ -131,21 +134,20 @@ Here @litchar{d} stands for @italic{data} and works with @racket[read].
                                                                      [user "password"]
                                                                      [tamer "opensource"]}})})}
                      #:after {λ _ (delete-file realm.rktd)}
-                     (test-case "200: [::1]guest"
+                     (test-case "200: guest@::1"
                                 (match-let ([{list status reason _ _} (client sendrecv)])
                                   (check-eq? status 200 reason)))
-                     (test-case "401: [127]guest"
+                     (test-case "401: guest@127"
                                 (match-let ([{list status reason _ _} (client 127-sendrecv)])
                                   (check-eq? status 401 reason)))
-                     (test-case "200: [127]tamer"
+                     (test-case "200: tamer@127"
                                 (match-let ([{list status reason _ _} (client 127-sendrecv
                                                                               #:username #"tamer"
                                                                               #:password #"opensource")])
                                   (check-eq? status 200 reason)))))]
 
 By the way, as you may guess, users don@literal{'}t need to refresh passwords manually
-since the @litchar{realm.rktd} is checked every request. After all
-the authentication is transparent to the client @litchar{::1}.
+since the @litchar{realm.rktd} is checked every request.
 
 @handbook-appendix[]
 
