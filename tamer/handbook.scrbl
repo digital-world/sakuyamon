@@ -18,5 +18,5 @@ simple but also ready for large-scale extension.
 @tamer-smart-summary[]
 @handbook-smart-table[]
 
-@include-section[(submod "sakuyamon.rkt" doc)]
-@include-section[(submod "dispatch.rkt" doc)]
+@include-section[(submod "sakuyamon.rktl" doc)]
+@include-section[(submod "dispatch.rktl" doc)]

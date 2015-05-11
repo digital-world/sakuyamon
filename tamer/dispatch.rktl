@@ -97,15 +97,16 @@ where stores the auto-generated @itech{htdocs}.
 
 @itech{Per-Digimon Terminus} is the simplest one since it only serves static content.
 By default, users should ignore the name convention of @bold{Scribble},
-so paths reference to any @litchar{*.rkt} will be transformed to their @litchar{*.html} counterparts
-iff they are valid @secref["scribble_lp2_Language" #:doc '(lib "scribblings/scribble/scribble.scrbl")]s.
+so paths reference to any @litchar{*.rktl} will be redirected to their @litchar{*.html} counterparts.
+Here @litchar{l} stands for @secref["scribble_lp2_Language" #:doc '(lib "scribblings/scribble/scribble.scrbl")]
+rather than @secref["load-lang" #:doc '(lib "scribblings/reference/reference.scrbl")].
 
 Nonetheless, these paths would always be navigated by auto-generated navigators. All we need do is
 making sure it works properly.
 
 @chunk[|<testcase: rewrite url>|
-       (for ([rpath (in-list (list "!/../."  "!/../dispatch.rkt" "dir/lp.rkt" "./../../tamer.rkt"))]
-             [px (in-list (list #px"/$" #px"_rkt(/|\\.html)$" #px"dir_lp_rkt(/|\\.html)$" #false))]
+       (for ([rpath (in-list (list "!/../."  "!/../dispatch.rktl" "t/h.lp.rktl" "./../../tamer.rkt"))]
+             [px (in-list (list #px"/$" #px"_rktl(/|\\.html)$" #px"t_h_lp_rktl(/|\\.html)$" #false))]
              [expect (in-list (list 302 302 302 418))])
          (test-case (format "~a: ~a" expect rpath)
                     (match-let ([{list status reason headers _} (sendrecv (~htdocs rpath))])
@@ -116,19 +117,20 @@ making sure it works properly.
 Sometimes, users may want to hide their private projects, although this is not recommended.
 Nonetheless, @itech{Per-Digimon Terminus} do support
 @hyperlink["http://en.wikipedia.org/wiki/Basic_access_authentication"]{HTTP Basic Access Authentication}.
-Just put a file @litchar{realm.rktl} in the @racket[digimon-tamer] to work with
+Just put a file @litchar{realm.rktd} in the @racket[digimon-tamer] to work with
 @secref["dispatch-passwords" #:doc '(lib "web-server/scribblings/web-server-internal.scrbl")].
+Here @litchar{d} stands for @italic{data} and works with @racket[read].
 
 @chunk[|<testcase: basic access authentication>|
-       (let* ([realm.rktl (build-path (digimon-tamer) "realm.rktl")]
+       (let* ([realm.rktd (build-path (digimon-tamer) "realm.rktd")]
               [client {λ [sendrecv #:username [user #false] #:password [pwd #false]]
                         (sakuyamon-agent sendrecv (~htdocs ".") #"GET" #:username user #:password pwd)}])
          (test-suite "Basic Authentication"
-                     #:before {λ _ (with-output-to-file realm.rktl #:exists 'error
+                     #:before {λ _ (with-output-to-file realm.rktd #:exists 'error
                                      {λ _ (printf "'~s~n" '{{"realm" "(#px)?/.+"
                                                                      [user "password"]
                                                                      [tamer "opensource"]}})})}
-                     #:after {λ _ (delete-file realm.rktl)}
+                     #:after {λ _ (delete-file realm.rktd)}
                      (test-case "200: [::1]guest"
                                 (match-let ([{list status reason _ _} (client sendrecv)])
                                   (check-eq? status 200 reason)))
@@ -142,7 +144,7 @@ Just put a file @litchar{realm.rktl} in the @racket[digimon-tamer] to work with
                                   (check-eq? status 200 reason)))))]
 
 By the way, as you may guess, users don@literal{'}t need to refresh passwords manually
-since the @litchar{realm.rktl} is checked every request. After all
+since the @litchar{realm.rktd} is checked every request. After all
 the authentication is transparent to the client @litchar{::1}.
 
 @handbook-appendix[]

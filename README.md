@@ -17,12 +17,12 @@ Keep it simple but also ready for large-scale extension.
 
 > + 📚Behaviors and Features
 >     + 📖
-[sakuyamon.rkt](http://gyoudmon.org/~wargrey/.sakuyamon/sakuyamon.rkt)
+[sakuyamon.rktl](http://gyoudmon.org/~wargrey/.sakuyamon/sakuyamon.rktl)
 >       + 📑Sakuyamon, Realize!
 >         - 💚 1 - realize --port 8443 [fresh]
 >         - 💚 2 - realize --port 8443 [already in use]
 >     + 📖
-[dispatch.rkt](http://gyoudmon.org/~wargrey/.sakuyamon/dispatch.rkt)
+[dispatch.rktl](http://gyoudmon.org/~wargrey/.sakuyamon/dispatch.rktl)
 >       + 📑Main Terminus
 >         - 💚 1 - .digimon/~user/readme.t
 >         + 📑Function URLs
@@ -39,8 +39,8 @@ Keep it simple but also ready for large-scale extension.
 >         - 💚 1 - readme.t
 >         + 📑Rewrite URL
 >           - 💚 1 - 302: !/../.
->           - 💚 2 - 302: !/../dispatch.rkt
->           - 💚 3 - 302: dir/lp.rkt
+>           - 💚 2 - 302: !/../dispatch.rktl
+>           - 💚 3 - 302: t/h.lp.rktl
 >           - 💚 4 - 418: ./../../tamer.rkt
 >         + 📑Basic Authentication
 >           - 💚 1 - 200: [::1]guest

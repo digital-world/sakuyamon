@@ -95,19 +95,18 @@
                                          (find-relative-path (digimon-zone) (digimon-tamer))
                                          (car (use-compiled-file-paths)) "handbook"))
             (chain:make (cond [::1? (chain:make)]
-                              [else (pwd:make {λ [req] (let ([realm.rktl (build-path (~user user) ./htdocs 'up 'up "realm.rktl")])
-                                                         (define-values {_ authorize} (pwd:password-file->authorized? realm.rktl))
+                              [else (pwd:make {λ [req] (let ([realm.rktd (build-path (~user user) ./htdocs 'up 'up "realm.rktd")])
+                                                         (define-values {_ authorize} (pwd:password-file->authorized? realm.rktd))
                                                          ((pwd:make-basic-denied?/path authorize) req))}
                                               #:authentication-responder (λ [url header] (response:401 url header)))])
-                        (filter:make #px"\\.rkt$" (lift:make {λ [req] (let-values ([{tail _} (~path "/" (drop (url-path (request-uri req)) 2))])
+                        (filter:make #px"\\.rktl$" (lift:make {λ [req] (let-values ([{tail _} (~path "/" (drop (url-path (request-uri req)) 2))])
                                                                         (define dirtail (regexp-replaces (path->string tail)
                                                                                                          '{[#px"^/" ""]
-                                                                                                           [#px"/" "_"]
-                                                                                                           [#px"\\.rkt$" "_rkt/"]}))
+                                                                                                           [#px"[/.]" "_"]}))
                                                                         (define depth? (directory-exists? (build-path (~user user) ./htdocs dirtail)))
                                                                         (redirect-to (format "/~a/~a/~a" user digimon 
-                                                                                             (cond [depth? dirtail]
-                                                                                                   [else (string-replace dirtail #px"/$" ".html")]))))}))
+                                                                                             (cond [depth? (string-append dirtail "/")]
+                                                                                                   [else (string-append dirtail ".html")]))))}))
                         (file:make #:path->mime-type path->mime
                                    #:url->path {λ [uri] (~path (build-path (~user user) ./htdocs) (drop (url-path uri) 2))}))})
 
