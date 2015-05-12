@@ -24,30 +24,29 @@ Keep it simple but also ready for large-scale extension.
 >     + 📖
 [dispatch.rktl](http://gyoudmon.org/~wargrey/.sakuyamon/dispatch.rktl)
 >       + 📑Main Terminus
->         - 💚 1 - .digimon/~user/readme.t
+>         - 💚 1 - /trick/.digimon/readme.t
 >         + 📑Function URLs
->           - 💚 1 - [::1]/d-arc/collect-garbage
->           - 💚 2 - [127]/d-arc/collect-garbage
->           - 💚 3 - [::1]/d-arc/refresh-servlet
->           - 💚 4 - [127]/d-arc/refresh-servlet
+>           - 💚 1 - 200: /d-arc/collect-garbage@::1
+>           - 💚 2 - 403: /d-arc/collect-garbage@127
+>           - 💚 3 - 200: /d-arc/refresh-servlet@::1
+>           - 💚 4 - 403: /d-arc/refresh-servlet@127
 >       + 📑Per-User Terminus
->         - 💚 1 - readme.t
+>         - 💚 1 - /~wargrey/readme.t
 >         + 📑Function URLs
->           - 💚 1 - [::1]/d-arc/refresh-servlet
->           - 💚 2 - [127]/d-arc/refresh-servlet
+>           - 💚 1 - 200: /~wargrey/d-arc/refresh-servlet@::1
+>           - 💚 2 - 403: /~wargrey/d-arc/refresh-servlet@127
 >       + 📑Per-Digimon Terminus
->         - 💚 1 - readme.t
+>         - 💚 1 - /~wargrey/.sakuyamon/readme.t
 >         + 📑Rewrite URL
 >           - 💚 1 - 302: !/../.
->           - 💚 2 - 302: !/../dispatch.rktl
->           - 💚 3 - 302: t/h.lp.rktl
->           - 💚 4 - 418: ./../../tamer.rkt
+>           - 💚 2 - 302: ./t/h.lp.rktl
+>           - 💚 3 - 418: ../../tamer.rkt
 >         + 📑Basic Authentication
->           - 💚 1 - 200: [::1]guest
->           - 💚 2 - 401: [127]guest
->           - 💚 3 - 200: [127]tamer
+>           - 💚 1 - 200: guest@::1
+>           - 💚 2 - 401: guest@127
+>           - 💚 3 - 200: tamer@127
 >
-> 📌18 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌17 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)

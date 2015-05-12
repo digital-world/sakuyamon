@@ -22,9 +22,19 @@ since they are system-wide @itech[#:key "Terminus"]{Termini}.
 @chunk[|<dispatch taming start>|
        (require "tamer.rkt")
        (tamer-taming-start)
+
+       (define htdocs (curry format "/~a"))
+       (define ~user (curry format "/~~~a/~a" (getenv "USER")))
+       (define .digimon (curry format "/~~~a/.~a/~a" (getenv "USER") (current-digimon)))
+
+       (define /htdocs (curry build-path (digimon-terminus)))
+       (define /user (curry build-path (find-system-path 'home-dir) "Public/DigitalWorld" "terminus"))
+       (define /digimon (curry build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook"))
+       
        (define-values {shutdown curl} (sakuyamon-realize))
        (define {127.curl uri #:method [method #"GET"] #:headers [headers null] #:data [data #false]}
          (curl uri #:host "127.0.0.1" #:method method #:headers headers #:data data))
+       
        |<dispatch:*>|]
 
 @handbook-scenario{Main Terminus}
@@ -36,8 +46,8 @@ are relative to @racket[digimon-terminus].
 @tamer-note['dispatch-main]
 
 @chunk[|<testcase: dispatch main>|
-       (for ([rpath (in-list (list ".digimon/~user/readme.t"))])
-         (let ([lpath (build-path (digimon-terminus) rpath)]) 
+       (for ([path (in-list (list "trick/.digimon/readme.t"))])
+         (let-values ([{lpath rpath} (values (/htdocs path) (htdocs path))])
            (test-spec rpath |<dispatch: setup and teardown>| |<check: dispatch>|)))]
 
 @chunk[|<check: dispatch>|
@@ -45,41 +55,40 @@ are relative to @racket[digimon-terminus].
          (check-eq? status 200 reason)
          (check-equal? (read-line /dev/net/stdin) (path->string lpath)))]
 
-@deftech{Function URL}s are dispatched only when the request comes from @itech{trustable} clients.
+@deftech{Function URL}s are dispatched only when the requests come from @itech{trustable} clients.
 
 @chunk[|<testcase: dispatch funtion URLs>|
        (for ([d-arc (in-list (list "d-arc/collect-garbage" "d-arc/refresh-servlet"))])
-         |<check: function url>|)]
+         (let ([~htdocs htdocs]) |<check: function url>|))]
 
 @chunk[|<check: function url>|
-       (test-case (format "200: /~a@::1" d-arc)
+       (test-case (format "200: ~a@::1" (~htdocs d-arc))
                   (match-let ([{list status reason _ _} (curl (~htdocs d-arc))])
                     (check-eq? status 200 reason)))
-       (test-case (format "403: /~a@127" d-arc)
+       (test-case (format "403: ~a@127" (~htdocs d-arc))
                   (match-let ([{list status reason _ _} (127.curl (~htdocs d-arc))])
                     (check-eq? status 403 reason)))]
 
 @handbook-scenario{Per-User Terminus}
 
 @deftech{Per-User Terminus} is designed for system users to share and discuss their works on the internet
-if they store the content in the directory @litchar{$HOME/Public/DigitalWorld} and organise it as a
+if they store contents in the directory @litchar{$HOME/Public/DigitalWorld} and organise them as a
 @hyperlink["https://github.com/digital-world/DigiGnome"]{digimon}. URL paths always start with @litchar{~user}
-and the rest parts are relative to @litchar{terminus}.
+and the rest parts are relative to @racket[digimon-terminus].
 
 @tamer-note['dispatch-user]
 
 @chunk[|<testcase: dispatch user>|
        (for ([path (in-list (list "readme.t"))])
-         (let ([rpath (format "/~~~a/~a" (getenv "USER") path)]
-               [lpath (build-path (find-system-path 'home-dir) "Public/DigitalWorld" "terminus" path)]) 
-           (test-spec path |<dispatch: setup and teardown>| |<check: dispatch>|)))]
+         (let-values ([{lpath rpath} (values (/user path) (~user path))]) 
+           (test-spec rpath |<dispatch: setup and teardown>| |<check: dispatch>|)))]
 
 Note that @itech{Per-User Terminus} do support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].
 So users should be responsible for their own @itech{function URL}s.
 
 @chunk[|<testcase: dispatch-user-funtion-URLs>|
        (for ([d-arc (in-list (list "d-arc/refresh-servlet"))])
-         |<check: function url>|)]
+         (let ([~htdocs ~user]) |<check: function url>|))]
 
 @handbook-scenario{Per-Digimon Terminus}
 
@@ -95,11 +104,10 @@ where stores the auto-generated @itech{htdocs}.
 
 @chunk[|<testcase: dispatch digimon>|
        (for ([path (in-list (list "readme.t"))])
-         (let ([rpath (format "/~~~a/.~a/~a" (getenv "USER") (current-digimon) path)]
-               [lpath (build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook" path)]) 
-           (test-spec path |<dispatch: setup and teardown>| |<check: dispatch>|)))]
+         (let-values ([{lpath rpath} (values (/digimon path) (.digimon path))])
+           (test-spec rpath |<dispatch: setup and teardown>| |<check: dispatch>|)))]
 
-@itech{Per-Digimon Terminus} only serves static content that usually be generated from the
+@itech{Per-Digimon Terminus} only serves static contents that usually be generated from the
 @secref["scribble_lp2_Language" #:doc '(lib "scribblings/scribble/scribble.scrbl")].
 So paths reference to any @litchar{*.rktl} will be redirected to their @litchar{*.html} counterparts.
 Here @litchar{l} stands for @secref["lp" #:doc '(lib "scribblings/scribble/scribble.scrbl")] 
@@ -112,8 +120,9 @@ making sure it works properly.
        (for ([rpath (in-list (list "!/../." "./t/h.lp.rktl" "../../tamer.rkt"))]
              [px (in-list (list #px"/$" #px"t_h_lp_rktl(/|\\.html)$" #false))]
              [expect (in-list (list 302 302 418))])
+         (make-directory* (/digimon))
          (test-case (format "~a: ~a" expect rpath)
-                    (match-let ([{list status reason headers _} (curl (~htdocs rpath))])
+                    (match-let ([{list status reason headers _} (curl (.digimon rpath))])
                       (check-eq? status expect reason)
                       (when (and (= expect 302) (regexp? px))
                         (let ([location (dict-ref headers #"Location")])
@@ -126,17 +135,21 @@ Just put a @racket[read]able @italic{data file} @litchar{realm.rktd} in the @rac
 @secref["dispatch-passwords" #:doc '(lib "web-server/scribblings/web-server-internal.scrbl")].
 
 @chunk[|<testcase: basic access authentication>|
-       (let ([realm.rktd (build-path (digimon-tamer) "realm.rktd")]
-             [client {λ [curl . lines]
-                       (let ([>> {λ _ (map displayln lines)}]
-                             [<< {λ _ (sakuyamon-agent curl (~htdocs ".") #"GET")}])
-                         (with-input-from-bytes (with-output-to-bytes >>) <<))}])
+       (let* ([realm.rktd (build-path (digimon-tamer) "realm.rktd")]
+              [realm (path->string (file-name-from-path realm.rktd))]
+              [client {λ [curl . lines]
+                        (let ([>> {λ _ (map displayln lines)}]
+                              [<< {λ _ (sakuyamon-agent curl (.digimon realm) #"GET")}])
+                          (with-input-from-bytes (with-output-to-bytes >>) <<))}])
          (test-suite "Basic Authentication"
-                     #:before {λ _ (with-output-to-file realm.rktd #:exists 'error
-                                     {λ _ (printf "'~s~n" '{{"realm" "(#px)?/.+"
-                                                                     [user "password"]
-                                                                     [tamer "opensource"]}})})}
-                     #:after {λ _ (delete-file realm.rktd)}
+                     #:before {λ _ (void (with-output-to-file realm.rktd #:exists 'error
+                                           {λ _ (printf "'~s~n" `{{"realm" ,(regexp-quote realm)
+                                                                           [user "password"]
+                                                                           [tamer "opensource"]}})})
+                                         (make-directory* (/digimon))
+                                         (copy-file realm.rktd (/digimon realm)))}
+                     #:after {λ _ (void (delete-file (/digimon realm))
+                                        (delete-file realm.rktd))}
                      (test-case "200: guest@::1"
                                 (match-let ([{list status reason _ _} (client curl)])
                                   (check-eq? status 200 reason)))
@@ -159,28 +172,25 @@ since the @litchar{realm.rktd} is checked every request.
          (define-tamer-suite dispatch-main "Main Terminus"
            |<dispatch: check #:before>|
            |<testcase: dispatch main>|
-           (let ([~htdocs (curry format "/~a")])
-            (test-suite "Function URLs" |<testcase: dispatch funtion URLs>|)))
+           (test-suite "Function URLs" |<testcase: dispatch funtion URLs>|))
 
          (define-tamer-suite dispatch-user "Per-User Terminus"
            |<dispatch: check #:before>|
            |<testcase: dispatch user>|
-           (let ([~htdocs (curry format "/~~~a/~a" (getenv "USER"))])
-             (test-suite "Function URLs" |<testcase: dispatch-user-funtion-URLs>|)))
+           (test-suite "Function URLs" |<testcase: dispatch-user-funtion-URLs>|))
 
          (define-tamer-suite dispatch-digimon "Per-Digimon Terminus"
            |<dispatch: check #:before>| #:after {λ _ (shutdown)}
            |<testcase: dispatch digimon>|
-           (let ([~htdocs (curry format "/~~~a/.~a/~a" (getenv "USER") (current-digimon))])
-             (list (test-suite "Rewrite URL" |<testcase: rewrite url>|)
-                   |<testcase: basic access authentication>|)))}]
+           (list (test-suite "Rewrite URL" |<testcase: rewrite url>|)
+                 |<testcase: basic access authentication>|))}]
 
 @chunk[|<dispatch: check #:before>|
        #:before {λ _ (when (pair? curl) (raise-result-error 'realize "procedure?" curl))}]
 
 @chunk[|<dispatch: setup and teardown>|
        #:before {λ _ (void (make-parent-directory* lpath)
-                           (display-to-file lpath lpath))}
+                           (display-to-file #:exists 'replace lpath lpath))}
        #:after {λ _ (void (delete-file lpath)
                           (with-handlers ([exn? void])
                             (let rmdir ([dir (path-only lpath)])

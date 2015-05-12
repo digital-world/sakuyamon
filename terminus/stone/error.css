@@ -1,18 +1,29 @@
+/* Merged Racket Default and Github .warning and .error */
+
 .section {
-  	margin: 25px;
-  	font-family: sans-serif;
-  	border: 1px solid black;
+    margin: 25px;
+    color: #9c2400;
+	background-color: #ffe3c8;
+    background: -moz-linear-gradient(#ffe3c8, #f5dac0);
+    background: -webkit-linear-gradient(#ffe3c8, #f5dac0);
+    -ms-filter: "progid:DXImageTransform.Microsoft.gradient(startColorstr='#ffe3c8', endColorstr='#f5dac0')";
+  	font-family: 'Courier', monospace;
+    border: 1px solid #da9797
 }
 
 .title {
-  	background-color: #663366;
   	font-size: large;
   	padding: 5px;
-  	color: #FFFFFF;
+    color: #613A00;
+    background-color: #f8d8d8;
+    background: -moz-linear-gradient(#f8d8d8, #efd0d0);
+    background: -webkit-linear-gradient(#f8d8d8, #efd0d0);
+    -ms-filter: "progid:DXImageTransform.Microsoft.gradient(startColorstr='#f8d8d8', endColorstr='#efd0d0')";
+    border: 1px solid #dca874
+
 }
 
 .section > p {
-	font-family: 'Courier', monospace;
 	font-size: 0.84rem;
   	margin-left: 5px;
  	margin-right: 5px;
