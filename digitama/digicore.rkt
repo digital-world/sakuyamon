@@ -9,8 +9,8 @@
 
 (define info-ref : (Option Info-Ref) (get-info/full (digimon-zone)))
 
-(define sakuyamon-user-terminus? : (Parameterof Boolean)
-  (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-terminus-user? {λ _ #false}) Boolean)))
+(define sakuyamon-tamer-terminus? : (Parameterof Boolean)
+  (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-terminus-tamer? {λ _ #false}) Boolean)))
 (define sakuyamon-digimon-terminus? : (Parameterof Boolean)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-terminus-digimon? {λ _ #false}) Boolean)))
 

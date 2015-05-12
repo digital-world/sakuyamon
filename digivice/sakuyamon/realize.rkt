@@ -58,8 +58,8 @@
                                          [{"-t"} ,{λ [flag ict] (sakuyamon-connection-timeout (string->number ict))}
                                                  {"Initial connection timeout." "ict"}]
                                          [{"--SSL"} ,{λ [flag] (sakuyamon-ssl? #true)} {"Enable SSL with 443 as default port."}]
-                                         [{"--USER"} ,{λ [flag] (sakuyamon-user-terminus? #true)} {"Enable Per-User Terminus."}]
-                                         [{"--DIGIMON"} ,{λ [flag] (sakuyamon-digimon-terminus? #true)} {"Enable Per-Project Terminus."}]}}
+                                         [{"--TAMER"} ,{λ [flag] (sakuyamon-tamer-terminus? #true)} {"Enable Per-Tamer Terminus."}]
+                                         [{"--DIGIMON"} ,{λ [flag] (sakuyamon-digimon-terminus? #true)} {"Enable Per-Digimon Terminus."}]}}
                             {λ [! . arglist] (if (null? arglist) (serve-forever) (raise-user-error 'sakuyamon "I don't need arguments: ~a" arglist))}
                             null
                             {λ [--help] (exit (display (string-replace --help #px"  -- : .+?-h --'\\s*" "")))})})}
