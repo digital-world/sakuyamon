@@ -48,7 +48,7 @@
         (define initial-connection-timeout (sakuyamon-connection-timeout))
         (define read-request http:read-request)
         
-        (define host-tamer-digimon-cache (make-hash)) ; hash has its own semaphor as well as catch-table for ref set! and remove!
+        (define host-cache (make-hash)) ; hash has its own semaphor as well as catch-table for ref set! and remove!
         (define path->mime (make-path->mime-type (collection-file-path "mime.types" "web-server" "default-web-root")))
 
         (define ~date (curry ~r #:min-width 2 #:pad-string "0"))
@@ -69,17 +69,17 @@
                                                                                    (make-default-path->servlet #:timeouts-default-servlet tds
                                                                                                                #:make-servlet-namespace fns)))})
 
-        (define ~request {λ [req] (let ([now (current-date)])
+        (define ~request {λ [req] (let ([now (current-date)]
+                                        [a-headers (request-headers req)])
                                     (format "~s~n" (list (format "~a-~a-~a ~a:~a:~a"
                                                                  (date-year now) (~date (date-month now)) (~date (date-day now))
                                                                  (~date (date-hour now)) (~date (date-minute now)) (~date (date-second now)))
-                                                         (let ([agent (headers-assq* #"User-Agent" (request-headers/raw req))])
-                                                           (and agent (header-value agent)))
+                                                         (dict-ref a-headers 'user-agent #false)
                                                          (string-upcase (bytes->string/utf-8 (request-method req)))
                                                          (url->string (request-uri req))
                                                          (request-client-ip req)
-                                                         (let ([host (headers-assq* #"Host" (request-headers/raw req))])
-                                                           (and host (header-value host))))))})
+                                                         (dict-ref a-headers 'host #false)
+                                                         (dict-ref a-headers 'referer #false))))})
 
         (define dispatch
           {lambda [conn req]
@@ -88,21 +88,25 @@
               (define host (cond [(url-host (request-uri req)) => ~host]
                                  [(headers-assq* #"Host" (request-headers/raw req)) => (compose1 ~host header-value)]
                                  [else 'none]))
-              (define paths (url-path (request-uri req))) 
-              (define tamer? (and (sakuyamon-tamer-terminus?) (false? (null? paths))
-                                  (let ([p (path/param-path (car paths))])
-                                    (and (string? p) (regexp-match? #"^~.+$" p)
-                                         (with-handlers ([exn:fail:filesystem? {λ _ #false}]) (expand-user-path p)) p))))
-              (define digimon? (and #| Also in user's home |# tamer? (sakuyamon-digimon-terminus?) (false? (null? (cdr paths)))
-                                    (let ([p (path/param-path (cadr paths))]) (and (string? p) (regexp-match? #"^\\..+$" p) p))))
+              (define termuni (hash-ref! host-cache host make-hash))
+              (define ~: (let ([pas (url-path (request-uri req))])
+                           (with-handlers ([void {λ _ #false}])
+                             (let* ([~:? (path/param-path (car pas))]
+                                    [~: (string-split ~:? #px":")])
+                               (and (regexp-match? #"^~.+$" (car ~:))
+                                    (expand-user-path (car ~:))
+                                    ~:)))))
               ({λ [serve] (serve conn req)}
-               (hash-ref! host-tamer-digimon-cache (list host tamer? digimon?)
+               (hash-ref! termuni ~:
                           {λ _ (parameterize ([current-custodian (current-server-custodian)])
                                  (chain:make (timeout:make initial-connection-timeout)
                                              (log:make #:format ~request #:log-path (build-path (digimon-stone) "request.log"))
-                                             (cond [digimon? (dispatch-digimon tamer? digimon? ::1?)] ; Why use exclusive conditions?
-                                                   [tamer? (dispatch-tamer tamer? ::1?)] ; Because tamer and digimon are cached with host,
-                                                   [else (dispatch-main ::1?)]) ; branches have already been stored in different caches.
+                                             (match ~: ; Why use exclusive conditions? different conditions have already been stored in different caches.
+                                               [{list tamer digimon} (cond [(false? (sakuyamon-digimon-terminus?)) (chain:make)]
+                                                                           [else (dispatch-digimon tamer digimon ::1?)])] 
+                                               [{list tamer} (cond [(false? (sakuyamon-tamer-terminus?)) (chain:make)]
+                                                                   [else (dispatch-tamer tamer ::1?)])]
+                                               [else (dispatch-main ::1?)])
                                              (lift:make {λ [req] (response:404)})))})))})
         
         (define dispatch-digimon
@@ -111,43 +115,53 @@
                                         (string-trim digimon #px"\\." #:right? #false)
                                         (find-relative-path (digimon-zone) (digimon-tamer))
                                         (car (use-compiled-file-paths)) "handbook"))
-            (define realm.rktd (build-path /htdocs 'up 'up "realm.rktd"))
-            (chain:make (filter:make #px"\\.rktl$" (lift:make {λ [req] (let-values ([{src _} (~path "/" (drop (url-path (request-uri req)) 2))])
+            (define realm.rktd (simple-form-path (build-path /htdocs 'up 'up ".realm.rktd")))
+            (define-values {<pwd-would-update-automatically> authorize} (pwd:password-file->authorized? realm.rktd))
+            (chain:make (filter:make #px"\\.rktl$" (lift:make {λ [req] (let-values ([{src _} (~path "/" (drop (url-path (request-uri req)) 1))])
                                                                         (define to (string-replace (substring (path->string src) 1) #px"[/.]" "_"))
-                                                                        (define depth? (directory-exists? (build-path /htdocs to)))
+                                                                        (define render-depth? (directory-exists? (build-path /htdocs to)))
                                                                         (redirect-to (format "/~a/~a/~a" real-tamer digimon 
-                                                                                             (cond [depth? (string-append to "/")]
+                                                                                             (cond [render-depth? (string-append to "/")]
                                                                                                    [else (string-append to ".html")]))))}))
-                        (cond [::1? (chain:make)] ; authorizing works after URL rewritting for Scribble.
-                              [else (pwd:make (let-values ([{auto-updater! authorize} (pwd:password-file->authorized? realm.rktd)])
-                                                (pwd:make-basic-denied?/path authorize))
+                        (cond [::1? (chain:make)] ; authenticating works after URL rewritting for Scribble.
+                              [else (pwd:make (pwd:make-basic-denied?/path authorize)
                                               #:authentication-responder {λ [url header] (response:401 url header)})])
                         (file:make #:path->mime-type path->mime
-                                   #:url->path {λ [uri] (~path /htdocs (drop (url-path uri) 2))}))})
+                                   #:url->path {λ [uri] (~path /htdocs (drop (url-path uri) 1))})
+                        (lift:make {λ _ (cond [(directory-exists? /htdocs) (next-dispatcher)]
+                                              [else (response:503)])}))})
 
         (define dispatch-tamer
           {lambda [real-tamer ::1?]
             (define /htdocs (build-path (expand-user-path real-tamer) "Public" "DigitalWorld" "terminus"))
+            (define realm.rktd (simple-form-path (build-path /htdocs 'up ".realm.rktd")))
             (define url->path {λ [uri] (~path /htdocs (drop (url-path uri) 1))})
-            (define-values {refresh! url->servlet} (path->servlet url->path null))
+            (define-values {<pwd-would-update-automatically> authorize} (pwd:password-file->authorized? realm.rktd))
+            (define-values {refresh-servlet! url->servlet} (path->servlet url->path null))
             (define /d-arc/ (string-append "/" real-tamer "/d-arc/"))
             (chain:make (filter:make (pregexp /d-arc/) (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
-                                                             [else (filter:make #px"/refresh-servlet$" (lift:make {λ _ (response:rs refresh!)}))]))
+                                                             [else (filter:make #px"/refresh-servlet$"
+                                                                                (lift:make {λ _ (response:rs refresh-servlet!)}))]))
                         (timeout:make (sakuyamon-timeout-servlet-connection))
+                        (cond [::1? (chain:make)]
+                              [else (pwd:make (pwd:make-basic-denied?/path authorize)
+                                              #:authentication-responder {λ [url header] (response:401 url header)})])
                         (servlet:make #:responders-servlet-loading (curryr response:exn #"Loading")
                                       #:responders-servlet (curryr response:exn #"Handling")
                                       url->servlet)
                         (file:make #:url->path url->path #:path->mime-type path->mime
-                                   #:indices (list "default.html" "default.rkt")))})
+                                   #:indices (list "default.html" "default.rkt"))
+                        (lift:make {λ _ (cond [(directory-exists? /htdocs) (next-dispatcher)]
+                                              [else (response:503)])}))})
         
         (define dispatch-main
           {lambda [::1?]
             (define /htdocs (digimon-terminus))
             (define url->path {λ [uri] (~path /htdocs (url-path uri))})
-            (define-values {refresh! url->servlet} (path->servlet url->path null))
+            (define-values {refresh-servlet! url->servlet} (path->servlet url->path null))
             (chain:make (filter:make #px"^/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
                                                          [else (chain:make (path:make "/d-arc/collect-garbage" {λ _ (response:gc)})
-                                                                           (path:make "/d-arc/refresh-servlet" {λ _ (response:rs refresh!)}))]))
+                                                                           (path:make "/d-arc/refresh-servlet" {λ _ (response:rs refresh-servlet!)}))]))
                         (timeout:make (sakuyamon-timeout-servlet-connection))
                         (servlet:make #:responders-servlet-loading (curryr response:exn #"Loading")
                                       #:responders-servlet (curryr response:exn #"Handling")
