@@ -17,6 +17,8 @@
 (provide (all-from-out "../../DigiGnome/digitama/tamer.rkt"))
 (provide (all-from-out net/head net/base64 net/http-client web-server/http web-server/test))
 
+(define realm.rktd (path->string (build-path (digimon-stone) "realm.rktd")))
+
 (define sakuyamon-realize
   {lambda arglist
     (parameterize ([current-custodian (make-custodian)])
@@ -39,7 +41,9 @@
           (define parts (regexp-match #px".+?\\s+(\\d+)\\s+(.+)\\s*$" (bytes->string/utf-8 status)))
           (list (string->number (list-ref parts 1))
                 (string-join (string-split (list-ref parts 2) (string cat#)) (string #\newline))
-                (apply append (map extract-all-fields net-headers))
+                (map {λ [kv] (cons (string->symbol (string-downcase (bytes->string/utf-8 (car kv))))
+                                   (bytes->string/utf-8 (cdr kv)))}
+                     (apply append (map extract-all-fields net-headers)))
                 /dev/net/stdin)})
       (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown #:kill? #true) (cons "" (exn-message b))))}])
         (match ((curry sync/timeout/enable-break 1.618) (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt})
@@ -51,18 +55,24 @@
 
 (define sakuyamon-agent
   {lambda [curl uri0 method #:headers [headers0 null] #:data [data0 #false]]
-    (define {re-curl [uri uri0] #:add-headers [headers null] #:data [data data0]}
+    (define {retry [uri uri0] #:add-headers [headers null] #:data [data data0]}
       (sakuyamon-agent curl uri method #:headers (append headers0 headers) #:data data))
     
     (define status (curl uri0 #:method method #:headers headers0 #:data data0))
     (match-define {list status-code _ net-headers _} status)
-    (case status-code
-      [{301} (let ([m (string->symbol (string-downcase (format "~a" method)))])
-               (cond [(member m '{get head}) (re-curl (dict-ref net-headers #"Location"))]
-                     [else status]))]
-      [{302 307} (re-curl (dict-ref net-headers #"Location"))]
-      [{401} (with-handlers ([exn? {λ _ status}])
-               (let ([username:password (bytes-append (read-bytes-line) #":" (read-bytes-line))])
-                 (re-curl #:add-headers (list (bytes-append #"Authorization: Basic " (base64-encode username:password))))))]
-      [else status])})
+    (with-handlers ([void {λ _ status}])
+      (case status-code
+        [{301} (let ([m (string->symbol (string-downcase (format "~a" method)))])
+                 (cond [(member m '{get head}) (retry (dict-ref net-headers 'location))]
+                       [else status]))]
+        [{302 307} (retry (dict-ref net-headers 'location))]
+        [{401} (let ([WWW-Authenticate (dict-ref net-headers 'www-authenticate)])
+                 (cond [(regexp-match #px"^Basic" WWW-Authenticate)
+                        => {λ _ (let ([username:password (bytes-append (read-bytes-line) #":" (read-bytes-line))])
+                                  (retry #:add-headers (list (bytes-append #"Authorization: Basic " (base64-encode username:password)))))}]
+                       [(regexp-match #px"^Digest" WWW-Authenticate)
+                        => {λ _ (displayln WWW-Authenticate /dev/stdout)
+                             status}]
+                       [else (raise 500)]))]
+        [else status]))})
       

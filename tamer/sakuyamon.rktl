@@ -6,14 +6,22 @@
 
 @handbook-story{Hello, Sakuyamon!}
 
-As the @deftech{digimon tamer}s, our story always starts with checking the @deftech{digivice}
-in order to make sure we could talk with the @deftech{digimon}s as expected.
+As the @deftech{digimon} @deftech{tamer}s, our story always starts with checking the
+@deftech{@hyperlink["http://gyoudmon.org/~wargrey:DigiGnome/digivice.rktl"]{digivice}}
+in order to make sure we could talk with the @itech{digimon}s as expected.
 
 @tamer-smart-summary[]
 
 @chunk[|<sakuyamon taming start>|
        (require "tamer.rkt")
        (tamer-taming-start)
+
+       (define sakuyamon (parameterize ([current-command-line-arguments (vector)]
+                                        [current-output-port /dev/null]
+                                        [current-error-port /dev/null]
+                                        [exit-handler void])
+                           (dynamic-require (build-path (digimon-digivice) "sakuyamon.rkt") 'main)))
+       
        |<sakuyamon:*>|]
 
 @handbook-scenario{Sakuyamon, Realize!}
@@ -35,10 +43,9 @@ which means she can always be talked with via @racketidfont{curl} as long as she
               (code:comment @#,t{@hyperlink["https://letsencrypt.org"]{@racketcommentfont{Let@literal{'}s Encrypt}} is a kind of service})
               (code:comment @#,t{that allow administrator enabling HTTPS esaily, freely and automatically.})]
 
-So, as usual @racket[sakuyamon-realize] itself should be checked first:
+As usual @racket[sakuyamon-realize] itself should be checked first:
 
 @tamer-note['realize]
-
 @chunk[|<testcase: realize>|
        (let*-values ([{shutdown sendrecv} (sakuyamon-realize "-p" "8443")]
                      [{shutdown-errno recv-stdmsg} (sakuyamon-realize "-p" "8443")]
@@ -53,9 +60,50 @@ So, as usual @racket[sakuyamon-realize] itself should be checked first:
                       (check-pred pair? recv-stdmsg)
                       (check-regexp-match (pregexp (format "errno=~a" $?)) (cdr recv-stdmsg)))))]
 
+@handbook-scenario{Keep Realms Safety!}
+
+Apart from heavy-weight authentication solutions implemented by website developers on their own,
+HTTP protocal has two alternatives, the
+@deftech[#:key "BAA"]{@hyperlink["http://en.wikipedia.org/wiki/Basic_access_authentication"]{Basic Access Authentication}} and
+@deftech[#:key "DAA"]{@hyperlink["http://en.wikipedia.org/wiki/Digest_access_authentication"]{Digest Access Authentication}}.
+As lightweight as they are, the only requirement is a @racket[read]able data file @deftech{.realm.rktd}.
+
+@para[#:style "GYDMComment"]{See @itech{Per-Digimon Terminus} and @itech{Per-Tamer Terminus}
+                                 to check how @itech{Sakuyamon} applies it.}
+
+@tamer-racketbox[#:keep-first-line #true (build-path (digimon-stone) "realm.rktd")]
+
+Like @hyperlink["http://en.wikipedia.org/wiki/Digest_access_authentication#The_.htdigest_file"]{@exec{htdigest}},
+@itech{Sakuyamon} has a tool @exec{realm} to help users to digest their flat @itech{.realm.rktd}s.
+
+@tamer-action[(parameterize ([exit-handler void])
+                (sakuyamon "realm" "--help"))
+              (parameterize ([exit-handler void])
+                (sakuyamon "realm" realm.rktd))]
+
+Note that @exec{realm} will do nothing for those passwords that have already been updated.
+
+@tamer-note['realm]
+@chunk[|<testcsae: realm in-place>|
+       (let-values ([{realm.dtkr} (path->string (path-replace-suffix realm.rktd ".dtkr"))]
+                    [{digest-in digest-out} (make-pipe #false 'digest-in 'digest-out)])
+         (test-spec "realm --in-place"
+                    #:before {λ _ (copy-file realm.rktd realm.dtkr)}
+                    #:after {λ _ (delete-file realm.dtkr)}
+                    (check-equal? (parameterize ([current-output-port digest-out])
+                                    (thread {λ _ (dynamic-wind {λ _ (void)}
+                                                               {λ _ (parameterize ([exit-handler void])
+                                                                      (sakuyamon "realm" realm.dtkr))}
+                                                               {λ _ (close-output-port digest-out)})})
+                                    (read digest-in))
+                                  (parameterize ([exit-handler void])
+                                    (sakuyamon "realm" "--in-place" realm.dtkr)
+                                    (call-with-input-file realm.dtkr read)))))]
+
 @handbook-appendix[]
 
 @chunk[|<sakuyamon:*>|
        {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
-         (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)}]
+         (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)
+         (define-tamer-suite realm "Keep the Realms Safety!" |<testcsae: realm in-place>|)}]

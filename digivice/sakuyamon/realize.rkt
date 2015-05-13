@@ -6,12 +6,15 @@
 
 {module+ sakuyamon
   (require racket/unit)
+  (require racket/path)
   (require racket/string)
   (require racket/cmdline)
   (require racket/promise)
   (require racket/function)
   (require racket/place)
   (require racket/async-channel)
+
+  (require syntax/location)
   
   (require net/tcp-sig)
   (require web-server/private/dispatch-server-sig)
@@ -48,7 +51,7 @@
                   {λ _ (shutdown)}))
 
   (call-as-normal-termination
-   {λ _ (parse-command-line "sakuyamon realize"
+   {λ _ (parse-command-line (format "~a ~a" (cadr (quote-module-name)) (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
                             (current-command-line-arguments)
                             `{{usage-help ,(format "~a~n" desc)}
                               {once-each [{"-p"} ,{λ [flag port] (sakuyamon-port (string->number port))}
@@ -60,9 +63,8 @@
                                          [{"--SSL"} ,{λ [flag] (sakuyamon-ssl? #true)} {"Enable SSL with 443 as default port."}]
                                          [{"--TAMER"} ,{λ [flag] (sakuyamon-tamer-terminus? #true)} {"Enable Per-Tamer Terminus."}]
                                          [{"--DIGIMON"} ,{λ [flag] (sakuyamon-digimon-terminus? #true)} {"Enable Per-Digimon Terminus."}]}}
-                            {λ [! . arglist] (if (null? arglist) (serve-forever) (raise-user-error 'sakuyamon "I don't need arguments: ~a" arglist))}
-                            null
-                            {λ [--help] (exit (display (string-replace --help #px"  -- : .+?-h --'\\s*" "")))})})}
+                            {λ [!] (serve-forever)} null
+                            (compose1 exit display (curryr string-replace #px"  -- : .+?-h --'\\s*" "")))})}
 
 {module digitama racket/base
   (provide (all-defined-out))
