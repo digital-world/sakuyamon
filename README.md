@@ -1,4 +1,4 @@
-# [🏡<sub>🐈</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)Tamer's Handbook: Sakuyamon
+# [🏡<sub>🐈</sub>](http://gyoudmon.org/~wargrey:sakuyamon)Tamer's Handbook: Sakuyamon
 
 > _**Sakuyamon**_ is the Queen of [gyoudmon.org](http://gyoudmon.org).
 
@@ -17,36 +17,40 @@ Keep it simple but also ready for large-scale extension.
 
 > + 📚Behaviors and Features
 >     + 📖
-[sakuyamon.rktl](http://gyoudmon.org/~wargrey/.sakuyamon/sakuyamon.rktl)
+[sakuyamon.rktl](http://gyoudmon.org/~wargrey:sakuyamon/sakuyamon.rktl)
 >       + 📑Sakuyamon, Realize!
 >         - 💚 1 - realize --port 8443 [fresh]
 >         - 💚 2 - realize --port 8443 [already in use]
 >     + 📖
-[dispatch.rktl](http://gyoudmon.org/~wargrey/.sakuyamon/dispatch.rktl)
+[dispatch.rktl](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rktl)
 >       + 📑Main Terminus
->         - 💚 1 - /trick/.digimon/readme.t
+>         - 💚 1 - /trick:digimon/readme.t
 >         + 📑Function URLs
 >           - 💚 1 - 200: /d-arc/collect-garbage@::1
 >           - 💚 2 - 403: /d-arc/collect-garbage@127
 >           - 💚 3 - 200: /d-arc/refresh-servlet@::1
 >           - 💚 4 - 403: /d-arc/refresh-servlet@127
->       + 📑Per-User Terminus
+>       + 📑Per-Tamer Terminus
 >         - 💚 1 - /~wargrey/readme.t
 >         + 📑Function URLs
 >           - 💚 1 - 200: /~wargrey/d-arc/refresh-servlet@::1
 >           - 💚 2 - 403: /~wargrey/d-arc/refresh-servlet@127
+>         + 📑Digest Authentication
+>           - 💚 1 - 200: guest@::1:digest
+>           - 💚 2 - 401: guest@127:digest
+>           - 💔 3 - 200: tamer@127:digest
 >       + 📑Per-Digimon Terminus
->         - 💚 1 - /~wargrey/.sakuyamon/readme.t
->         + 📑Rewrite URL
->           - 💚 1 - 302: !/../.
->           - 💚 2 - 302: ./t/h.lp.rktl
+>         - 💚 1 - /~wargrey:sakuyamon/readme.t
+>         + 📑URL Rewriting
+>           - 💣 1 - 302: !/../.
+>           - 💣 2 - 302: ./t/h.lp.rktl
 >           - 💚 3 - 418: ../../tamer.rkt
 >         + 📑Basic Authentication
->           - 💚 1 - 200: guest@::1
->           - 💚 2 - 401: guest@127
->           - 💚 3 - 200: tamer@127
+>           - 💚 1 - 200: guest@::1:basic
+>           - 💚 2 - 401: guest@127:basic
+>           - 💔 3 - 200: tamer@127:basic
 >
-> 📌17 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌20 examples, 2 failures, 2 errors, 80.00% Okay.
 >
 >
-[🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey/.sakuyamon)
+[🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey:sakuyamon)
