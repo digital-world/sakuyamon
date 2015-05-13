@@ -56,6 +56,13 @@
                        [make-check-digest-credentials (-> Username*Realm->Digest-HA1 (-> String Digest-Credentials Boolean))]
                        [password->digest-HA1 (-> Username*Realm->Password Username*Realm->Digest-HA1)])
 
+(require/typed/provide web-server/http/bindings
+                       [request-headers (-> Request (Listof (Pairof Symbol String)))]
+                       [request-bindings (-> Request (Listof (Pairof Symbol (U String Bytes))))]
+                       [extract-binding/single (-> Symbol (Listof (Pairof Symbol String)) String)]
+                       [extract-bindings (-> Symbol (Listof (Pairof Symbol String)) (Listof String))]
+                       [exists-binding? (-> Symbol (Listof (Pairof Symbol String)) Boolean)])
+
 (require/typed/provide web-server/configuration/responders
                        [file-response (-> Natural Bytes Path-String Header * Response)]
                        [servlet-loading-responder (-> URL exn Response)]
@@ -90,26 +97,6 @@
                                          (pre "» " ,(number->string status-code)
                                               " - " ,desc))))))})
 
-(define response:401 : (-> URL Header * Response)
-  {lambda [url . headers]
-    (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*))
-                  #"Unauthorized" "Authentication Failed!" headers)})
-
-(define response:403 : (-> Header * Response)
-  {lambda headers
-    (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*)(*))
-                  #"Forbidden" "Access Denied!" headers)})
-
-(define response:404 : (-> Header * Response)
-  {lambda headers
-    (response:ddd '(*(+(*)(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))))(+(*)(*)(*)(*)))
-                  #"File Not Found" "Resource Not Found!" headers)})
-                  
-(define response:418 : (-> Header * Response)
-  {lambda headers
-    (response:ddd '(+(*(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*))
-                  #"I am a teapot" "Have a cup of tea?" headers)})
-
 (define response:gc : (-> Header * Response)
   {lambda headers
     (define ~mb : (-> Integer String) {λ [b] (~r (/ b 1024.0 1024.0) #:precision '{= 3})})
@@ -135,6 +122,26 @@
                                       (p "> (" (a ([href "http://racket-lang.org"]) "refresh-servlet!") ")"
                                          (pre))))))})
 
+(define response:401 : (-> URL Header * Response)
+  {lambda [url . headers]
+    (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*))
+                  #"Unauthorized" "Authentication Failed!" headers)})
+
+(define response:403 : (-> Header * Response)
+  {lambda headers
+    (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*)(*))
+                  #"Forbidden" "Access Denied!" headers)})
+
+(define response:404 : (-> Header * Response)
+  {lambda headers
+    (response:ddd '(*(+(*)(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))))(+(*)(*)(*)(*)))
+                  #"File Not Found" "Resource Not Found!" headers)})
+                  
+(define response:418 : (-> Header * Response)
+  {lambda headers
+    (response:ddd '(+(*(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*))
+                  #"I am a teapot" "Have a cup of tea?" headers)})
+
 (define response:exn : (-> (Option URL) exn Bytes Header * Response)
   {lambda [url x stage . headers]
     (cond [(false? (exn? x)) (raise x)]
@@ -159,3 +166,9 @@
                                                                                    (and srcinfo (regexp-match? #px"^[^/]" srcinfo)
                                                                                         (format "»»» ~a: ~a~n" (tr srcinfo) (or (car stack) 'λ)))))}
                                                                           (continuation-mark-set->context (exn-continuation-marks x))))))))))])})
+
+(define response:503 : (-> Header * Response)
+  {lambda headers
+    (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*)(*)(*))
+                  #"Service Unavailable" "Service Under Construction!" headers)})
+
