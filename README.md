@@ -21,6 +21,8 @@ Keep it simple but also ready for large-scale extension.
 >       + 📑Sakuyamon, Realize!
 >         - 💚 1 - realize --port 8443 [fresh]
 >         - 💚 2 - realize --port 8443 [already in use]
+>       + 📑Keep the Realms Safety!
+>         - 💚 1 - realm --in-place
 >     + 📖
 [dispatch.rktl](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rktl)
 >       + 📑Main Terminus
@@ -42,15 +44,15 @@ Keep it simple but also ready for large-scale extension.
 >       + 📑Per-Digimon Terminus
 >         - 💚 1 - /~wargrey:sakuyamon/readme.t
 >         + 📑URL Rewriting
->           - 💣 1 - 302: !/../.
->           - 💣 2 - 302: ./t/h.lp.rktl
+>           - 💚 1 - 302: !/../.
+>           - 💚 2 - 302: ./t/h.lp.rktl
 >           - 💚 3 - 418: ../../tamer.rkt
 >         + 📑Basic Authentication
 >           - 💚 1 - 200: guest@::1:basic
 >           - 💚 2 - 401: guest@127:basic
->           - 💔 3 - 200: tamer@127:basic
+>           - 💚 3 - 200: tamer@127:basic
 >
-> 📌20 examples, 2 failures, 2 errors, 80.00% Okay.
+> 📌21 examples, 1 failure, 0 errors, 95.24% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey:sakuyamon)
