@@ -34,8 +34,6 @@
                                              (error 'sakuyamon "Please be patient, the age of plaintext transmission is almost over!"))
                                            (make-ssl-tcp@ sakuyamon.crt sakuyamon.key #f #f #f #f #f))])))
 
-(struct exn:terminus {identity})
-
 (define sakuyamon-config@
   {unit (import)
         (export dispatch-server-config^)
@@ -136,16 +134,24 @@
             (define /htdocs (build-path (expand-user-path real-tamer) "Public" "DigitalWorld" "terminus"))
             (define realm.rktd (simple-form-path (build-path /htdocs 'up ".realm.rktd")))
             (define url->path {λ [uri] (~path /htdocs (drop (url-path uri) 1))})
-            (define-values {<pwd-would-update-automatically> authorize} (pwd:password-file->authorized? realm.rktd))
             (define-values {refresh-servlet! url->servlet} (path->servlet url->path null))
+            (define-values {lookup-realm lookup-HA1} (realm.rktd->lookups realm.rktd))
             (define /d-arc/ (string-append "/" real-tamer "/d-arc/"))
             (chain:make (filter:make (pregexp /d-arc/) (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
                                                              [else (filter:make #px"/refresh-servlet$"
                                                                                 (lift:make {λ _ (response:rs refresh-servlet!)}))]))
                         (timeout:make (sakuyamon-timeout-servlet-connection))
                         (cond [::1? (chain:make)]
-                              [else (pwd:make (pwd:make-basic-denied?/path authorize)
-                                              #:authentication-responder {λ [url header] (response:401 url header)})])
+                              [else (lift:make {λ [req] (match (lookup-realm (url->string (request-uri req)))
+                                                          [#false (next-dispatcher)]
+                                                          [realm (with-handlers ([exn? {λ [e] (response:exn e)}])
+                                                                   (let ([credit (request->digest-credentials req)]
+                                                                         [authorize (make-check-digest-credentials lookup-HA1)])
+                                                                     (when (and credit (authorize (bytes->string/utf-8 (request-method req)) credit))
+                                                                       (next-dispatcher))
+                                                                     (define private (symbol->string (gensym (current-digimon))))
+                                                                     (define opaque (symbol->string (gensym (current-digimon))))
+                                                                     (response:401 (request-uri req) (make-md5-auth-header realm private opaque))))])})])
                         (servlet:make #:responders-servlet-loading (curryr response:exn #"Loading")
                                       #:responders-servlet (curryr response:exn #"Handling")
                                       url->servlet)
@@ -167,4 +173,34 @@
                                       #:responders-servlet (curryr response:exn #"Handling")
                                       url->servlet)
                         (file:make #:url->path url->path #:path->mime-type path->mime
-                                   #:indices (list "default.html" "default.rkt")))})})
+                                   #:indices (list "default.html" "default.rkt")))})
+
+        (define realm.rktd->lookups
+          {lambda [realm.rktd]
+            (define timestamp (box #f))
+            (define realm-cache (box #f))
+            (define update-realms! {λ _ (when (and (file-exists? realm.rktd) (memq 'read (file-or-directory-permissions realm.rktd)))
+                                          (let ([cur-mtime (file-or-directory-modify-seconds realm.rktd)])
+                                            (when (or (not (unbox timestamp))
+                                                      (> cur-mtime (unbox timestamp))
+                                                      (not (unbox realm-cache)))
+                                              (set-box! realm-cache
+                                                        (make-hash (for/list ([group (in-list (cadr (with-input-from-file realm.rktd read)))])
+                                                                     (match-define {list-rest realm pattern user.pwds} group)
+                                                                     (define ciuser (compose1 string->symbol string-downcase symbol->string car))
+                                                                     (define bpwd (compose1 string->bytes/utf-8 cadr))
+                                                                     (define userdicts (map {λ [u.p] (cons (ciuser u.p) (bpwd u.p))} user.pwds))
+                                                                     (cons realm (cons pattern (make-hasheq userdicts))))))
+                                              (set-box! timestamp cur-mtime))))})
+            (values {λ [digest-uri] (and (update-realms!)
+                                       (unbox realm-cache)
+                                       (let/ec deny (and (for ([{realm p.dict} (in-hash (unbox realm-cache))])
+                                                           (when (regexp-match? (pregexp (car p.dict)) digest-uri)
+                                                             (deny realm)))
+                                                         #false)))}
+                    {λ [username realm]
+                      (define realms (and (update-realms!) (unbox realm-cache)))
+                      (or (and realms (let ([p.dict (hash-ref (unbox realm-cache) realm #false)])
+                                        (and p.dict (hash-ref (cdr p.dict) (string->symbol (string-downcase username)) #false))))
+                          #"denied")})})})
+

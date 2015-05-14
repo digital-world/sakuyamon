@@ -115,7 +115,7 @@ HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in th
                     (match-let ([{list status reason _ _} (client 127.curl)])
                       (check-eq? status 401 reason)))
          (test-case (format "200: tamer@127:~a" type)
-                    (match-let ([{list status reason _ _} (client 127.curl 'tamer "opensource")])
+                    (match-let ([{list status reason _ _} (client 127.curl 'wargrey "gyoudmon")])
                       (check-eq? status 200 reason))))]
 
 @handbook-scenario{Per-Digimon Terminus}

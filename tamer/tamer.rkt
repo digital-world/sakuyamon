@@ -6,6 +6,7 @@
 
 (require (submod "../digivice/sakuyamon/realize.rkt" digitama))
 
+(require file/md5)
 (require net/head)
 (require net/base64)
 (require net/http-client)
@@ -66,13 +67,37 @@
                  (cond [(member m '{get head}) (retry (dict-ref net-headers 'location))]
                        [else status]))]
         [{302 307} (retry (dict-ref net-headers 'location))]
-        [{401} (let ([WWW-Authenticate (dict-ref net-headers 'www-authenticate)])
+        [{401} (let-values ([{username password} (values (string-downcase (read-line)) (read-line))]
+                            [{WWW-Authenticate} (dict-ref net-headers 'www-authenticate)]
+                            [{px.k=v} #px#"(\\w+)=\"(.+?)\""])
                  (cond [(regexp-match #px"^Basic" WWW-Authenticate)
-                        => {λ _ (let ([username:password (bytes-append (read-bytes-line) #":" (read-bytes-line))])
-                                  (retry #:add-headers (list (bytes-append #"Authorization: Basic " (base64-encode username:password)))))}]
+                        => {λ _  (retry #:add-headers (list (bytes-append #"Authorization: Basic "
+                                                                          (let ([user*pwd (format "~a:~a" username password)])
+                                                                            (base64-encode (string->bytes/utf-8 user*pwd))))))}]
                        [(regexp-match #px"^Digest" WWW-Authenticate)
-                        => {λ _ (displayln WWW-Authenticate /dev/stdout)
-                             status}]
+                        => {λ _ (with-handlers ([exn? {λ [e] (and (displayln e) (raise e))}])
+                                  (define bindings (for/list ([k-v (in-list (regexp-match* px.k=v WWW-Authenticate))])
+                                                     (let ([kv (regexp-match px.k=v k-v)])
+                                                       (cons (string->symbol (string-downcase (bytes->string/utf-8 (cadr kv))))
+                                                             (caddr kv)))))
+                                  (define nonce-count #"00000001") ; needs 8 digits
+                                  (match-define {list realm qop nonce} (map (curry dict-ref bindings) '{realm qop nonce}))
+                                  (define private-key (string->bytes/utf-8 (symbol->string (gensym (current-digimon))))) 
+                                  (define timestamp (string->bytes/utf-8 (number->string (current-seconds))))
+                                  (define digest-uri (string->bytes/utf-8 uri0))
+                                  (define cnonce (md5 (bytes-append timestamp #" " (md5 (bytes-append timestamp #":" private-key)))))
+                                  (define RESPONSE (md5 (bytes-append ((password->digest-HA1 {λ [user realm] password})
+                                                                       username (bytes->string/utf-8 realm)) #":"
+                                                                      nonce #":" nonce-count #":" cnonce #":" qop #":"
+                                                                      (md5 (bytes-append method #":" digest-uri)))))
+                                  (retry #:add-headers (list (bytes-append #"Authorization: Digest nc=" nonce-count
+                                                                           #", realm=\"" realm #"\""
+                                                                           #", username=\"" (string->bytes/utf-8 username) #"\""
+                                                                           #", nonce=\"" nonce #"\""
+                                                                           #", cnonce=\"" cnonce #"\""
+                                                                           #", qop=\"" qop #"\""
+                                                                           #", uri=\"" digest-uri #"\""
+                                                                           #", response=\"" RESPONSE #"\""))))}]
                        [else (raise 500)]))]
         [else status]))})
       

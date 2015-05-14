@@ -3,6 +3,7 @@
 @require{digicore.rkt}
 
 (require typed/net/url)
+(require typed/net/base64)
 
 (provide (except-out (all-defined-out) response:ddd))
 (provide (all-from-out typed/net/url))
@@ -12,7 +13,7 @@
 (define-type Request request)
 (define-type Response response)
 
-(define-type Digest-Credentials (Listof (Pairof Symbol Symbol)))
+(define-type Digest-Credentials (Listof (Pairof Symbol String)))
 (define-type Username*Realm->Password (-> String String String))
 (define-type Username*Realm->Digest-HA1 (-> String String Bytes))
 
@@ -83,6 +84,21 @@
 (require/typed/provide web-server/private/mime-types
                        [read-mime-types (-> Path-String (HashTable Symbol Bytes))]
                        [make-path->mime-type (-> Path-String (-> Path (Option Bytes)))])
+
+(require/typed/provide file/md5
+                       [md5 (->* {(U String Bytes Input-Port)} {Boolean} Bytes)])
+
+(define make-md5-auth-header : (-> String String String Header)
+  {lambda [realm private-key0 opaque0]
+    (define private-key : Bytes (string->bytes/utf-8 private-key0))
+    (define timestamp : Bytes (string->bytes/utf-8 (number->string (current-seconds))))
+    (define nonce : Bytes  (bytes-append timestamp #" " (md5 (bytes-append timestamp #":" private-key))))
+    (define opaque : Bytes (string->bytes/utf-8 opaque0))
+    (make-header #"WWW-Authenticate"
+                 (bytes-append #"Digest realm=\"" (string->bytes/utf-8 realm) #"\""
+                               #", qop=\"auth\""
+                               #", nonce=\"" (md5 nonce) #"\""
+                               #", opaque=\"" (md5 opaque) #"\""))})
 
 (define response:ddd : (-> Any Bytes String (Listof Header) Response)
   {lambda [code-sexp message desc headers]

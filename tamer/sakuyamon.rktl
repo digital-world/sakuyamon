@@ -71,7 +71,7 @@ As lightweight as they are, the only requirement is a @racket[read]able data fil
 @para[#:style "GYDMComment"]{See @itech{Per-Digimon Terminus} and @itech{Per-Tamer Terminus}
                                  to check how @itech{Sakuyamon} applies it.}
 
-@tamer-racketbox[#:keep-first-line #true (build-path (digimon-stone) "realm.rktd")]
+@tamer-racketbox[#:line-start-with 1 (build-path (digimon-stone) "realm.rktd")]
 
 Like @hyperlink["http://en.wikipedia.org/wiki/Digest_access_authentication#The_.htdigest_file"]{@exec{htdigest}},
 @itech{Sakuyamon} has a tool @exec{realm} to help users to digest their flat @itech{.realm.rktd}s.

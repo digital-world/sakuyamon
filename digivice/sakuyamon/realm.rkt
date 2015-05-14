@@ -7,7 +7,6 @@
 {module+ sakuyamon
   (require syntax/location)
 
-  (require file/md5)
   (require web-server/http/digest-auth)
   (require web-server/dispatchers/dispatch-passwords)
   
@@ -29,7 +28,8 @@
                                          [index (in-naturals 1)])
                                      (match-define {list user pwd} user.pwd)
                                      (define HA1 (cond [(eq? (string-length pwd) 32) (and 'already-done pwd)]
-                                                       [else (md5 (string->bytes/utf-8 (format "~a:~a:~a" user realm pwd)))]))
+                                                       [else ((password->digest-HA1 {λ [user realm] pwd})
+                                                              (string-downcase (symbol->string user)) realm)]))
                                      (fprintf out "~a[~a \"~a\"]~a" indent user HA1
                                               (if (eq? index (length user.pwds)) "}" #\newline)))
                                    (fprintf out "~a~n" (if (eq? group (length realms)) "}" ""))))})
