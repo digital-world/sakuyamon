@@ -40,7 +40,7 @@ Keep it simple but also ready for large-scale extension.
 >         + 📑Digest Authentication
 >           - 💚 1 - 200: guest@::1:digest
 >           - 💚 2 - 401: guest@127:digest
->           - 💚 3 - 200: tamer@127:digest
+>           - 💚 3 - 200: wargrey@127:digest
 >       + 📑Per-Digimon Terminus
 >         - 💚 1 - /~wargrey:sakuyamon/readme.t
 >         + 📑URL Rewriting
@@ -50,7 +50,7 @@ Keep it simple but also ready for large-scale extension.
 >         + 📑Basic Authentication
 >           - 💚 1 - 200: guest@::1:basic
 >           - 💚 2 - 401: guest@127:basic
->           - 💚 3 - 200: tamer@127:basic
+>           - 💚 3 - 200: wargrey@127:basic
 >
 > 📌21 examples, 0 failures, 0 errors, 100.00% Okay.
 >

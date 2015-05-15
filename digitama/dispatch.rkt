@@ -52,14 +52,17 @@
         (define ~date (curry ~r #:min-width 2 #:pad-string "0"))
         (define ~host {λ [host] (string->symbol (string-downcase (if (bytes? host) (bytes->string/utf-8 host) host)))})
         
-        (define ~path {λ [base pas] (with-handlers ([exn? {λ _ (raise-user-error 'url->path "Found Escaping `..`!")}])
-                                      (let travel ([pieces null] [prst (map path/param-path pas)])
-                                        (match prst
-                                          [{cons {or 'up ".."} rst} (travel (cdr pieces) rst)]
-                                          [{cons {or 'same "." ""} rst} (travel pieces rst)]
-                                          [{cons pdir rst} (travel (cons pdir pieces) rst)]
-                                          [_ (let ([ps (reverse pieces)])
-                                               (values (simplify-path (apply build-path base ps) #false) ps))])))})
+        (define ~path {λ [base pas default.rkt] (with-handlers ([exn? {λ _ (raise-user-error 'url->path "Found Escaping `..`!")}])
+                                                  (let travel ([pieces null] [prst (map path/param-path pas)])
+                                                    (match prst
+                                                      [{cons {or 'up ".."} rst} (travel (cdr pieces) rst)]
+                                                      [{cons {or 'same "." ""} rst} (travel pieces rst)]
+                                                      [{cons pdir rst} (travel (cons pdir pieces) rst)]
+                                                      [_ (let* ([ps (reverse pieces)]
+                                                                [p (simplify-path (apply build-path base ps) #false)])
+                                                           (cond [(or (false? default.rkt) (filename-extension p) (file-exists? p)) (values p ps)]
+                                                                 [else (values (build-path p default.rkt)
+                                                                               (reverse (cons default.rkt pieces)))]))])))})
         
         (define path->servlet {λ [->path mods] (let ([fns (make-make-servlet-namespace #:to-be-copied-module-specs mods)]
                                                      [tds (sakuyamon-timeout-default-servlet)])
@@ -115,7 +118,7 @@
                                         (car (use-compiled-file-paths)) "handbook"))
             (define realm.rktd (simple-form-path (build-path /htdocs 'up 'up ".realm.rktd")))
             (define-values {<pwd-would-update-automatically> authorize} (pwd:password-file->authorized? realm.rktd))
-            (chain:make (filter:make #px"\\.rktl$" (lift:make {λ [req] (let-values ([{src _} (~path "/" (drop (url-path (request-uri req)) 1))])
+            (chain:make (filter:make #px"\\.rktl$" (lift:make {λ [req] (let-values ([{src _} (~path "/" (drop (url-path (request-uri req)) 1) #false)])
                                                                         (define to (string-replace (substring (path->string src) 1) #px"[/.]" "_"))
                                                                         (define render-depth? (directory-exists? (build-path /htdocs to)))
                                                                         (redirect-to (format "/~a/~a/~a" real-tamer digimon 
@@ -125,7 +128,7 @@
                               [else (pwd:make (pwd:make-basic-denied?/path authorize)
                                               #:authentication-responder {λ [url header] (response:401 url header)})])
                         (file:make #:path->mime-type path->mime
-                                   #:url->path {λ [uri] (~path /htdocs (drop (url-path uri) 1))})
+                                   #:url->path {λ [uri] (~path /htdocs (drop (url-path uri) 1) #false)})
                         (lift:make {λ _ (cond [(directory-exists? /htdocs) (next-dispatcher)]
                                               [else (response:503)])}))})
 
@@ -133,8 +136,8 @@
           {lambda [real-tamer ::1?]
             (define /htdocs (build-path (expand-user-path real-tamer) "Public" "DigitalWorld" "terminus"))
             (define realm.rktd (simple-form-path (build-path /htdocs 'up ".realm.rktd")))
-            (define url->path {λ [uri] (~path /htdocs (drop (url-path uri) 1))})
-            (define-values {refresh-servlet! url->servlet} (path->servlet url->path null))
+            (define url->path {λ [default.rkt uri] (~path /htdocs (drop (url-path uri) 1) default.rkt)})
+            (define-values {refresh-servlet! url->servlet} (path->servlet (curry url->path "default.rkt") null))
             (define-values {lookup-realm lookup-HA1} (realm.rktd->lookups realm.rktd))
             (define /d-arc/ (string-append "/" real-tamer "/d-arc/"))
             (chain:make (filter:make (pregexp /d-arc/) (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
@@ -155,16 +158,16 @@
                         (servlet:make #:responders-servlet-loading (curryr response:exn #"Loading")
                                       #:responders-servlet (curryr response:exn #"Handling")
                                       url->servlet)
-                        (file:make #:url->path url->path #:path->mime-type path->mime
-                                   #:indices (list "default.html" "default.rkt"))
+                        (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime
+                                   #:indices (list "default.html"))
                         (lift:make {λ _ (cond [(directory-exists? /htdocs) (next-dispatcher)]
                                               [else (response:503)])}))})
         
         (define dispatch-main
           {lambda [::1?]
             (define /htdocs (digimon-terminus))
-            (define url->path {λ [uri] (~path /htdocs (url-path uri))})
-            (define-values {refresh-servlet! url->servlet} (path->servlet url->path null))
+            (define url->path {λ [default.rkt uri] (~path /htdocs (url-path uri) default.rkt)})
+            (define-values {refresh-servlet! url->servlet} (path->servlet (curry url->path "default.rkt") null))
             (chain:make (filter:make #px"^/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
                                                          [else (chain:make (path:make "/d-arc/collect-garbage" {λ _ (response:gc)})
                                                                            (path:make "/d-arc/refresh-servlet" {λ _ (response:rs refresh-servlet!)}))]))
@@ -172,7 +175,7 @@
                         (servlet:make #:responders-servlet-loading (curryr response:exn #"Loading")
                                       #:responders-servlet (curryr response:exn #"Handling")
                                       url->servlet)
-                        (file:make #:url->path url->path #:path->mime-type path->mime
+                        (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime
                                    #:indices (list "default.html" "default.rkt")))})
 
         (define realm.rktd->lookups
@@ -193,11 +196,11 @@
                                                                      (cons realm (cons pattern (make-hasheq userdicts))))))
                                               (set-box! timestamp cur-mtime))))})
             (values {λ [digest-uri] (and (update-realms!)
-                                       (unbox realm-cache)
-                                       (let/ec deny (and (for ([{realm p.dict} (in-hash (unbox realm-cache))])
-                                                           (when (regexp-match? (pregexp (car p.dict)) digest-uri)
-                                                             (deny realm)))
-                                                         #false)))}
+                                         (unbox realm-cache)
+                                         (let/ec deny (and (for ([{realm p.dict} (in-hash (unbox realm-cache))])
+                                                             (when (regexp-match? (pregexp (car p.dict)) digest-uri)
+                                                               (deny realm)))
+                                                           #false)))}
                     {λ [username realm]
                       (define realms (and (update-realms!) (unbox realm-cache)))
                       (or (and realms (let ([p.dict (hash-ref (unbox realm-cache) realm #false)])

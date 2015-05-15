@@ -92,13 +92,13 @@
   {lambda [realm private-key0 opaque0]
     (define private-key : Bytes (string->bytes/utf-8 private-key0))
     (define timestamp : Bytes (string->bytes/utf-8 (number->string (current-seconds))))
-    (define nonce : Bytes  (bytes-append timestamp #" " (md5 (bytes-append timestamp #":" private-key))))
-    (define opaque : Bytes (string->bytes/utf-8 opaque0))
+    (define nonce : Bytes  (md5 (bytes-append timestamp #" " (md5 (bytes-append timestamp #":" private-key)))))
+    (define opaque : Bytes (md5 (string->bytes/utf-8 opaque0)))
     (make-header #"WWW-Authenticate"
                  (bytes-append #"Digest realm=\"" (string->bytes/utf-8 realm) #"\""
                                #", qop=\"auth\""
-                               #", nonce=\"" (md5 nonce) #"\""
-                               #", opaque=\"" (md5 opaque) #"\""))})
+                               #", nonce=\"" nonce #"\""
+                               #", opaque=\"" opaque #"\""))})
 
 (define response:ddd : (-> Any Bytes String (Listof Header) Response)
   {lambda [code-sexp message desc headers]
