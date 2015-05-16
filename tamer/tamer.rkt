@@ -45,11 +45,11 @@
 
 (define {sakuyamon-agent ssl? port host}
   {lambda arglist
-    (define method (make-parameter #"GET"))
     (define anyauth (make-parameter #false))
     (define location (make-parameter #false))
     (define user:pwd (make-parameter #false))
     (define go-headers (make-parameter null))
+    (define http-method (make-parameter #"GET"))
 
     (define {retry uri . addition}
       (define {remake arglist}
@@ -61,12 +61,15 @@
        `{{usage-help ,(format "Transfer URL: a cURL-like tool for taming only.~n")}
          {once-each [{"--anyauth"} ,{λ [flag] (anyauth #true)} {"Detect authentication method."}]
                     [{"--location" "-L"} ,{λ [flag] (anyauth #true)} {"Follow redirects."}]
-                    [{"--head" "-I"} ,{λ [flag] (method #"HEAD")} {"Show document info only."}]
-                    [{"--user" "-u"} ,{λ [flag u:p] (user:pwd u:p)} {"Server user and password." "USER:PASSWORD"}]}
+                    [{"--get" "-G"} ,{λ [flag] (http-method #"GET")} {"Send with HTTP GET."}]
+                    [{"--head" "-I"} ,{λ [flag] (http-method #"HEAD")} {"Show document info only."}]
+                    [{"--user" "-u"} ,{λ [flag u:p] (user:pwd u:p)} {"Server user and password." "USER:PASSWORD"}]
+                    [{"--request" "-X"} ,{λ [flag method] (http-method (string->bytes/utf-8 (string-upcase method)))}
+                                        {"Specify request command to use." "COMMAND"}]}
          {multi [{"--header" "-H"} ,{λ [flag line] (go-headers (cons line (go-headers)))}
                                    {"Custom header to pass to server." "LINE"}]}}
        {λ [! uri] (let ([status (let-values ([{status net-headers /dev/net/stdin} (http-sendrecv host uri #:ssl? ssl? #:port port
-                                                                                                 #:method (method) #:headers (reverse (go-headers)))])
+                                                                                                 #:method (http-method) #:headers (reverse (go-headers)))])
                                   (define parts (regexp-match #px".+?\\s+(\\d+)\\s+(.+)\\s*$" (bytes->string/utf-8 status)))
                                   (list (string->number (list-ref parts 1))
                                         (string-join (string-split (list-ref parts 2) (string cat#)) (string #\newline))
@@ -78,7 +81,7 @@
                     (with-handlers ([void {λ _ status}])
                       (cond [(and (location) (member code '{301 302 307}))
                              => {λ _ (case code
-                                       [{301} (cond [(member (method) '{#"GET" #"HEAD"}) (retry (dict-ref headers 'location))]
+                                       [{301} (cond [(member (http-method) '{#"GET" #"HEAD"}) (retry (dict-ref headers 'location))]
                                                     [else status])]
                                        [{302 307} (retry (dict-ref headers 'location))])}]
                             [(and (user:pwd) (anyauth) (eq? code 401))
@@ -108,7 +111,7 @@
                                                                                                    ((password->digest-HA1 {λ _ pwd})
                                                                                                     user (bytes->string/utf-8 realm))
                                                                                                    nonce nonce-count cnonce qop
-                                                                                                   (md5 (format "~a:~a" (method) uri)))))))}]
+                                                                                                   (md5 (format "~a:~a" (http-method) uri)))))))}]
                                              [else (raise 500)]))}]
                             [else status])))}
        '{"url"}

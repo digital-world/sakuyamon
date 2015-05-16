@@ -51,6 +51,7 @@
                                            [output : (-> Output-Port Void)]}]
                        [headers-assq* (-> Bytes (Listof Header) (Option Header))]
                        [response/xexpr (-> Any [#:code Natural] [#:message Bytes] [#:headers (Listof Header)] Response)]
+                       [response/output (-> (-> Output-Port Void) [#:code Natural] [#:message Bytes] [#:headers (Listof Header)] Response)]
                        [redirect-to (->* {String} {Redirection-Status #:headers (Listof Header)} Response)]
                        [make-digest-auth-header (-> String String String Header)]
                        [request->digest-credentials (-> Request (Option Digest-Credentials))]
@@ -112,6 +113,11 @@
                                          ,(string-replace (format "~a" code-sexp) #px"\\s+" "" #:all? #true) ")"
                                          (pre "» " ,(number->string status-code)
                                               " - " ,desc))))))})
+
+(define response:options : (-> URL (Listof String) Header * Response)
+  {lambda [uri allows . headers]
+    (response/output void #:code 200
+                     #:headers (cons (make-header #"Allow" (string->bytes/utf-8 (string-join allows ","))) headers))})
 
 (define response:gc : (-> Header * Response)
   {lambda headers
@@ -183,8 +189,12 @@
                                                                                         (format "»»» ~a: ~a~n" (tr srcinfo) (or (car stack) 'λ)))))}
                                                                           (continuation-mark-set->context (exn-continuation-marks x))))))))))])})
 
+(define response:501 : (-> Header * Response)
+  {lambda headers
+    (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*))
+                  #"Method Not Implemented" "Method Beyond Capabilities!" headers)})
+
 (define response:503 : (-> Header * Response)
   {lambda headers
     (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*)(*)(*))
                   #"Service Unavailable" "Service Under Construction!" headers)})
-

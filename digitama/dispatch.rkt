@@ -70,13 +70,14 @@
                                                                                    (make-default-path->servlet #:timeouts-default-servlet tds
                                                                                                                #:make-servlet-namespace fns)))})
 
+        (define ~method (compose1 string-upcase bytes->string/utf-8))
         (define ~request {λ [req] (let ([now (current-date)]
                                         [a-headers (request-headers req)])
                                     (format "~s~n" (list (format "~a-~a-~a ~a:~a:~a"
                                                                  (date-year now) (~date (date-month now)) (~date (date-day now))
                                                                  (~date (date-hour now)) (~date (date-minute now)) (~date (date-second now)))
                                                          (dict-ref a-headers 'user-agent #false)
-                                                         (string-upcase (bytes->string/utf-8 (request-method req)))
+                                                         (~method (request-method req))
                                                          (url->string (request-uri req))
                                                          (request-client-ip req)
                                                          (dict-ref a-headers 'host #false)
@@ -117,8 +118,14 @@
                                         (find-relative-path (digimon-zone) (digimon-tamer))
                                         (car (use-compiled-file-paths)) "handbook"))
             (define realm.rktd (simple-form-path (build-path /htdocs 'up 'up ".realm.rktd")))
+            (define robots.txt (simple-form-path (build-path /htdocs 'up 'up "robots.txt")))
             (define-values {<pwd-would-update-automatically> authorize} (pwd:password-file->authorized? realm.rktd))
-            (chain:make (filter:make #px"\\.rktl$" (lift:make {λ [req] (let-values ([{src _} (~path "/" (drop (url-path (request-uri req)) 1) #false)])
+            (chain:make (lift:make {λ [req] (let ([method (~method (request-method req))]
+                                                  [allows '{"GET" "HEAD"}])
+                                              (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows)]
+                                                    [(member method allows) (next-dispatcher)]
+                                                    [else (response:501)]))})
+                        (filter:make #px"\\.rktl$" (lift:make {λ [req] (let-values ([{src _} (~path "/" (drop (url-path (request-uri req)) 1) #false)])
                                                                         (define to (string-replace (substring (path->string src) 1) #px"[/.]" "_"))
                                                                         (define render-depth? (directory-exists? (build-path /htdocs to)))
                                                                         (redirect-to (format "/~a/~a/~a" real-tamer digimon 
@@ -129,6 +136,9 @@
                                               #:authentication-responder {λ [url header] (response:401 url header)})])
                         (file:make #:path->mime-type path->mime
                                    #:url->path {λ [uri] (~path /htdocs (drop (url-path uri) 1) #false)})
+                        (path:make (format "/~a:~a/~a" real-tamer digimon (file-name-from-path robots.txt))
+                                   {λ _ (cond [(file-exists? robots.txt) (file-response 200 #"OK" robots.txt)]
+                                              [else (next-dispatcher)])})
                         (lift:make {λ _ (cond [(directory-exists? /htdocs) (next-dispatcher)]
                                               [else (response:503)])}))})
 
@@ -140,7 +150,12 @@
             (define-values {refresh-servlet! url->servlet} (path->servlet (curry url->path "default.rkt") null))
             (define-values {lookup-realm lookup-HA1} (realm.rktd->lookups realm.rktd))
             (define /d-arc/ (string-append "/" real-tamer "/d-arc/"))
-            (chain:make (filter:make (pregexp /d-arc/) (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
+            (chain:make (lift:make {λ [req] (let ([method (~method (request-method req))]
+                                                  [allows '{"GET" "HEAD"}])
+                                              (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows)]
+                                                    [(member method allows) (next-dispatcher)]
+                                                    [else (response:501)]))})
+                        (filter:make (pregexp /d-arc/) (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
                                                              [else (filter:make #px"/refresh-servlet$"
                                                                                 (lift:make {λ _ (response:rs refresh-servlet!)}))]))
                         (timeout:make (sakuyamon-timeout-servlet-connection))
@@ -167,7 +182,12 @@
             (define /htdocs (digimon-terminus))
             (define url->path {λ [default.rkt uri] (~path /htdocs (url-path uri) default.rkt)})
             (define-values {refresh-servlet! url->servlet} (path->servlet (curry url->path "default.rkt") null))
-            (chain:make (filter:make #px"^/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
+            (chain:make (lift:make {λ [req] (let ([method (~method (request-method req))]
+                                                  [allows '{"GET" "HEAD"}])
+                                              (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows)]
+                                                    [(member method allows) (next-dispatcher)]
+                                                    [else (response:501)]))})
+                        (filter:make #px"^/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
                                                          [else (chain:make (path:make "/d-arc/collect-garbage" {λ _ (response:gc)})
                                                                            (path:make "/d-arc/refresh-servlet" {λ _ (response:rs refresh-servlet!)}))]))
                         (timeout:make (sakuyamon-timeout-servlet-connection))
