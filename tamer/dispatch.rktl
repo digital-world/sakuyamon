@@ -10,9 +10,6 @@ As an instance of the @bold{Racket} @deftech{Web Server},
 @itech{Sakuyamon} is just a configuration of a dispatching server
 that serves 3 types of @deftech[#:key "terminus"]{termini}, or @deftech{htdocs}.
 
-By default, @itech{Per-Tamer Terminus} and @itech{Per-Digimon Terminus} are disabled
-since they are system-wide @itech[#:key "Terminus"]{Termini}.
-
 Meanwhile, @hyperlink["http://en.wikipedia.org/wiki/Webserver_directory_index"]{directory indices}
 are @litchar{default.rkt}, @litchar{index.html} and @litchar{index.htm}, respectively.
 However they just exist on their own and not the directory@literal{'}s
@@ -41,11 +38,11 @@ However they just exist on their own and not the directory@literal{'}s
                                  @litchar{127.0.0.1} as a public one.}
 
 @tamer-action[(curl "--help")
-              (match-let ([{list _ _ headers _} (curl "-X" "Options" (/htdocs "."))])
+              (match-let ([{list _ _ headers _} (curl "-X" "Options" (/htdocs "/"))])
                 (dict-ref headers 'allow))
-              (match-let ([{list _ _ headers _} (curl "-X" "Options" (/tamer "."))])
+              (match-let ([{list _ _ headers _} (curl "-X" "Options" (/tamer "/"))])
                 (dict-ref headers 'allow))
-              (match-let ([{list _ _ headers _} (curl "-X" "Options" (/digimon "."))])
+              (match-let ([{list _ _ headers _} (curl "-X" "Options" (/digimon "/"))])
                 (dict-ref headers 'allow))]
 
 @handbook-scenario{Main Terminus}
@@ -121,6 +118,11 @@ HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in th
                                                                     "-u" "wargrey:gyoudmon" rpath)])
                       (check-eq? status 200 reason))))]
 
+@para[#:style "GYDMError"]{After all the dynamic contents might be totally harmful for
+                           @itech{Sakuyamon} and other @itech{tamers}, and there is no comprehensive
+                           solution to defeat this problem. Therefore enabling @itech{Per-Tamer Terminus}
+                           at your own risk!}
+
 @handbook-scenario{Per-Digimon Terminus}
 
 @deftech{Per-Digimon Terminus} is designed for system users to publish their project wikis like
@@ -183,6 +185,8 @@ is required to work with @secref["dispatch-passwords" #:doc '(lib "web-server/sc
 
 By the way, as you may guess, users don@literal{'}t need to refresh passwords manually
 since the @itech{.realm.rktd} is checked every request.
+
+@para[#:style "GYDMWarning"]{@itech{Per-Digimon Terminus} is disabled by default.}
 
 @handbook-appendix[]
 

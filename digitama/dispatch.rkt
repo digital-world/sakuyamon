@@ -103,7 +103,7 @@
                           {λ _ (parameterize ([current-custodian (current-server-custodian)])
                                  (chain:make (timeout:make initial-connection-timeout)
                                              (log:make #:format ~request #:log-path (build-path (digimon-stone) "request.log"))
-                                             (match ~: ; Why use exclusive conditions? different conditions have already been stored in different caches.
+                                             (match ~: ; Why use exclusive conditions? different branches have already been stored in different caches.
                                                [{list tamer digimon} (cond [(false? (sakuyamon-digimon-terminus?)) (chain:make)]
                                                                            [else (dispatch-digimon tamer digimon ::1?)])] 
                                                [{list tamer} (cond [(false? (sakuyamon-tamer-terminus?)) (chain:make)]
