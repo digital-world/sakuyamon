@@ -89,15 +89,15 @@ Note that @exec{realm} will do nothing for those passwords that have already bee
          (test-spec "realm --in-place"
                     #:before {λ _ (copy-file realm.rktd realm.dtkr)}
                     #:after {λ _ (delete-file realm.dtkr)}
-                    (check-equal? (parameterize ([current-output-port digest-out])
-                                    (thread {λ _ (dynamic-wind {λ _ (void)}
-                                                               {λ _ (parameterize ([exit-handler void])
-                                                                      (sakuyamon "realm" realm.dtkr))}
-                                                               {λ _ (close-output-port digest-out)})})
-                                    (read digest-in))
-                                  (parameterize ([exit-handler void])
-                                    (sakuyamon "realm" "--in-place" realm.dtkr)
-                                    (call-with-input-file realm.dtkr read)))))]
+                    (parameterize ([current-output-port digest-out]
+                                   [current-error-port digest-out])
+                      (check-equal? (parameterize ([exit-handler void])
+                                      (thread {λ _ (sakuyamon "realm" realm.dtkr)})
+                                      (read digest-in))
+                                    (parameterize ([exit-handler void])
+                                      (thread {λ _ (and (sakuyamon "realm" "--in-place" realm.dtkr)
+                                                        (sakuyamon "realm" realm.dtkr))})
+                                      (read digest-in))))))]
 
 @handbook-appendix[]
 
