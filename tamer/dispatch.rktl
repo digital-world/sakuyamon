@@ -13,6 +13,11 @@ that serves 3 types of @deftech[#:key "terminus"]{termini}, or @deftech{htdocs}.
 By default, @itech{Per-Tamer Terminus} and @itech{Per-Digimon Terminus} are disabled
 since they are system-wide @itech[#:key "Terminus"]{Termini}.
 
+Meanwhile, @hyperlink["http://en.wikipedia.org/wiki/Webserver_directory_index"]{directory indices}
+are @litchar{default.rkt}, @litchar{index.html} and @litchar{index.htm}, respectively.
+However they just exist on their own and not the directory@literal{'}s
+@hyperlink["http://en.wikipedia.org/wiki/URL_redirection"]{redirection}s.
+
 @tamer-smart-summary[]
 
 @chunk[|<dispatch taming start>|
@@ -27,16 +32,15 @@ since they are system-wide @itech[#:key "Terminus"]{Termini}.
        (define ~tamer (curry build-path (find-system-path 'home-dir) "Public/DigitalWorld" "terminus"))
        (define ~digimon (curry build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook"))
        
-       (define-values {shutdown curl} (sakuyamon-realize))
-       (define 127.curl
-         {lambda [uri #:method [method #"GET"] #:headers [headers null] #:data [data #false]]
-           (curl uri #:host "127.0.0.1" #:method method #:headers headers #:data data)})
+       (define-values {shutdown curl 127.curl} (sakuyamon-realize))
        
        |<dispatch:*>|]
 
 @para[#:style "GYDMWarning"]{For @hyperlink["http://en.wikipedia.org/wiki/Localhost"]{loopback addresses},
                                  @itech{Sakuyamon} always trust @deftech[#:key "trustable"]@litchar{::1} and treat
                                  @litchar{127.0.0.1} as a public one.}
+
+@tamer-action[(curl "--help")]
 
 @handbook-scenario{Main Terminus}
 
@@ -74,7 +78,7 @@ are relative to @racket[digimon-terminus].
 
 @deftech{Per-Tamer Terminus} is designed for system users to share and discuss their works on the internet
 if they store contents in the @deftech{public world} directory @litchar{$HOME/Public/DigitalWorld} and
-organise them as a @hyperlink["https://github.com/digital-world/DigiGnome"]{digimon}. The first
+organize them as a @hyperlink["https://github.com/digital-world/DigiGnome"]{digimon}. The first
 @italic{path element} of URL always has the shape of @litchar{~user} and the rest parts
 are relative to @racket[digimon-terminus].
 
@@ -104,18 +108,16 @@ HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in th
                      |<testcase: authentication>|))]
 
 @chunk[|<testcase: authentication>|
-       (let ([client {λ [curl . lines]
-                       (let ([>> {λ _ (map displayln lines)}]
-                             [<< {λ _ (sakuyamon-agent curl (rhtdocs .realm-path) #"GET")}])
-                         (with-input-from-bytes (with-output-to-bytes >>) <<))}])
+       (let ([rpath (rhtdocs .realm-path)])
          (test-case (format "200: guest@::1:~a" type)
-                    (match-let ([{list status reason _ _} (client curl)])
+                    (match-let ([{list status reason _ _} (curl "--location" rpath)])
                       (check-eq? status 200 reason)))
          (test-case (format "401: guest@127:~a" type)
-                    (match-let ([{list status reason _ _} (client 127.curl)])
+                    (match-let ([{list status reason _ _} (127.curl "--location" rpath)])
                       (check-eq? status 401 reason)))
          (test-case (format "200: wargrey@127:~a" type)
-                    (match-let ([{list status reason _ _} (client 127.curl 'wargrey "gyoudmon")])
+                    (match-let ([{list status reason _ _} (127.curl "--location" "--anyauth"
+                                                                    "-u" "wargrey:gyoudmon" rpath)])
                       (check-eq? status 200 reason))))]
 
 @handbook-scenario{Per-Digimon Terminus}
@@ -206,7 +208,7 @@ since the @itech{.realm.rktd} is checked every request.
                  |<testsuite: basic access authentication>|))}]
 
 @chunk[|<dispatch: check #:before>|
-       #:before {λ _ (when (pair? curl) (raise-result-error 'realize "procedure?" curl))}]
+       #:before {λ _ (when (string? 127.curl) (raise-result-error 'realize "procedure?" 127.curl))}]
 
 @chunk[|<dispatch: setup and teardown>|
        #:before {λ _ (void (make-parent-directory* lpath)

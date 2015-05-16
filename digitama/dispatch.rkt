@@ -60,9 +60,9 @@
                                                       [{cons pdir rst} (travel (cons pdir pieces) rst)]
                                                       [_ (let* ([ps (reverse pieces)]
                                                                 [p (simplify-path (apply build-path base ps) #false)])
-                                                           (cond [(or (false? default.rkt) (filename-extension p) (file-exists? p)) (values p ps)]
-                                                                 [else (values (build-path p default.rkt)
-                                                                               (reverse (cons default.rkt pieces)))]))])))})
+                                                           (if (and default.rkt (string=? (path/param-path (last pas)) ""))
+                                                               (values (build-path p default.rkt) (reverse (cons default.rkt pieces)))
+                                                               (values p ps)))])))})
         
         (define path->servlet {λ [->path mods] (let ([fns (make-make-servlet-namespace #:to-be-copied-module-specs mods)]
                                                      [tds (sakuyamon-timeout-default-servlet)])
@@ -158,8 +158,7 @@
                         (servlet:make #:responders-servlet-loading (curryr response:exn #"Loading")
                                       #:responders-servlet (curryr response:exn #"Handling")
                                       url->servlet)
-                        (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime
-                                   #:indices (list "default.html"))
+                        (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime)
                         (lift:make {λ _ (cond [(directory-exists? /htdocs) (next-dispatcher)]
                                               [else (response:503)])}))})
         
@@ -175,8 +174,7 @@
                         (servlet:make #:responders-servlet-loading (curryr response:exn #"Loading")
                                       #:responders-servlet (curryr response:exn #"Handling")
                                       url->servlet)
-                        (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime
-                                   #:indices (list "default.html" "default.rkt")))})
+                        (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime))})
 
         (define realm.rktd->lookups
           {lambda [realm.rktd]

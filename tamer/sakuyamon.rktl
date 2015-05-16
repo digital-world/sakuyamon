@@ -32,12 +32,11 @@ which means she can always be talked with via @racketidfont{curl} as long as she
 
 @tamer-action[(define {realize-with-flush . arglist}
                 (call-with-values {λ _ (apply sakuyamon-realize arglist)}
-                                  {λ [shutdown curl]
+                                  {λ [shutdown /maybe/stdout /maybe/stderr]
                                     (let ([$? (shutdown)])
-                                      (when (pair? curl)
-                                        (cond [(zero? $?) (printf "~a~n" (car curl))]
-                                              [else (eprintf "~a~n" (cdr curl))])))}))
-              (code:comment @#,t{@racketidfont{@racketcommentfont{curl}} will hold the output and error messages.})
+                                      (when (string? /maybe/stdout)
+                                        (cond [(zero? $?) (printf "~a~n" /maybe/stdout)]
+                                              [else (eprintf "~a~n" /maybe/stderr)])))}))
               (realize-with-flush "--help")
               (realize-with-flush "--SSL")
               (code:comment @#,t{@hyperlink["https://letsencrypt.org"]{@racketcommentfont{Let@literal{'}s Encrypt}} is a kind of service})
@@ -47,18 +46,18 @@ As usual @racket[sakuyamon-realize] itself should be checked first:
 
 @tamer-note['realize]
 @chunk[|<testcase: realize>|
-       (let*-values ([{shutdown sendrecv} (sakuyamon-realize "-p" "8443")]
-                     [{shutdown-errno recv-stdmsg} (sakuyamon-realize "-p" "8443")]
-                     [{shutdown curl} (and (shutdown) (sakuyamon-realize "-p" "8443"))])
+       (let*-values ([{shutdown ::1.sendrecv 127.sendrecv} (sakuyamon-realize "-p" "8443")]
+                     [{shutdown-errno stdout stderr} (sakuyamon-realize "-p" "8443")]
+                     [{shutdown ::1.curl 127.curl} (and (shutdown) (sakuyamon-realize "-p" "8443"))])
          (test-spec "realize --port 8443 [fresh]"
                     (let ([$? (shutdown)])
-                      (check-pred procedure? sendrecv)
-                      (check-pred procedure? curl)
+                      (check-pred procedure? ::1.sendrecv)
+                      (check-pred procedure? ::1.curl)
                       (check-pred zero? $?)))
          (test-spec "realize --port 8443 [already in use]"
                     (let ([$? (shutdown-errno)])
-                      (check-pred pair? recv-stdmsg)
-                      (check-regexp-match (pregexp (format "errno=~a" $?)) (cdr recv-stdmsg)))))]
+                      (check-pred string? stderr)
+                      (check-regexp-match (pregexp (format "errno=~a" $?)) stderr))))]
 
 @handbook-scenario{Keep Realms Safety!}
 

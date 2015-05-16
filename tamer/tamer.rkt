@@ -35,69 +35,81 @@
                              {λ _ (and (when kill? (place-kill sakuyamon))
                                        (place-wait sakuyamon))}
                              {λ _ (custodian-shutdown-all sakuyamon-zone)})}))
-      (define {curl ssl? port}
-        {λ [uri #:host [host "::1"] #:method [method #"GET"] #:headers [headers null] #:data [data #false]]
-          (define-values {status net-headers /dev/net/stdin}
-            (http-sendrecv host uri #:ssl? ssl? #:port port #:method method #:headers headers #:data data))
-          (define parts (regexp-match #px".+?\\s+(\\d+)\\s+(.+)\\s*$" (bytes->string/utf-8 status)))
-          (list (string->number (list-ref parts 1))
-                (string-join (string-split (list-ref parts 2) (string cat#)) (string #\newline))
-                (map {λ [kv] (cons (string->symbol (string-downcase (bytes->string/utf-8 (car kv))))
-                                   (bytes->string/utf-8 (cdr kv)))}
-                     (apply append (map extract-all-fields net-headers)))
-                /dev/net/stdin)})
-      (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown #:kill? #true) (cons "" (exn-message b))))}])
+      (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown #:kill? #true) "" (exn-message b)))}])
         (match ((curry sync/timeout/enable-break 1.618) (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt})
                                                         (handle-evt sakuyamon (curry cons sakuyamon)))
-          [#false (values (shutdown #:kill? #true) (cons "" "sakuyamon is delayed!"))]
-          ['dead-evt (values (shutdown) (cons (port->string place-out) (port->string place-err)))]
-          [{list-no-order _ {? boolean? ssl?} {? number? port}} (values (shutdown) (curl ssl? port))]
-          [whatever (values (shutdown #:kill? #true) (cons "" (format "~a" whatever)))])))})
+          [#false (values (shutdown #:kill? #true) "" "sakuyamon is delayed!")]
+          ['dead-evt (values (shutdown) (port->string place-out) (port->string place-err))]
+          [{list-no-order _ {? boolean? ssl?} {? number? port}} (values (shutdown) (sakuyamon-agent ssl? port "::1")
+                                                                        (sakuyamon-agent ssl? port "127.0.0.1"))])))})
 
-(define sakuyamon-agent
-  {lambda [curl uri0 method #:headers [headers0 null] #:data [data0 #false]]
-    (define {retry [uri uri0] #:add-headers [headers null] #:data [data data0]}
-      (sakuyamon-agent curl uri method #:headers (append headers0 headers) #:data data))
+(define {sakuyamon-agent ssl? port host}
+  {lambda arglist
+    (define method (make-parameter #"GET"))
+    (define anyauth (make-parameter #false))
+    (define location (make-parameter #false))
+    (define user:pwd (make-parameter #false))
+    (define go-headers (make-parameter null))
+
+    (define {retry uri . addition}
+      (define {remake arglist}
+        (remove* (list "--user" "-u" (user:pwd) uri) arglist))
+      (apply (sakuyamon-agent ssl? port host) (append addition (remake arglist) (list uri))))
     
-    (define status (curl uri0 #:method method #:headers headers0 #:data data0))
-    (match-define {list status-code _ net-headers _} status)
-    (with-handlers ([void {λ _ status}])
-      (case status-code
-        [{301} (let ([m (string->symbol (string-downcase (format "~a" method)))])
-                 (cond [(member m '{get head}) (retry (dict-ref net-headers 'location))]
-                       [else status]))]
-        [{302 307} (retry (dict-ref net-headers 'location))]
-        [{401} (let-values ([{username password} (values (string-downcase (read-line)) (read-line))]
-                            [{WWW-Authenticate} (dict-ref net-headers 'www-authenticate)]
-                            [{px.k=v} #px#"(\\w+)=\"(.+?)\""])
-                 (cond [(regexp-match #px"^Basic" WWW-Authenticate)
-                        => {λ _  (retry #:add-headers (list (bytes-append #"Authorization: Basic "
-                                                                          (let ([user*pwd (format "~a:~a" username password)])
-                                                                            (base64-encode (string->bytes/utf-8 user*pwd))))))}]
-                       [(regexp-match #px"^Digest" WWW-Authenticate)
-                        => {λ _ (with-handlers ([exn? {λ [e] (and (displayln e) (raise e))}])
-                                  (define bindings (for/list ([k-v (in-list (regexp-match* px.k=v WWW-Authenticate))])
-                                                     (let ([kv (regexp-match px.k=v k-v)])
-                                                       (cons (string->symbol (string-downcase (bytes->string/utf-8 (cadr kv))))
-                                                             (caddr kv)))))
-                                  (define nonce-count #"00000001") ; needs 8 digits
-                                  (match-define {list realm qop nonce} (map (curry dict-ref bindings) '{realm qop nonce}))
-                                  (define private-key (string->bytes/utf-8 (symbol->string (gensym (current-digimon))))) 
-                                  (define timestamp (string->bytes/utf-8 (number->string (current-seconds))))
-                                  (define digest-uri (string->bytes/utf-8 uri0))
-                                  (define cnonce (md5 (bytes-append timestamp #" " (md5 (bytes-append timestamp #":" private-key)))))
-                                  (define RESPONSE (md5 (bytes-append ((password->digest-HA1 {λ [user realm] password})
-                                                                       username (bytes->string/utf-8 realm)) #":"
-                                                                      nonce #":" nonce-count #":" cnonce #":" qop #":"
-                                                                      (md5 (bytes-append method #":" digest-uri)))))
-                                  (retry #:add-headers (list (bytes-append #"Authorization: Digest nc=" nonce-count
-                                                                           #", realm=\"" realm #"\""
-                                                                           #", username=\"" (string->bytes/utf-8 username) #"\""
-                                                                           #", nonce=\"" nonce #"\""
-                                                                           #", cnonce=\"" cnonce #"\""
-                                                                           #", qop=\"" qop #"\""
-                                                                           #", uri=\"" digest-uri #"\""
-                                                                           #", response=\"" RESPONSE #"\""))))}]
-                       [else (raise 500)]))]
-        [else status]))})
-      
+    (let/ec exit-agent
+      ((curry parse-command-line "sakuyamon-curl" arglist)
+       `{{usage-help ,(format "Transfer URL: a cURL-like tool for taming only.~n")}
+         {once-each [{"--anyauth"} ,{λ [flag] (anyauth #true)} {"Detect authentication method."}]
+                    [{"--location" "-L"} ,{λ [flag] (anyauth #true)} {"Follow redirects."}]
+                    [{"--head" "-I"} ,{λ [flag] (method #"HEAD")} {"Show document info only."}]
+                    [{"--user" "-u"} ,{λ [flag u:p] (user:pwd u:p)} {"Server user and password." "USER:PASSWORD"}]}
+         {multi [{"--header" "-H"} ,{λ [flag line] (go-headers (cons line (go-headers)))}
+                                   {"Custom header to pass to server." "LINE"}]}}
+       {λ [! uri] (let ([status (let-values ([{status net-headers /dev/net/stdin} (http-sendrecv host uri #:ssl? ssl? #:port port
+                                                                                                 #:method (method) #:headers (reverse (go-headers)))])
+                                  (define parts (regexp-match #px".+?\\s+(\\d+)\\s+(.+)\\s*$" (bytes->string/utf-8 status)))
+                                  (list (string->number (list-ref parts 1))
+                                        (string-join (string-split (list-ref parts 2) (string cat#)) (string #\newline))
+                                        (map {λ [kv] (cons (string->symbol (string-downcase (bytes->string/utf-8 (car kv))))
+                                                           (bytes->string/utf-8 (cdr kv)))}
+                                             (apply append (map extract-all-fields net-headers)))
+                                        /dev/net/stdin))])
+                    (match-define {list code _ headers _} status)
+                    (with-handlers ([void {λ _ status}])
+                      (cond [(and (location) (member code '{301 302 307}))
+                             => {λ _ (case code
+                                       [{301} (cond [(member (method) '{#"GET" #"HEAD"}) (retry (dict-ref headers 'location))]
+                                                    [else status])]
+                                       [{302 307} (retry (dict-ref headers 'location))])}]
+                            [(and (user:pwd) (anyauth) (eq? code 401))
+                             => {λ _ (let-values ([{WWW-Authenticate} (dict-ref headers 'www-authenticate)]
+                                                  [{px.k=v} #px#"(\\w+)=\"(.+?)\""])
+                                       (cond [(regexp-match #px"^Basic" WWW-Authenticate)
+                                              => {λ _ (retry uri "--header" (format "Authorization: Basic ~a"
+                                                                                    (base64-encode (string->bytes/utf-8 (user:pwd)))))}]
+                                             [(regexp-match #px"^Digest" WWW-Authenticate)
+                                              => {λ _ (with-handlers ([exn? {λ [e] (and (displayln e) (raise e))}])
+                                                        (define bindings (for/list ([k-v (in-list (regexp-match* px.k=v WWW-Authenticate))])
+                                                                           (let ([kv (regexp-match px.k=v k-v)])
+                                                                             (cons (string->symbol (string-downcase (bytes->string/utf-8 (cadr kv))))
+                                                                                   (caddr kv)))))
+                                                        (match-define {list _ user pwd} (regexp-match #px"^([^:]+)?:(.+)?$" (user:pwd)))
+                                                        (define nonce-count (~a "1" #:max-width 8 #:min-width 8 #:align 'right #:pad-string "0"))
+                                                        (match-define {list realm qop nonce} (map (curry dict-ref bindings) '{realm qop nonce})) 
+                                                        (define timestamp (number->string (current-seconds)))
+                                                        (define cnonce (md5 (format "~a ~a" timestamp (md5 timestamp))))
+                                                        (retry uri "--header" (format (string-append "Authorization: Digest nc=~a" 
+                                                                                                     ", realm=\"~a\", username=\"~a\""
+                                                                                                     ", nonce=\"~a\", cnonce=\"~a\""
+                                                                                                     ", qop=\"~a\", uri=\"~a\""
+                                                                                                     ", response=\"~a\"")
+                                                                                      nonce-count realm user nonce cnonce qop uri
+                                                                                      (md5 (format "~a:~a:~a:~a:~a:~a"
+                                                                                                   ((password->digest-HA1 {λ _ pwd})
+                                                                                                    user (bytes->string/utf-8 realm))
+                                                                                                   nonce nonce-count cnonce qop
+                                                                                                   (md5 (format "~a:~a" (method) uri)))))))}]
+                                             [else (raise 500)]))}]
+                            [else status])))}
+       '{"url"}
+       (compose1 exit-agent display (curryr string-replace #px"  -- : .+?-h --'\\s*" ""))))})
