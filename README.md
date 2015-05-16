@@ -21,7 +21,7 @@ Keep it simple but also ready for large-scale extension.
 >       + 📑Sakuyamon, Realize!
 >         - 💚 1 - realize --port 8443 [fresh]
 >         - 💚 2 - realize --port 8443 [already in use]
->       + 📑Keep the Realms Safety!
+>       + 📑Keep Realms Safe!
 >         - 💚 1 - realm --in-place
 >     + 📖
 [dispatch.rktl](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rktl)

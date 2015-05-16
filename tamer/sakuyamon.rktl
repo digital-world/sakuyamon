@@ -59,7 +59,7 @@ As usual @racket[sakuyamon-realize] itself should be checked first:
                       (check-pred string? stderr)
                       (check-regexp-match (pregexp (format "errno=~a" $?)) stderr))))]
 
-@handbook-scenario{Keep Realms Safety!}
+@handbook-scenario{Keep Realms Safe!}
 
 Apart from heavy-weight authentication solutions implemented by website developers on their own,
 HTTP protocal has two alternatives, the
@@ -105,4 +105,4 @@ Note that @exec{realm} will do nothing for those passwords that have already bee
        {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
          (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)
-         (define-tamer-suite realm "Keep the Realms Safety!" |<testcsae: realm in-place>|)}]
+         (define-tamer-suite realm "Keep Realms Safe!" |<testcsae: realm in-place>|)}]
