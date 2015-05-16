@@ -114,10 +114,12 @@
                                          (pre "» " ,(number->string status-code)
                                               " - " ,desc))))))})
 
-(define response:options : (-> URL (Listof String) Header * Response)
-  {lambda [uri allows . headers]
+(define response:options : (-> URL (Listof String) Bytes Header * Response)
+  {lambda [uri allows terminus . headers]
     (response/output void #:code 200
-                     #:headers (cons (make-header #"Allow" (string->bytes/utf-8 (string-join allows ","))) headers))})
+                     #:headers (list* (make-header #"Allow" (string->bytes/utf-8 (string-join allows ",")))
+                                      (make-header #"Terminus" terminus)
+                                      headers))})
 
 (define response:gc : (-> Header * Response)
   {lambda headers

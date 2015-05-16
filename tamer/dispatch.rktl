@@ -37,13 +37,7 @@ However they just exist on their own and not the directory@literal{'}s
                                  @itech{Sakuyamon} always trust @deftech[#:key "trustable"]@litchar{::1} and treat
                                  @litchar{127.0.0.1} as a public one.}
 
-@tamer-action[(curl "--help")
-              (match-let ([{list _ _ headers _} (curl "-X" "Options" (/htdocs "/"))])
-                (dict-ref headers 'allow))
-              (match-let ([{list _ _ headers _} (curl "-X" "Options" (/tamer "/"))])
-                (dict-ref headers 'allow))
-              (match-let ([{list _ _ headers _} (curl "-X" "Options" (/digimon "/"))])
-                (dict-ref headers 'allow))]
+@tamer-action[(curl "--help")]
 
 @handbook-scenario{Main Terminus}
 
@@ -54,9 +48,13 @@ are relative to @racket[digimon-terminus].
 @tamer-note['dispatch-main]
 
 @chunk[|<testcase: dispatch main>|
-       (test-spec "200: /robots.txt"
-                  (match-let ([{list status reason _ _} (curl (/htdocs "robots.txt"))])
-                    (check-eq? status 200 reason)))]
+       (let ([rpath (/htdocs "robots.txt")])
+         (test-spec (format "200: ~a" rpath)
+                    (match-let ([{list _ _ headers _} (curl "-X" "Options" rpath)])
+                      (check-regexp-match #px"^((GET|HEAD|POST),?){3}$" (dict-ref headers 'allow))
+                      (check-equal? (dict-ref headers 'terminus) "Main"))
+                    (match-let ([{list status reason _ _} (curl "--head" rpath)])
+                      (check-eq? status 200 reason))))]
 
 @deftech{Function URL}s are dispatched only when the requests come from @itech{trustable} clients.
 
@@ -77,15 +75,19 @@ are relative to @racket[digimon-terminus].
 @deftech{Per-Tamer Terminus} is designed for system users to share and discuss their works on the internet
 if they store contents in the @deftech{public world} directory @litchar{$HOME/Public/DigitalWorld} and
 organize them as a @hyperlink["https://github.com/digital-world/DigiGnome"]{digimon}. The first
-@italic{path element} of URL always has the shape of @litchar{~user} and the rest parts
-are relative to it@literal{'}s own @racket[digimon-terminus].
+@italic{path element} of URL always has the shape of @litchar{~username} and the rest parts
+are relative to their own @racket[digimon-terminus]s.
 
 @tamer-note['dispatch-user]
 
 @chunk[|<testcase: dispatch tamer>|
-       (test-spec "200|404: /robots.txt"
-                  (match-let ([{list status reason _ _} (curl (/tamer "robots.txt"))])
-                    (check-pred (curryr member '{200 404}) status reason)))]
+       (let ([rpath (/tamer "robots.txt")])
+         (test-spec (format "200|404: ~a" rpath)
+                    (match-let ([{list _ _ headers _} (curl "-X" "Options" rpath)])
+                      (check-regexp-match #px"^((GET|HEAD|POST),?){3}$" (dict-ref headers 'allow))
+                      (check-equal? (dict-ref headers 'terminus) "Per-Tamer"))
+                    (match-let ([{list status reason _ _} (curl "--head" rpath)])
+                      (check-pred (curryr member '{200 404}) status reason))))]
 
 Note that @itech{Per-Tamer Terminus} do support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].
 So users should be responsible for their own @itech{function URL}s.
@@ -128,9 +130,9 @@ HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in th
 @deftech{Per-Digimon Terminus} is designed for system users to publish their project wikis like
 @hyperlink["https://help.github.com/articles/what-are-github-pages/"]{Github Pages}. Projects
 should be stored in directory @litchar{$HOME/DigitalWorld} and follow
-@hyperlink["https://github.com/digital-world/DigiGnome"]{my project convientions}.
-The first @italic{path element} of URL always has the shape of @litchar{~user:digimon}
-and the rest parts are relative to @litchar{compiled/handbook} within @racket[digimon-tamer]
+@hyperlink["https://github.com/digital-world/DigiGnome"]{my convientions}.
+The first @italic{path element} of URL always has the shape of @litchar{~username:digimon}
+and the rest parts are relative to @litchar{compiled/handbook} within their own @racket[digimon-tamer]
 where stores the auto-generated @itech{htdocs}.
 
 @para[#:style "GYDMWarning"]{Note its @litchar{robots.txt} should be placed in @racket[digimon-tamer]
@@ -142,10 +144,13 @@ where stores the auto-generated @itech{htdocs}.
 @tamer-note['dispatch-digimon]
 
 @chunk[|<testcase: dispatch digimon>|
-       (test-spec "200: /robots.txt"
-                  (let ([~digimon (curry build-path (digimon-tamer))])
-                    (match-let ([{list status reason _ _} (curl (/digimon "robots.txt"))])
-                    (check-eq? status 200 reason))))]
+       (let ([rpath (/digimon "robots.txt")])
+         (test-spec (format "200: ~a" rpath)
+                    (match-let ([{list _ _ headers _} (curl "-X" "Options" rpath)])
+                      (check-regexp-match #px"^((GET|HEAD),?){2}$" (dict-ref headers 'allow))
+                      (check-equal? (dict-ref headers 'terminus) "Per-Digimon"))
+                    (match-let ([{list status reason _ _} (curl "--head" rpath)])
+                      (check-eq? status 200 reason))))]
 
 @itech{Per-Digimon Terminus} only serves static contents that usually be generated from the
 @secref["scribble_lp2_Language" #:doc '(lib "scribblings/scribble/scribble.scrbl")].
