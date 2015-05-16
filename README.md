@@ -26,14 +26,14 @@ Keep it simple but also ready for large-scale extension.
 >     + 📖
 [dispatch.rktl](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rktl)
 >       + 📑Main Terminus
->         - 💚 1 - /trick:digimon/readme.t
+>         - 💚 1 - 200: /robots.txt
 >         + 📑Function URLs
 >           - 💚 1 - 200: /d-arc/collect-garbage@::1
 >           - 💚 2 - 403: /d-arc/collect-garbage@127
 >           - 💚 3 - 200: /d-arc/refresh-servlet@::1
 >           - 💚 4 - 403: /d-arc/refresh-servlet@127
 >       + 📑Per-Tamer Terminus
->         - 💚 1 - /~wargrey/readme.t
+>         - 💚 1 - 200|404: /robots.txt
 >         + 📑Function URLs
 >           - 💚 1 - 200: /~wargrey/d-arc/refresh-servlet@::1
 >           - 💚 2 - 403: /~wargrey/d-arc/refresh-servlet@127
@@ -42,7 +42,7 @@ Keep it simple but also ready for large-scale extension.
 >           - 💚 2 - 401: guest@127:digest
 >           - 💚 3 - 200: wargrey@127:digest
 >       + 📑Per-Digimon Terminus
->         - 💚 1 - /~wargrey:sakuyamon/readme.t
+>         - 💚 1 - 200: /robots.txt
 >         + 📑URL Rewriting
 >           - 💚 1 - 302: !/../.
 >           - 💚 2 - 302: ./t/h.lp.rktl
