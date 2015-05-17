@@ -6,12 +6,12 @@
 
 @handbook-story{Dispatching Rules!}
 
-As an instance of the @bold{Racket} @deftech{Web Server},
+As an instance of @bold{Racket} @deftech{Web Server},
 @itech{Sakuyamon} is just a configuration of a dispatching server
 that serves 3 types of @deftech[#:key "terminus"]{termini}, or @deftech{htdocs}.
 
 Meanwhile, @hyperlink["http://en.wikipedia.org/wiki/Webserver_directory_index"]{directory indices}
-are @litchar{default.rkt}, @litchar{index.html} and @litchar{index.htm}, respectively.
+are @litchar{default.rkt} and @litchar{index.html}, respectively.
 However they just exist on their own and not the directory@literal{'}s
 @hyperlink["http://en.wikipedia.org/wiki/URL_redirection"]{redirection}s.
 
@@ -26,7 +26,7 @@ However they just exist on their own and not the directory@literal{'}s
        (define /digimon (curry format "/~~~a:~a/~a" (getenv "USER") (current-digimon)))
 
        (define ~htdocs (curry build-path (digimon-terminus)))
-       (define ~tamer (curry build-path (find-system-path 'home-dir) "Public/DigitalWorld" "terminus"))
+       (define ~tamer (curry build-path (find-system-path 'home-dir) "DigitalWorld" "Kuzuhamon" "terminus"))
        (define ~digimon (curry build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook"))
        
        (define-values {shutdown curl 127.curl} (sakuyamon-realize))
@@ -72,11 +72,10 @@ are relative to @racket[digimon-terminus].
 
 @handbook-scenario{Per-Tamer Terminus}
 
-@deftech{Per-Tamer Terminus} is designed for system users to share and discuss their works on the internet
-if they store contents in the @deftech{public world} directory @litchar{$HOME/Public/DigitalWorld} and
-organize them as a @hyperlink["https://github.com/digital-world/DigiGnome"]{digimon}. The first
-@italic{path element} of URL always has the shape of @litchar{~username} and the rest parts
-are relative to their own @racket[digimon-terminus]s.
+@deftech{Per-Tamer Terminus} is designed for system users to share and discuss their work on the internet
+if they organize it as a @hyperlink["https://github.com/digital-world/DigiGnome#digital-world"]{digimon}
+called @deftech{Kuzuhamon}. The first @italic{path element} of URL always has the shape of @litchar{~username}
+and the rest parts are relative to its own @racket[digimon-terminus]s.
 
 @tamer-note['dispatch-user]
 
@@ -96,8 +95,8 @@ So users should be responsible for their own @itech{function URL}s.
        (for ([d-arc (in-list (list "d-arc/refresh-servlet"))])
          (let ([rhtdocs /tamer]) |<check: function url>|))]
 
-Although users could write their own servlets to protect their contents in a more trustable way, they still have
-HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in their @itech{public world}.
+Although users could write their own servlets to protect their contents in a more security way, they still have
+HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in the root of @itech{Kuzuhamon}.
 
 @chunk[|<testsuite: digest access authentication>|
        (let*-values ([{type lhtdocs rhtdocs} (values 'digest ~tamer /tamer)]
@@ -128,9 +127,8 @@ HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in th
 @handbook-scenario{Per-Digimon Terminus}
 
 @deftech{Per-Digimon Terminus} is designed for system users to publish their project wikis like
-@hyperlink["https://help.github.com/articles/what-are-github-pages/"]{Github Pages}. Projects
-should be stored in directory @litchar{$HOME/DigitalWorld} and follow
-@hyperlink["https://github.com/digital-world/DigiGnome"]{my convientions}.
+@hyperlink["https://help.github.com/articles/what-are-github-pages/"]{Github Pages}, and projects
+should be organized in the @hyperlink["https://github.com/digital-world/DigiGnome#digital-world"]{Digital World}.
 The first @italic{path element} of URL always has the shape of @litchar{~username:digimon}
 and the rest parts are relative to @litchar{compiled/handbook} within their own @racket[digimon-tamer]
 where stores the auto-generated @itech{htdocs}.

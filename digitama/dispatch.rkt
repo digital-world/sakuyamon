@@ -93,38 +93,38 @@
                                  [(headers-assq* #"Host" (request-headers/raw req)) => (compose1 ~host header-value)]
                                  [else 'none]))
               (define termuni (hash-ref! host-cache host make-hash))
+              (define ~:? (let ([pas (url-path (request-uri req))])
+                            (with-handlers ([void {λ _ #false}])
+                              (match (path/param-path (car pas))
+                                ;;; Perhaps these are not fair for SEO
+                                [{or "~"} (list "~")]
+                                [{or ":" "~:"} (list "~" "")]
+                                [{pregexp #px"^~?:(.+)$" {list _ :.}} (list "~" :.)]
+                                [{pregexp #px"^(~.+?):$" {list _ ~.}} (list ~. "")]
+                                [{var ~:?} (let ([~: (string-split ~:? #px":")])
+                                             (and (regexp-match? #"^~.+$" (car ~:))
+                                                  (expand-user-path (car ~:))
+                                                  ~:))]))))
               ({λ [serve] (serve conn req)}
-               (match (let ([pas (url-path (request-uri req))])
-                        (with-handlers ([void {λ _ #false}])
-                          (match (path/param-path (car pas))
-                            ;;; Perhaps these are not fair for SEO
-                            [{or "~"} (list "~")]
-                            [{or ":" "~:"} (list "~" "")]
-                            [{pregexp #px"^~?:(.+)$" {list _ :.}} (list "~" :.)]
-                            [{pregexp #px"^(~.+?):$" {list _ ~.}} (list ~. "")]
-                            [{var ~:?} (let ([~: (string-split ~:? #px":")])
-                                         (and (regexp-match? #"^~.+$" (car ~:))
-                                              (expand-user-path (car ~:))
-                                              ~:))])))
-                 [{list "~" ""} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                      (redirect-to (format "/~a:DigiGnome~a" ~username src)))})]
-                 [{list tamer ""} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                        (redirect-to (format "/~a:DigiGnome~a" tamer src)))})]
-                 [{list "~" digimon} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                           (redirect-to (format "/~a:~a~a" ~username digimon src)))})]
-                 [{list "~"} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                   (redirect-to (format "/~a~a" ~username src)))})]
-                 [~: (hash-ref! termuni ~:
-                                {λ _ (parameterize ([current-custodian (current-server-custodian)])
-                                       (chain:make (timeout:make initial-connection-timeout)
-                                                   (log:make #:format ~request #:log-path (build-path (digimon-stone) "request.log"))
-                                                   (match ~: ; Why exclusive conditions? branches have already been stored in different caches.
-                                                     [{list tamer digimon} (cond [(false? (sakuyamon-digimon-terminus?)) (chain:make)]
-                                                                                 [else (dispatch-digimon tamer digimon ::1?)])] 
-                                                     [{list tamer} (cond [(false? (sakuyamon-tamer-terminus?)) (chain:make)]
-                                                                         [else (dispatch-tamer tamer ::1?)])]
-                                                     [else (dispatch-main ::1?)])
-                                                   (lift:make {λ [req] (response:404)})))})])))})
+               (hash-ref! termuni ~:?
+                          {λ _ (parameterize ([current-custodian (current-server-custodian)])
+                                 (chain:make (timeout:make initial-connection-timeout)
+                                             (log:make #:format ~request #:log-path (build-path (digimon-stone) "request.log"))
+                                             (match ~:? ; Why exclusive conditions? branches have already been stored in different caches.
+                                               [{list "~" ""} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
+                                                                                    (redirect-to (format "/~a:Kuzuhamon~a" ~username src)))})]
+                                               [{list tamer ""} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
+                                                                                      (redirect-to (format "/~a:Kuzuhamon~a" tamer src)))})]
+                                               [{list "~" digimon} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
+                                                                                         (redirect-to (format "/~a:~a~a" ~username digimon src)))})]
+                                               [{list "~"} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
+                                                                                 (redirect-to (format "/~a~a" ~username src)))})]
+                                               [{list tamer digimon} (cond [(false? (sakuyamon-digimon-terminus?)) (chain:make)]
+                                                                           [else (dispatch-digimon tamer digimon ::1?)])] 
+                                               [{list tamer} (cond [(false? (sakuyamon-tamer-terminus?)) (chain:make)]
+                                                                   [else (dispatch-tamer tamer ::1?)])]
+                                               [else (dispatch-main ::1?)])
+                                             (lift:make {λ [req] (response:404)})))})))})
         
         (define dispatch-digimon
           {lambda [real-tamer digimon ::1?]
@@ -158,7 +158,7 @@
 
         (define dispatch-tamer
           {lambda [real-tamer ::1?]
-            (define /htdocs (build-path (expand-user-path real-tamer) "Public" "DigitalWorld" "terminus"))
+            (define /htdocs (build-path (expand-user-path real-tamer) "DigitalWorld" "Kuzuhamon" "terminus"))
             (define realm.rktd (simple-form-path (build-path /htdocs 'up ".realm.rktd")))
             (define url->path {λ [default.rkt uri] (~path /htdocs uri 1 default.rkt)})
             (define-values {refresh-servlet! url->servlet} (path->servlet (curry url->path "default.rkt") null))

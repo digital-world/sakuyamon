@@ -4,7 +4,7 @@
 
 (define version "Baby")
 
-(define pkg-desc "Manage and protect http://gyoudmon.org.")
+(define pkg-desc "Manage and protect http://gyoudmon.org as well as the digital world.")
 
 (define build-deps '{"base" "typed-racket-lib" "scribble-lib" "web-server-lib"})
 
