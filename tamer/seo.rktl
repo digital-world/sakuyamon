@@ -22,7 +22,15 @@ are @litchar{default.rkt} and @litchar{index.html}, respectively.
 
 @handbook-scenario{Robots Exclusion Protocol}
 
-@para[#:style "GYDMComment"]{Just a placeholder for the future if @litchar{robots.txt} really need some rules.}
+@tamer-note['robots.txt]
+
+@handbook-rule{Every @itech{Terminus} should have a @litchar{robots.txt} file placed in the proper directory.}
+
+@chunk[|<testcase: robots.txt>|
+       (for ([/webroot (in-list (list /htdocs /tamer /digimon))])
+         (test-case (format "200|503: ~a" (/webroot "robots.txt"))
+                    (match-let ([{list status reason _ _} (curl (/webroot "robots.txt"))])
+                      (check-pred (curryr member '{200 503}) status reason))))]
 
 @handbook-scenario{Server Side Redirection}
 
@@ -79,6 +87,10 @@ The rendered @litchar{*.html}s will be placed within directories that up to 2 de
 @chunk[|<seo:*>|
        {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
+         (define-tamer-suite robots.txt "/robots.txt"
+           |<seo: check #:before>|
+           |<testcase: robots.txt>|)
+         
          (define-tamer-suite redirections "Server Side Redirections"
            |<seo: check #:before>| #:after {λ _ (shutdown)}
            (test-suite "dir -> dir/" |<testcase: dir to dir/>|)

@@ -98,6 +98,9 @@ HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in th
                                                                     "-u" "wargrey:gyoudmon" rpath)])
                       (check-eq? status 200 reason))))]
 
+By the way, users can custom @hyperlink["http://en.wikipedia.org/wiki/HTTP_404"]{404 pages} by putting a
+@litchar{404.html} in their own @racket[racket-stone].
+
 @para[#:style "GYDMError"]{After all the dynamic contents might be totally harmful for
                            @itech{Sakuyamon} and other @itech{tamers}, and there is no comprehensive
                            solution to defeat this problem. Therefore enabling @itech{Per-Tamer Terminus}
