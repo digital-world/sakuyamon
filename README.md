@@ -50,6 +50,10 @@ Keep it simple but also ready for large-scale extension.
 >           - 💚 3 - 200: wargrey@127:basic
 >     + 📖
 [seo.rktl](http://gyoudmon.org/~wargrey:sakuyamon/seo.rktl)
+>       + 📑/robots.txt
+>         - 💚 1 - 200|503: /robots.txt
+>         - 💚 2 - 200|503: /~wargrey/robots.txt
+>         - 💚 3 - 200|503: /~wargrey:sakuyamon/robots.txt
 >       + 📑Server Side Redirections
 >         + 📑dir -> dir/
 >           - 💚 1 - 302: .
@@ -68,7 +72,7 @@ Keep it simple but also ready for large-scale extension.
 >       + 📑Bad Users
 >         - 💚 1 - 418: ../tamer/.realm.rktd
 >
-> 📌28 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌31 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey:sakuyamon)
