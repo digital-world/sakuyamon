@@ -53,6 +53,7 @@ Keep it simple but also ready for large-scale extension.
 >       + 📑Server Side Redirections
 >         + 📑dir -> dir/
 >           - 💚 1 - 302: .
+>           - 💚 2 - 302: stone
 >         + 📑expand ~:
 >           - 💚 1 - 302: ~
 >           - 💚 2 - 302: :
@@ -60,13 +61,14 @@ Keep it simple but also ready for large-scale extension.
 >           - 💚 4 - 302: :sakuyamon
 >           - 💚 5 - 302: ~wargrey:
 >         + 📑rktl -> html
->           - 💚 1 - 302: ./t/h.lp.rktl
+>           - 💚 1 - 302: seo.rktl
+>           - 💚 2 - 302: dir/dot.lp.rktl
 >     + 📖
 [security.rktl](http://gyoudmon.org/~wargrey:sakuyamon/security.rktl)
 >       + 📑Bad Users
 >         - 💚 1 - 418: ../tamer/.realm.rktd
 >
-> 📌26 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌28 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey:sakuyamon)

@@ -31,7 +31,7 @@ are @litchar{default.rkt} and @litchar{index.html}, respectively.
 @handbook-rule{All non-/-suffixed directories should be redirected to their /-suffixed counterparts.}
 
 @chunk[|<testcase: dir to dir/>|
-       (for ([rpath (in-list (list "."))])
+       (for ([rpath (in-list (list "." "stone"))])
          (test-case (format "302: ~a" rpath)
                     (match-let ([{list status reason headers _} (curl (/htdocs rpath))])
                       (check-eq? status 302 reason)
@@ -68,12 +68,11 @@ The rendered @litchar{*.html}s will be placed within directories that up to 2 de
 @litchar{*.rktl} if exist should be fixed either.
 
 @chunk[|<testcase: rktl to html>|
-       (for ([rpath (in-list (list "./t/h.lp.rktl"))]
-             [px (in-list (list #px"t_h_lp_rktl(/|\\.html)$"))])
+       (for ([rpath (in-list (list "seo.rktl" "dir/dot.lp.rktl"))])
          (test-case (format "302: ~a" rpath)
                     (match-let ([{list status reason headers _} (curl (/digimon rpath))])
                       (check-eq? status 302 reason)
-                      (check-regexp-match px (dict-ref headers 'location)))))]
+                      (check-regexp-match #px"/[^/.]+?(/|\\.html)$" (dict-ref headers 'location)))))]
 
 @handbook-appendix{SEO Auxiliaries}
 
