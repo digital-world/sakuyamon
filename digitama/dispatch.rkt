@@ -158,7 +158,8 @@
 
         (define dispatch-tamer
           {lambda [real-tamer ::1?]
-            (define /htdocs (build-path (expand-user-path real-tamer) "DigitalWorld" "Kuzuhamon" "terminus"))
+            (define /htdocs (build-path (expand-user-path real-tamer) "DigitalWorld" "Kuzuhamon"
+                                        (find-relative-path (digimon-zone) (digimon-terminus))))
             (define realm.rktd (simple-form-path (build-path /htdocs 'up ".realm.rktd")))
             (define url->path {λ [default.rkt uri] (~path /htdocs uri 1 default.rkt)})
             (define-values {refresh-servlet! url->servlet} (path->servlet (curry url->path "default.rkt") null))

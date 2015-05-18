@@ -21,3 +21,5 @@ simple but also ready for large-scale extension.
 
 @include-section[(submod "sakuyamon.rktl" doc)]
 @include-section[(submod "dispatch.rktl" doc)]
+@include-section[(submod "seo.rktl" doc)]
+@include-section[(submod "security.rktl" doc)]

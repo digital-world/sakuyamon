@@ -1,6 +1,7 @@
-# [🏡<sub>🐈</sub>](http://gyoudmon.org/~wargrey:sakuyamon)Tamer's Handbook: Sakuyamon
+# [🏡](http://gyoudmon.org/~wargrey:sakuyamon)[<sub>🐈</sub>](http://gyoudmon.org/~wargrey:digignome)Tamer's Handbook: Sakuyamon
 
-> _**Sakuyamon**_ is the Queen of [gyoudmon.org](http://gyoudmon.org).
+> _**Sakuyamon**_ is the Queen of [gyoudmon.org](http://gyoudmon.org)  as
+> well as the _**digital world**_.
 
 Please do not ask me why I choose **Racket** to build my website.
 Meanwhile I don't know more than you about whether it is suitable for
@@ -26,14 +27,14 @@ Keep it simple but also ready for large-scale extension.
 >     + 📖
 [dispatch.rktl](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rktl)
 >       + 📑Main Terminus
->         - 💚 1 - 200: /robots.txt
+>         - 💚 1 - HTTP OPTIONS
 >         + 📑Function URLs
 >           - 💚 1 - 200: /d-arc/collect-garbage@::1
 >           - 💚 2 - 403: /d-arc/collect-garbage@127
 >           - 💚 3 - 200: /d-arc/refresh-servlet@::1
 >           - 💚 4 - 403: /d-arc/refresh-servlet@127
 >       + 📑Per-Tamer Terminus
->         - 💚 1 - 200|404: /~wargrey/robots.txt
+>         - 💚 1 - HTTP OPTIONS
 >         + 📑Function URLs
 >           - 💚 1 - 200: /~wargrey/d-arc/refresh-servlet@::1
 >           - 💚 2 - 403: /~wargrey/d-arc/refresh-servlet@127
@@ -42,17 +43,30 @@ Keep it simple but also ready for large-scale extension.
 >           - 💚 2 - 401: guest@127:digest
 >           - 💚 3 - 200: wargrey@127:digest
 >       + 📑Per-Digimon Terminus
->         - 💚 1 - 200: /~wargrey:sakuyamon/robots.txt
->         + 📑URL Rewriting
->           - 💚 1 - 302: !/../.
->           - 💚 2 - 302: ./t/h.lp.rktl
->           - 💚 3 - 418: ../../tamer.rkt
+>         - 💚 1 - HTTP OPTIONS
 >         + 📑Basic Authentication
 >           - 💚 1 - 200: guest@::1:basic
 >           - 💚 2 - 401: guest@127:basic
 >           - 💚 3 - 200: wargrey@127:basic
+>     + 📖
+[seo.rktl](http://gyoudmon.org/~wargrey:sakuyamon/seo.rktl)
+>       + 📑Server Side Redirections
+>         + 📑dir -> dir/
+>           - 💚 1 - 302: .
+>         + 📑expand ~:
+>           - 💚 1 - 302: ~
+>           - 💚 2 - 302: :
+>           - 💚 3 - 302: ~:
+>           - 💚 4 - 302: :sakuyamon
+>           - 💚 5 - 302: ~wargrey:
+>         + 📑rktl -> html
+>           - 💚 1 - 302: ./t/h.lp.rktl
+>     + 📖
+[security.rktl](http://gyoudmon.org/~wargrey:sakuyamon/security.rktl)
+>       + 📑Bad Users
+>         - 💚 1 - 418: ../tamer/.realm.rktd
 >
-> 📌21 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌26 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey:sakuyamon)
