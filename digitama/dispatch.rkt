@@ -128,11 +128,9 @@
         
         (define dispatch-digimon
           {lambda [real-tamer digimon ::1?]
-            (define /htdocs (build-path (expand-user-path real-tamer) "DigitalWorld" digimon
-                                        (find-relative-path (digimon-zone) (digimon-tamer))
-                                        (car (use-compiled-file-paths)) "handbook"))
-            (define realm.rktd (simple-form-path (build-path /htdocs 'up 'up ".realm.rktd")))
-            (define robots.txt (simple-form-path (build-path /htdocs 'up 'up "robots.txt")))
+            (define /tamer (build-path (expand-user-path real-tamer) "DigitalWorld" digimon (find-relative-path (digimon-zone) (digimon-tamer))))
+            (define /htdocs (build-path /tamer (car (use-compiled-file-paths)) "handbook"))
+            (match-define {list realm.rktd robots.txt} (map (curry build-path /tamer) (list ".realm.rktd" "robots.txt")))
             (define-values {<pwd-would-update-automatically> authorize} (pwd:password-file->authorized? realm.rktd))
             (chain:make (lift:make {λ [req] (let ([method (~method (request-method req))]
                                                   [allows '{"GET" "HEAD"}])
@@ -158,9 +156,10 @@
 
         (define dispatch-tamer
           {lambda [real-tamer ::1?]
-            (define /htdocs (build-path (expand-user-path real-tamer) "DigitalWorld" "Kuzuhamon"
-                                        (find-relative-path (digimon-zone) (digimon-terminus))))
-            (define realm.rktd (simple-form-path (build-path /htdocs 'up ".realm.rktd")))
+            (define /zone (build-path (expand-user-path real-tamer) "DigitalWorld" "Kuzuhamon"))
+            (define /htdocs (build-path /zone (find-relative-path (digimon-zone) (digimon-terminus))))
+            (define 404.html (build-path /zone (find-relative-path (digimon-zone) (digimon-stone)) "404.html"))
+            (define realm.rktd (build-path /zone ".realm.rktd"))
             (define url->path {λ [default.rkt uri] (~path /htdocs uri 1 default.rkt)})
             (define-values {refresh-servlet! url->servlet} (path->servlet (curry url->path "default.rkt") null))
             (define-values {lookup-realm lookup-HA1} (realm.rktd->lookups realm.rktd))
@@ -189,6 +188,7 @@
                                       url->servlet)
                         (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime)
                         (lift:make {λ _ (cond [(directory-exists? /htdocs) (next-dispatcher)]
+                                              [(file-exists? 404.html) (file-response 404 #"File Not Found" 404.html)]
                                               [else (response:503)])}))})
         
         (define dispatch-main
