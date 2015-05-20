@@ -1,13 +1,10 @@
 #lang scribble/text
 
-@(require setup/getinfo)
+@(require "../digitama/digicore.rkt")
+@(require setup/dirs)
 
-@(define info-ref (get-info/full (let try-dir ([dir (with-handlers ([exn:fail:contract? {lambda [efc] (current-directory)}])
-                                                      (build-path (find-system-path 'orig-dir) (find-system-path 'run-file)))])
-                                   (if (directory-exists? (build-path dir "digivice")) dir (try-dir (build-path dir 'up))))))
-
-@(define name (string-downcase (string-replace (info-ref 'collection) #px"\\s+" "_")))
-@(define desc-in-initd "The web server written in the Racket language that serves gyoudmon.org.")
+@(define name (string-downcase (string-replace (info-ref 'collection {λ _ (current-digimon)}) #px"\\s+" "_")))
+@(define desc "A lightweight web server written in the Racket language.")
 
 #! /bin/sh
 ### BEGIN INIT INFO
@@ -17,7 +14,7 @@
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: gyoudmon.org
-# Description:       @|desc-in-initd|
+# Description:       @|desc|
 ### END INIT INFO
 
 # Author: WarGrey Ju <juzhenliang@|#\@|gmail.com>
@@ -25,11 +22,11 @@
 # Do NOT "set -e"
 
 # PATH should only include /usr/* if it runs after the mountnfs.sh script
-PATH=/opt/GYDMracket/bin:/sbin:/usr/sbin:/bin:/usr/bin
-DESC="@|desc-in-initd|"
+PATH=@(find-console-bin-dir):/sbin:/usr/sbin:/bin:/usr/bin
+DESC="@|desc|"
 NAME=@|name|
-DAEMON=/opt/GYDMracket/bin/plt-web-server
-DAEMON_ARGS="--chuid wargrey"
+DAEMON=@(path->string (path-add-suffix (build-path (digimon-digivice) (current-digimon)) ".rkt"))
+DAEMON_ARGS="--chuid @getenv{USER}:tamer"
 PIDFILE=/var/run/@|name|.pid
 SCRIPTNAME=/etc/init.d/$NAME
 

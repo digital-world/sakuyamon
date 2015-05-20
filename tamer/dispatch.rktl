@@ -67,7 +67,7 @@ and the rest parts are relative to its own @racket[digimon-terminus]s.
                     (check-regexp-match #px"^((GET|HEAD|POST),?){3}$" (dict-ref headers 'allow))
                     (check-equal? (dict-ref headers 'terminus) "Per-Tamer")))]
 
-Note that @itech{Per-Tamer Terminus} do support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].
+Note that @itech{Per-Tamer Terminus} does support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].
 So users should be responsible for their own @itech{function URL}s.
 
 @chunk[|<testcase: dispatch-user-funtion-URLs>|

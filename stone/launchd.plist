@@ -1,0 +1,35 @@
+#lang racket/base
+
+(require "../digitama/digicore.rkt")
+
+(require racket/string)
+(require racket/match)
+(require setup/dirs)
+(require xml/plist)
+
+(define PATH (format "~a:/sbin:/usr/sbin:/bin:/usr/bin" (find-console-bin-dir)))
+(define name (string-downcase (string-replace (info-ref 'collection {λ _ (current-digimon)}) #px"\\s+" "_")))
+
+(define-values {/dev/filter/stdin /dev/filter/stdout} (make-pipe #false '/dev/filter/stdin '/dev/filter/stdout))
+
+({λ [plist] (write-plist plist /dev/filter/stdout)}
+`{dict [assoc-pair "Label" ,(format "org.gyoudmon.~a" name)]
+       ;[assoc-pair "UserName" ,(getenv "USER")]
+       ;[assoc-pair "GroupName" "tamer"]
+       [assoc-pair "ProgramArguments" {array ,(format "~a/~a.rkt" (digimon-digivice) (current-digimon)) "realize"}]
+       [assoc-pair "ProcessType" "Background"]
+       [assoc-pair "KeepAlive" {true}]
+       [assoc-pair "EnvironmentVariables" {dict [assoc-pair "PATH" ,PATH]
+                                                [assoc-pair "USER" ,(getenv "USER")]}]
+       [assoc-pair "StandardOutPath" ,(format "~a/stdout.log" (digimon-stone))]
+       [assoc-pair "StandardErrorPath" ,(format "~a/stderr.log" (digimon-stone))]
+       [assoc-pair "Sockets" {dict [assoc-pair "Listeners" {dict [assoc-pair "SockServiceName" "http"]
+                                                                 [assoc-pair "SockType" "stream"]
+                                                                 [assoc-pair "SockFamily" "IPv4v6"]
+                                                                 [assoc-pair "SockProtocol" "TCP"]
+                                                                 [assoc-pair "Bonjour" ,name]}]}]})
+(close-output-port /dev/filter/stdout)
+
+(for ([plist (in-port read-line /dev/filter/stdin)])
+  (displayln (regexp-replaces plist `{[#px"<true></true>" "<true/>"]
+                                      [#px"<false></false>" "<false/>"]})))

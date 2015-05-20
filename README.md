@@ -3,16 +3,20 @@
 > _**Sakuyamon**_ is the Queen of [gyoudmon.org](http://gyoudmon.org)  as
 > well as the _**digital world**_.
 
-Please do not ask me why I choose **Racket** to build my website.
-Meanwhile I don't know more than you about whether it is suitable for
-this kind of tasks since its real world applications are damn harder to
-be found than to be heard of. So you get it, I mean I like it and just
-for fun, maybe also paid for it.
+Please do not ask me why I choose **Racket**. Meanwhile I don’t know
+more than you about whether it is suitable for this kind of tasks since
+its real world applications are damn harder to be found than to be heard
+of. So you get it, I mean I like it and just for fun, maybe also paid
+for it.
 
-Due to my poor knowledge on **Racket**, infrasturctures are designed as
-lightweight as possible. Instances include almost all batteries with
-zero configuration, and they should communicate with each other easily.
-Keep it simple but also ready for large-scale extension.
+The infrasturctures are designed as lightweight as possible. Instances
+include almost all batteries with zero configuration, and they should
+communicate with each other easily. Keep it simple but also ready for
+large-scale extension.
+
+It is intentionally designed not to work with `raco setup`, nor any
+other installing process. Please choose a non-root user and clone the
+source code, after making it will suitable to run as that user.
 
 ---
 
