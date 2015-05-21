@@ -20,12 +20,13 @@
 (provide (all-from-out "../../DigiGnome/digitama/tamer.rkt"))
 (provide (all-from-out net/head net/base64 net/http-client web-server/http web-server/test))
 
+(define whoami (if (zero? (getuid)) "tamer" (getenv "USER")))
 (define /htdocs (curry format "/~a"))
-(define /tamer (curry format "/~~~a/~a" (getenv "USER")))
-(define /digimon (curry format "/~~~a:~a/~a" (getenv "USER") (current-digimon)))
+(define /tamer (curry format "/~~~a/~a" whoami))
+(define /digimon (curry format "/~~~a:~a/~a" whoami (current-digimon)))
 
 (define ~htdocs (curry build-path (digimon-terminus)))
-(define ~tamer (curry build-path (find-system-path 'home-dir) "DigitalWorld" "Kuzuhamon" "terminus"))
+(define ~tamer (curry build-path (expand-user-path (format "~~~a" whoami)) "DigitalWorld" "Kuzuhamon" "terminus"))
 (define ~digimon (curry build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook"))
 
 (define realm.rktd (path->string (build-path (digimon-stone) "realm.rktd")))

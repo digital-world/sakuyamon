@@ -14,8 +14,8 @@ to be found than to be heard of. So you get it, I mean I like it and just for fu
 The infrasturctures are designed as lightweight as possible. Instances include almost all batteries with zero configuration,
 and they should communicate with each other easily. Keep it simple but also ready for large-scale extension.
 
-It is intentionally designed not to work with @exec{raco setup}, nor any other installations. Another good news is that, you
-are safe to run it as @bold{root}, after making as usual it will work properly.
+It is intentionally designed not to work with @exec{raco setup}, nor any other installing processes. Another good news is that, you
+are safe to run it as @bold{root}, after making as usual it will work properly. @italic{@bold{Only tested with Ubuntu and MacOSX.}}
 
 @tamer-smart-summary[]
 @handbook-smart-table[]
