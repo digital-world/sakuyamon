@@ -1,6 +1,7 @@
 #lang at-exp racket
 
 @require{digicore.rkt}
+@require{posix.rkt}
 @require{http.rkt}
 
 (require racket/date)
@@ -49,7 +50,12 @@
         (define host-cache (make-hash)) ; hash has its own semaphor as well as catch-table for ref set! and remove!
         (define path->mime (make-path->mime-type (collection-file-path "mime.types" "web-server" "default-web-root")))
 
-        (define ~username (string-append "~" (getenv "USER")))
+        (define uid (lazy (getuid)))
+        (define gid (lazy (getgid)))
+        (define id-un (lazy (let-values ([{errno un} (fetch_tamer_name (force uid))]) un)))
+        (define id-gn (lazy (let-values ([{errno gn} (fetch_tamer_group (force gid))]) gn)))
+
+        (define ~username (lazy (format "~~~a" (force id-un))))
         (define ~date (curry ~r #:min-width 2 #:pad-string "0"))
         (define ~host {λ [host] (string->symbol (string-downcase (if (bytes? host) (bytes->string/utf-8 host) host)))})
         
@@ -112,13 +118,13 @@
                                              (log:make #:format ~request #:log-path (build-path (digimon-stone) "request.log"))
                                              (match ~:? ; Why exclusive conditions? branches have already been stored in different caches.
                                                [{list "~" ""} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                                                    (redirect-to (format "/~a:Kuzuhamon~a" ~username src)))})]
+                                                                                    (redirect-to (format "/~a:Kuzuhamon~a" (force ~username) src)))})]
                                                [{list tamer ""} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
                                                                                       (redirect-to (format "/~a:Kuzuhamon~a" tamer src)))})]
                                                [{list "~" digimon} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                                                         (redirect-to (format "/~a:~a~a" ~username digimon src)))})]
+                                                                                         (redirect-to (format "/~a:~a~a" (force ~username) digimon src)))})]
                                                [{list "~"} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                                                 (redirect-to (format "/~a~a" ~username src)))})]
+                                                                                 (redirect-to (format "/~a~a" (force ~username) src)))})]
                                                [{list tamer digimon} (cond [(false? (sakuyamon-digimon-terminus?)) (chain:make)]
                                                                            [else (dispatch-digimon tamer digimon ::1?)])] 
                                                [{list tamer} (cond [(false? (sakuyamon-tamer-terminus?)) (chain:make)]
@@ -134,7 +140,8 @@
             (define-values {<pwd-would-update-automatically> authorize} (pwd:password-file->authorized? realm.rktd))
             (chain:make (lift:make {λ [req] (let ([method (~method (request-method req))]
                                                   [allows '{"GET" "HEAD"}])
-                                              (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Digimon")]
+                                              (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Digimon"
+                                                                                                 (force id-un) (force id-gn))]
                                                     [(member method allows) (next-dispatcher)]
                                                     [else (response:501)]))})
                         (filter:make #px"\\.rktl$" (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
@@ -165,7 +172,8 @@
             (define-values {lookup-realm lookup-HA1} (realm.rktd->lookups realm.rktd))
             (chain:make (lift:make {λ [req] (let ([method (~method (request-method req))]
                                                   [allows '{"GET" "HEAD" "POST"}])
-                                              (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Tamer")]
+                                              (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Tamer"
+                                                                                                 (force id-un) (force id-gn))]
                                                     [(member method allows) (next-dispatcher)]
                                                     [else (response:501)]))})
                         (filter:make #px"^/~[^/]*/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
@@ -198,7 +206,8 @@
             (define-values {refresh-servlet! url->servlet} (path->servlet (curry url->path "default.rkt") null))
             (chain:make (lift:make {λ [req] (let ([method (~method (request-method req))]
                                                   [allows '{"GET" "HEAD" "POST"}])
-                                              (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Main")]
+                                              (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Main"
+                                                                                                 (force id-un) (force id-gn))]
                                                     [(member method allows) (next-dispatcher)]
                                                     [else (response:501)]))})
                         (filter:make #px"^/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]

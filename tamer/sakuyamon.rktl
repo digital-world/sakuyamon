@@ -47,16 +47,17 @@ As usual @racket[sakuyamon-realize] itself should be checked first:
 @tamer-note['realize]
 @chunk[|<testcase: realize>|
        (let*-values ([{shutdown ::1.sendrecv 127.sendrecv} (sakuyamon-realize "-p" "8443")]
-                     [{shutdown-errno stdout stderr} (sakuyamon-realize "-p" "8443")]
+                     [{shutdown=>errno stdout stderr} (sakuyamon-realize "-p" "8443")]
                      [{shutdown ::1.curl 127.curl} (and (shutdown) (sakuyamon-realize "-p" "8443"))])
          (test-spec "realize --port 8443 [fresh]"
                     (let ([$? (shutdown)])
-                      (check-pred procedure? ::1.sendrecv)
-                      (check-pred procedure? ::1.curl)
+                      (check-pred procedure? 127.sendrecv)
+                      (check-pred procedure? 127.curl)
                       (check-pred zero? $?)))
          (test-spec "realize --port 8443 [already in use]"
-                    (let ([$? (shutdown-errno)])
+                    (let ([$? (shutdown=>errno)])
                       (check-pred string? stderr)
+                      (check-eq? $? 48 stderr)
                       (check-regexp-match (pregexp (format "errno=~a" $?)) stderr))))]
 
 @handbook-scenario{Keep Realms Safe!}

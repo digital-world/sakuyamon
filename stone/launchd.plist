@@ -14,8 +14,6 @@
 
 ({λ [plist] (write-plist plist /dev/filter/stdout)}
 `{dict [assoc-pair "Label" ,(format "org.gyoudmon.~a" name)]
-       ;[assoc-pair "UserName" ,(getenv "USER")]
-       ;[assoc-pair "GroupName" "tamer"]
        [assoc-pair "ProgramArguments" {array ,(format "~a/~a.rkt" (digimon-digivice) (current-digimon)) "realize"}]
        [assoc-pair "ProcessType" "Background"]
        [assoc-pair "KeepAlive" {true}]

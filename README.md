@@ -15,8 +15,8 @@ communicate with each other easily. Keep it simple but also ready for
 large-scale extension.
 
 It is intentionally designed not to work with `raco setup`, nor any
-other installing process. Please choose a non-root user and clone the
-source code, after making it will suitable to run as that user.
+other installations. Another good news is that, you are safe to run it
+as **root**, after making as usual it will work properly.
 
 ---
 

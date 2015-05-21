@@ -24,6 +24,7 @@
   
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/dispatch.rkt")
+  (require "../../digitama/posix.rkt")
 
   (define {serve-forever}
     (define-compound-unit sakuyamon@
@@ -35,13 +36,21 @@
     
     (define-values/invoke-unit/infer sakuyamon@)
 
+    (define |id -u| (getuid))
     (define sakuyamon-pipe (make-async-channel #false))
     (define shutdown (parameterize ([error-display-handler void]) (serve #:confirmation-channel sakuyamon-pipe)))
     (define confirmation (async-channel-get sakuyamon-pipe))
+    (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
+    (define exit-with-errno {λ [no] (exit ({λ _ no} (eprintf "system error: ~a; errno=~a~n" (strerror no) no)))})
     (dynamic-wind {λ _ (void)}
                   {λ _ (cond [(and (exn:fail:network:errno? confirmation) confirmation)
-                              => (compose1 exit {λ _ (car (exn:fail:network:errno-errno confirmation))} (curry eprintf "~a~n") exn-message)] 
+                              => (compose1 exit {λ _ (car (exn:fail:network:errno-errno confirmation))} (curry eprintf "~a~n") exn-message)]
+                             [(and (zero? |id -u|) (not (zero? errno)) errno)
+                              => exit-with-errno]
                              [else (with-handlers ([exn:break? {λ _ (unless (port-closed? (current-output-port)) (newline))}])
+                                     (when (zero? |id -u|) ; I am root
+                                       (unless (zero? (setuid uid)) (exit-with-errno (saved-errno)))
+                                       (unless (zero? (setgid gid)) (exit-with-errno (saved-errno))))
                                      (printf "sakuyamon@HTTP~a#~a~n" (if (sakuyamon-ssl?) "S" "") confirmation)
                                      (when (place-channel? (tamer-pipe))
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
