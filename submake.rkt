@@ -17,7 +17,7 @@
                                       {λ _ (dynamic-require src #false)})})
     
     (when (string=? (getenv "USER") "root")
-      (or (system "sh ~a ~a create" (build-path (digimon-stone) "tamer.sh") (system-type 'os))
+      (or (system (format "sh ~a ~a create" (build-path (digimon-stone) "tamer.sh") (system-type 'os)))
           (error 'make "Failed to separate privileges!"))
 
       (make ([sakuyamon.plist [/stone/launchd.plist (quote-source-file)] (void (sudo.make sakuyamon.plist /stone/launchd.plist)
@@ -30,7 +30,7 @@
 
   {module+ clobber
     (when (string=? (getenv "USER") "root")
-      (system "sh ~a ~a delete" (build-path (digimon-stone) "tamer.sh") (system-type 'os))
+      (system (format "sh ~a ~a delete" (build-path (digimon-stone) "tamer.sh") (system-type 'os)))
       (delete-file (case (system-type 'os)
                      [{macosx} sakuyamon.plist]
                      [{unix} sakuyamon.sh])))}}
