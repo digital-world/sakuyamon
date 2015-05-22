@@ -46,6 +46,10 @@
         (define max-waiting (sakuyamon-max-waiting))
         (define initial-connection-timeout (sakuyamon-connection-timeout))
         (define read-request http:read-request)
+
+        ;;; These happen before (setuid)
+        (define id-ur (getuid))
+        (define id-urn (let-values ([{errno id-urn} (fetch_tamer_name id-ur)]) id-urn))
         
         (define host-cache (make-hash)) ; hash has its own semaphor as well as catch-table for ref set! and remove!
         (define path->mime (make-path->mime-type (collection-file-path "mime.types" "web-server" "default-web-root")))
@@ -69,7 +73,6 @@
                                                                                    (make-default-path->servlet #:timeouts-default-servlet tds
                                                                                                                #:make-servlet-namespace fns)))})
 
-        (define ~username (format "~~~a" (let-values ([{errno id-urn} (fetch_tamer_name (getuid))]) id-urn))) ;;; This happens before (setuid)
         (define ~date (curry ~r #:min-width 2 #:pad-string "0"))
         (define ~host {λ [host] (string->symbol (string-downcase (if (bytes? host) (bytes->string/utf-8 host) host)))})
         (define ~method (compose1 string-upcase bytes->string/utf-8))
@@ -96,11 +99,6 @@
               (define ~:? (let ([pas (url-path (request-uri req))])
                             (with-handlers ([void {λ _ #false}])
                               (match (path/param-path (car pas))
-                                ;;; Perhaps these are not fair for SEO
-                                [{or "~"} (list "~")]
-                                [{or ":" "~:"} (list "~" "")]
-                                [{pregexp #px"^~?:(.+)$" {list _ :.}} (list "~" :.)]
-                                [{pregexp #px"^(~.+?):$" {list _ ~.}} (list ~. "")]
                                 [{var ~:?} (let ([~: (string-split ~:? #px":")])
                                              (and (regexp-match? #"^~.+$" (car ~:))
                                                   (expand-user-path (car ~:))
@@ -111,14 +109,6 @@
                                  (chain:make (timeout:make initial-connection-timeout)
                                              (log:make #:format ~request #:log-path (build-path (digimon-stone) "request.log"))
                                              (match ~:? ; Why exclusive conditions? branches have already been stored in different caches.
-                                               [{list "~" ""} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                                                    (redirect-to (format "/~a:Kuzuhamon~a" ~username src)))})]
-                                               [{list tamer ""} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                                                      (redirect-to (format "/~a:Kuzuhamon~a" tamer src)))})]
-                                               [{list "~" digimon} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                                                         (redirect-to (format "/~a:~a~a" ~username digimon src)))})]
-                                               [{list "~"} (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
-                                                                                 (redirect-to (format "/~a~a" ~username src)))})]
                                                [{list tamer digimon} (cond [(false? (sakuyamon-digimon-terminus?)) (chain:make)]
                                                                            [else (dispatch-digimon tamer digimon ::1?)])] 
                                                [{list tamer} (cond [(false? (sakuyamon-tamer-terminus?)) (chain:make)]

@@ -45,25 +45,6 @@ are @litchar{default.rkt} and @litchar{index.html}, respectively.
                       (check-eq? status 302 reason)
                       (check-regexp-match #px"/$" (dict-ref headers 'location)))))]
 
-@handbook-rule{Shortcuts of @litchar{~} and @litchar{:} should be redirected to their full shapes with /-suffixed.}
-
-For @itech{Per-Tamer Terminus} and @itech{Per-Digimon Terminus}, @litchar{~username:digimon} has lots of variables for short.
-In practice these shortcuts always make nonsense since @itech{Sakuyamon} will be deployed and run as a non-root user
-who has a fresh @litchar{$HOME}. But nonetheless, she is also helpful working in a local machine.
-
-Of course the default username is yourself while the default digimon is @litchar{Kuzuhamon}.
-
-@chunk[|<testcase: expand ~:>|
-       (test-case "302: ~"
-                  (match-let ([{list status reason headers _} (curl (/htdocs "~"))])
-                    (check-eq? status 302 reason)
-                    (check-regexp-match #px"^/(~.+?)/$" (dict-ref headers 'location))))
-       (for ([rpath (in-list (list ":" "~:" (~a ":" (current-digimon)) (~a "~" (getenv "USER") ":")))])
-         (test-case (format "302: ~a" rpath)
-                    (match-let ([{list status reason headers _} (curl (/htdocs rpath))])
-                      (check-eq? status 302 reason)
-                      (check-regexp-match #px"^/(~.+?):(.+?)/$" (dict-ref headers 'location)))))]
-
 @handbook-rule{Paths reference to any @litchar{*.rktl} should be redirected to their @litchar{*.html} counterparts.}
 
 @para[#:style "GYDMComment"]{Note @litchar{.rktl} stands for
@@ -94,7 +75,6 @@ The rendered @litchar{*.html}s will be placed within directories that up to 2 de
          (define-tamer-suite redirections "Server Side Redirections"
            |<seo: check #:before>| #:after {λ _ (shutdown)}
            (test-suite "dir -> dir/" |<testcase: dir to dir/>|)
-           (test-suite "expand ~:" |<testcase: expand ~:>|)
            (test-suite "rktl -> html" |<testcase: rktl to html>|))}]
 
 @chunk[|<seo: check #:before>|
