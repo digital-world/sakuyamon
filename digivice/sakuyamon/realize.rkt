@@ -53,13 +53,15 @@
                                        ;;; setuid would drop the privilege of seting gid.
                                        (unless (zero? (setgid gid)) (exit-with-errno (saved-errno)))
                                        (unless (zero? (setuid uid)) (exit-with-errno (saved-errno))))
+                                     (when (zero? (getuid))
+                                       (error 'sakuyamon "Privilege Has Not Dropped!"))
                                      (printf "sakuyamon@HTTP~a#~a~n" (if (sakuyamon-ssl?) "S" "") confirmation)
                                      (when (place-channel? (tamer-pipe))
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
-                                     (cond [(not (terminal-port? (current-input-port))) (do-not-return)]
-                                           [else (let do-not-return ([stdin (current-input-port)])
-                                                   (unless (eof-object? (read-line stdin))
-                                                   (sync/enable-break (handle-evt stdin do-not-return))))]))])}
+                                     (cond [(or (tamer-pipe) (terminal-port? /dev/stdin)) (let do-not-return ([stdin /dev/stdin])
+                                                                                            (unless (eof-object? (read-line stdin))
+                                                                                              (sync/enable-break (handle-evt stdin do-not-return))))]
+                                           [else (do-not-return)]))])}
                   {λ _ (shutdown)}))
 
   (call-as-normal-termination

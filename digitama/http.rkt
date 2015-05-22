@@ -21,6 +21,12 @@
                [srcloc->string (-> srcloc (Option String))]
                [current-memory-use (->* [] [(Option Custodian)] Nonnegative-Integer)])
 
+(require/typed "posix.rkt"
+               [getuid (-> Natural)]
+               [getgid (-> Natural)]
+               [fetch_tamer_name (-> Natural (Values Natural Bytes))]
+               [fetch_tamer_group (-> Natural (Values Natural Bytes))])
+
 (require/typed/provide web-server/http
                        [#:opaque Redirection-Status redirection-status?]
                        [#:struct header {[field : Bytes]
@@ -114,13 +120,15 @@
                                          (pre "» " ,(number->string status-code)
                                               " - " ,desc))))))})
 
-(define response:options : (-> URL (Listof String) Bytes Bytes Bytes Header * Response)
-  {lambda [uri allows terminus user group . headers]
+(define response:options : (-> URL (Listof String) Bytes Header * Response)
+  {lambda [uri allows terminus . headers]
+    (match-define-values {_ id-un} (fetch_tamer_name (getuid)))
+    (match-define-values {_ id-gn} (fetch_tamer_group (getgid)))
     (response/output void #:code 200
                      #:headers (list* (make-header #"Allow" (string->bytes/utf-8 (string-join allows ",")))
                                       (make-header #"Terminus" terminus)
-                                      (make-header #"Daemon" user)
-                                      (make-header #"Realm" group)
+                                      (make-header #"Daemon" id-un)
+                                      (make-header #"Realm" id-gn)
                                       headers))})
 
 (define response:gc : (-> Header * Response)
