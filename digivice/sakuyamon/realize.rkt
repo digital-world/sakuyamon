@@ -17,6 +17,7 @@
   (require syntax/location)
   
   (require net/tcp-sig)
+  (require web-server/web-server)
   (require web-server/private/dispatch-server-sig)
   (require web-server/private/dispatch-server-unit)
 
@@ -49,14 +50,16 @@
                               => exit-with-errno]
                              [else (with-handlers ([exn:break? {λ _ (unless (port-closed? (current-output-port)) (newline))}])
                                      (when (zero? |id -u|) ; I am root
-                                       (unless (zero? (setuid uid)) (exit-with-errno (saved-errno)))
-                                       (unless (zero? (setgid gid)) (exit-with-errno (saved-errno))))
+                                       ;;; setuid would drop the privilege of seting gid.
+                                       (unless (zero? (setgid gid)) (exit-with-errno (saved-errno)))
+                                       (unless (zero? (setuid uid)) (exit-with-errno (saved-errno))))
                                      (printf "sakuyamon@HTTP~a#~a~n" (if (sakuyamon-ssl?) "S" "") confirmation)
                                      (when (place-channel? (tamer-pipe))
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
-                                     (let do-not-return ([stdin (current-input-port)])
-                                       (unless (eof-object? (read-line stdin))
-                                         (sync/enable-break (handle-evt stdin do-not-return)))))])}
+                                     (cond [(not (terminal-port? (current-input-port))) (do-not-return)]
+                                           [else (let do-not-return ([stdin (current-input-port)])
+                                                   (unless (eof-object? (read-line stdin))
+                                                   (sync/enable-break (handle-evt stdin do-not-return))))]))])}
                   {λ _ (shutdown)}))
 
   (call-as-normal-termination

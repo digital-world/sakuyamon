@@ -17,15 +17,10 @@
        [assoc-pair "ProgramArguments" {array ,(format "~a/~a.rkt" (digimon-digivice) (current-digimon)) "realize"}]
        [assoc-pair "ProcessType" "Background"]
        [assoc-pair "KeepAlive" {true}]
-       [assoc-pair "EnvironmentVariables" {dict [assoc-pair "PATH" ,PATH]
-                                                [assoc-pair "USER" ,(getenv "USER")]}]
+       [assoc-pair "EnvironmentVariables" {dict [assoc-pair "PATH" ,PATH]}]
        [assoc-pair "StandardOutPath" ,(format "~a/stdout.log" (digimon-stone))]
-       [assoc-pair "StandardErrorPath" ,(format "~a/stderr.log" (digimon-stone))]
-       [assoc-pair "Sockets" {dict [assoc-pair "Listeners" {dict [assoc-pair "SockServiceName" "http"]
-                                                                 [assoc-pair "SockType" "stream"]
-                                                                 [assoc-pair "SockFamily" "IPv4v6"]
-                                                                 [assoc-pair "SockProtocol" "TCP"]
-                                                                 [assoc-pair "Bonjour" ,name]}]}]})
+       [assoc-pair "StandardErrorPath" ,(format "~a/stderr.log" (digimon-stone))]})
+
 (close-output-port /dev/filter/stdout)
 
 (for ([plist (in-port read-line /dev/filter/stdin)])
