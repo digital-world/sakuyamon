@@ -22,7 +22,6 @@
 (require (prefix-in file: web-server/dispatchers/dispatch-files))
 (require (prefix-in servlet: web-server/dispatchers/dispatch-servlets))
 (require (prefix-in path: web-server/dispatchers/dispatch-pathprocedure))
-(require (prefix-in log: web-server/dispatchers/dispatch-log))
 (require (prefix-in filter: web-server/dispatchers/dispatch-filter))
 (require (prefix-in lift: web-server/dispatchers/dispatch-lift))
 
@@ -76,17 +75,6 @@
         (define ~date (curry ~r #:min-width 2 #:pad-string "0"))
         (define ~host {λ [host] (string->symbol (string-downcase (if (bytes? host) (bytes->string/utf-8 host) host)))})
         (define ~method (compose1 string-upcase bytes->string/utf-8))
-        (define ~request {λ [req] (let ([now (current-date)]
-                                        [a-headers (request-headers req)])
-                                    (format "~s~n" (list (format "~a-~a-~a ~a:~a:~a"
-                                                                 (date-year now) (~date (date-month now)) (~date (date-day now))
-                                                                 (~date (date-hour now)) (~date (date-minute now)) (~date (date-second now)))
-                                                         (dict-ref a-headers 'user-agent #false)
-                                                         (~method (request-method req))
-                                                         (url->string (request-uri req))
-                                                         (request-client-ip req)
-                                                         (dict-ref a-headers 'host #false)
-                                                         (dict-ref a-headers 'referer #false))))})
 
         (define dispatch
           {lambda [conn req]
@@ -107,7 +95,20 @@
                (hash-ref! termuni ~:?
                           {λ _ (parameterize ([current-custodian (current-server-custodian)])
                                  (chain:make (timeout:make initial-connection-timeout)
-                                             (log:make #:format ~request #:log-path (build-path (digimon-stone) "request.log"))
+                                             (lift:make {λ [req] (let ([now (current-date)]
+                                                                       [a-headers (request-headers req)])
+                                                                   (syslog 'notice 'request "~s"
+                                                                           (list (format "~a-~a-~a ~a:~a:~a"
+                                                                                         (date-year now) (~date (date-month now))
+                                                                                         (~date (date-day now)) (~date (date-hour now))
+                                                                                         (~date (date-minute now)) (~date (date-second now)))
+                                                                                 (dict-ref a-headers 'user-agent #false)
+                                                                                 (~method (request-method req))
+                                                                                 (url->string (request-uri req))
+                                                                                 (request-client-ip req)
+                                                                                 (dict-ref a-headers 'host #false)
+                                                                                 (dict-ref a-headers 'referer #false)))
+                                                                   (next-dispatcher))})
                                              (match ~:? ; Why exclusive conditions? branches have already been stored in different caches.
                                                [{list tamer digimon} (cond [(false? (sakuyamon-digimon-terminus?)) (chain:make)]
                                                                            [else (dispatch-digimon tamer digimon ::1?)])] 

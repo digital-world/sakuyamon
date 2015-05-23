@@ -11,6 +11,7 @@
   (require racket/cmdline)
   (require racket/promise)
   (require racket/function)
+  (require racket/match)
   (require racket/place)
   (require racket/async-channel)
 
@@ -27,6 +28,15 @@
   (require "../../digitama/dispatch.rkt")
   (require "../../digitama/posix.rkt")
 
+  (define syslog-perror
+    {lambda [severity maybe . argl]
+      (define message (apply format maybe argl))
+      (define topic 'realize)
+      (case severity
+        [{notice} (printf "~a: ~a~n" topic message)]
+        [else (eprintf "~a: ~a~n" topic message)])
+      (rsyslog (severity.c severity) topic message)})
+  
   (define {serve-forever}
     (define-compound-unit sakuyamon@
       (import)
@@ -34,18 +44,19 @@
       (link [{{DS : dispatch-server^}} dispatch-server@ T DSC]
             [{{T : tcp^}} (force sakuyamon-tcp@) DS]
             [{{DSC : dispatch-server-config^}} sakuyamon-config@ DS]))
-    
     (define-values/invoke-unit/infer sakuyamon@)
 
     (define |id -u| (getuid))
+    (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
+    (define exit-with-errno {λ [no] (exit ({λ _ no} (syslog 'error "system error: ~a; errno=~a~n" (strerror no) no)))})
+    
     (define sakuyamon-pipe (make-async-channel #false))
     (define shutdown (parameterize ([error-display-handler void]) (serve #:confirmation-channel sakuyamon-pipe)))
     (define confirmation (async-channel-get sakuyamon-pipe))
-    (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
-    (define exit-with-errno {λ [no] (exit ({λ _ no} (eprintf "system error: ~a; errno=~a~n" (strerror no) no)))})
+
     (dynamic-wind {λ _ (void)}
                   {λ _ (cond [(and (exn:fail:network:errno? confirmation) confirmation)
-                              => (compose1 exit {λ _ (car (exn:fail:network:errno-errno confirmation))} (curry eprintf "~a~n") exn-message)]
+                              => (compose1 exit {λ _ (car (exn:fail:network:errno-errno confirmation))} (curry syslog-perror 'error) exn-message)]
                              [(and (zero? |id -u|) (not (zero? errno)) errno)
                               => exit-with-errno]
                              [else (with-handlers ([exn:break? {λ _ (unless (port-closed? (current-output-port)) (newline))}])
@@ -54,8 +65,8 @@
                                        (unless (zero? (setgid gid)) (exit-with-errno (saved-errno)))
                                        (unless (zero? (setuid uid)) (exit-with-errno (saved-errno))))
                                      (when (zero? (getuid))
-                                       (error 'sakuyamon "Privilege Has Not Dropped!"))
-                                     (printf "sakuyamon@HTTP~a#~a~n" (if (sakuyamon-ssl?) "S" "") confirmation)
+                                       (syslog-perror 'error "misconfigured: Privilege Has Not Dropped!"))
+                                     (syslog-perror 'notice "listen on ~a ~a SSL~n" confirmation (if (sakuyamon-ssl?) "with" "without"))
                                      (when (place-channel? (tamer-pipe))
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
                                      (cond [(or (tamer-pipe) (terminal-port? /dev/stdin)) (let do-not-return ([stdin /dev/stdin])

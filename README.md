@@ -63,12 +63,6 @@ tested with Ubuntu and MacOSX.**_
 >         + 📑dir -> dir/
 >           - 💚 1 - 302: .
 >           - 💚 2 - 302: stone
->         + 📑expand ~:
->           - 💚 1 - 302: ~
->           - 💚 2 - 302: :
->           - 💚 3 - 302: ~:
->           - 💚 4 - 302: :sakuyamon
->           - 💚 5 - 302: ~wargrey:
 >         + 📑rktl -> html
 >           - 💚 1 - 302: seo.rktl
 >           - 💚 2 - 302: dir/dot.lp.rktl
@@ -77,7 +71,7 @@ tested with Ubuntu and MacOSX.**_
 >       + 📑Bad Users
 >         - 💚 1 - 418: ../tamer/.realm.rktd
 >
-> 📌31 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌26 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey:sakuyamon)
