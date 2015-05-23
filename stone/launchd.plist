@@ -17,9 +17,7 @@
        [assoc-pair "ProgramArguments" {array ,(format "~a/~a.rkt" (digimon-digivice) (current-digimon)) "realize"}]
        [assoc-pair "ProcessType" "Background"]
        [assoc-pair "KeepAlive" {true}]
-       [assoc-pair "EnvironmentVariables" {dict [assoc-pair "PATH" ,PATH]}]
-       [assoc-pair "StandardOutPath" ,(format "~a/stdout.log" (digimon-stone))]
-       [assoc-pair "StandardErrorPath" ,(format "~a/stderr.log" (digimon-stone))]})
+       [assoc-pair "EnvironmentVariables" {dict [assoc-pair "PATH" ,PATH]}]})
 
 (close-output-port /dev/filter/stdout)
 
