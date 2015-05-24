@@ -85,7 +85,7 @@ exit_with_errno:
 
 /* syslog */
 void rsyslog(int priority, const char *topic, const char *message) {
-    openlog("sakuyamon", LOG_PID | LOG_CONS, (getuid() == 0 ? LOG_DAEMON : LOG_USER));
+    openlog("sakuyamon", LOG_PID | LOG_CONS, (getppid() == 1 ? LOG_DAEMON : LOG_USER));
     setlogmask(LOG_UPTO(LOG_INFO));
     syslog(priority, "%s: %s\n", topic, message);
     closelog();
