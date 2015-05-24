@@ -59,7 +59,9 @@
                               => (compose1 exit {λ _ (car (exn:fail:network:errno-errno confirmation))} (curry syslog-perror 'error) exn-message)]
                              [(and daemon? (not (zero? errno)) errno)
                               => exit-with-errno]
-                             [else (with-handlers ([exn:break? {λ _ (unless (port-closed? (current-output-port)) (newline))}])
+                             [else (with-handlers ([exn:break? {λ _ (unless (port-closed? (current-output-port))
+                                                                      (newline)
+                                                                      (syslog-perror 'info "terminated due to breaking."))}])
                                      (when daemon? ; I am root
                                        ;;; setuid would drop the privilege of seting gid.
                                        (unless (zero? (setgid gid)) (exit-with-errno (saved-errno)))
@@ -71,8 +73,8 @@
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
                                      (cond [daemon? (do-not-return)]
                                            [else (let do-not-return ([stdin /dev/stdin])
-                                                   (unless (eof-object? (read-line stdin))
-                                                     (sync/enable-break (handle-evt stdin do-not-return))))]))])}
+                                                   (cond [(eof-object? (read-line stdin)) (syslog-perror 'info "terminated manually.")]
+                                                         [else (sync/enable-break (handle-evt stdin do-not-return))]))]))])}
                   {λ _ (shutdown)}))
 
   (call-as-normal-termination
