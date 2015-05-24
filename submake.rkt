@@ -6,34 +6,37 @@
 (require make)
 
 (define sakuyamon.plist "/System/Library/LaunchDaemons/org.gyoudmon.sakuyamon.plist")
-(define sakuyamon.sh "/etc/init.d/sakuyamon")
-
 (define /stone/launchd.plist (build-path (digimon-stone) "launchd.plist"))
+
+(define sakuyamon.asl "/etc/asl/org.gyoudmon.sakuyamon")
+(define /stone/sakuyamon.asl (build-path (digimon-stone) "asl.d.conf"))
+
+(define sakuyamon.sh "/etc/init.d/sakuyamon")
 (define /stone/initd.sh (build-path (digimon-stone) "initd.sh"))
 
 {module+ make:files 
   {module+ make
-    (define sudo.make {λ [dest src] (with-output-to-file dest #:exists 'replace
-                                      {λ _ (dynamic-require src #false)})})
+    (define sudo.make {λ [dest src [chown #false]] (and (with-output-to-file dest #:exists 'replace
+                                                          {λ _ (dynamic-require src #false)})
+                                                        (when chown (system (format "chown ~a ~a" chown dest))))})
     
     (when (string=? (getenv "USER") "root")
       (or (system (format "sh ~a ~a create" (build-path (digimon-stone) "tamer.sh") (system-type 'os)))
           (error 'make "Failed to separate privileges!"))
     
-      (make ([sakuyamon.plist [/stone/launchd.plist (quote-source-file)] (void (sudo.make sakuyamon.plist /stone/launchd.plist)
-                                                                               (system (format "chown root:wheel ~a" sakuyamon.plist)))]
-             [sakuyamon.sh [/stone/initd.sh (quote-source-file)] (void (sudo.make sakuyamon.sh /stone/initd.sh)
-                                                                       (system (format "chown root:root ~a" sakuyamon.sh)))])
-            (list (case (system-type 'os)
-                    [{macosx} sakuyamon.plist]
-                    [{unix} sakuyamon.sh]))))}
+      (make ([sakuyamon.plist [/stone/launchd.plist (quote-source-file)] (sudo.make sakuyamon.plist /stone/launchd.plist "root:wheel")]
+             [sakuyamon.asl [/stone/sakuyamon.asl (quote-source-file)] (sudo.make sakuyamon.asl /stone/sakuyamon.asl "root:wheel")]
+             [sakuyamon.sh [/stone/initd.sh (quote-source-file)] (sudo.make sakuyamon.sh /stone/initd.sh "root:root")])
+            (case (system-type 'os)
+              [{macosx} (list sakuyamon.plist sakuyamon.asl)]
+              [{unix} (list sakuyamon.sh)])))}
 
   {module+ clobber
     (when (string=? (getenv "USER") "root")
       (system (format "sh ~a ~a delete" (build-path (digimon-stone) "tamer.sh") (system-type 'os)))
-      (delete-file (case (system-type 'os)
-                     [{macosx} sakuyamon.plist]
-                     [{unix} sakuyamon.sh])))}}
+      (for-each delete-file (case (system-type 'os)
+                              [{macosx} (list sakuyamon.plist sakuyamon.asl)]
+                              [{unix} (list sakuyamon.sh)])))}}
 
 {module+ postmake
   (when (string=? (getenv "USER") "root")
