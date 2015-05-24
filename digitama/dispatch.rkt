@@ -5,6 +5,7 @@
 @require{http.rkt}
 
 (require racket/date)
+(require setup/dirs)
  
 (require net/tcp-unit)
 (require net/ssl-tcp-unit)
@@ -87,6 +88,7 @@
               (define ~:? (let ([pas (url-path (request-uri req))])
                             (with-handlers ([void {λ _ #false}])
                               (match (path/param-path (car pas))
+                                [{or "~:"} (and (find-doc-dir) 'racket-docs)]
                                 [{var ~:?} (let ([~: (string-split ~:? #px":")])
                                              (and (regexp-match? #"^~.+$" (car ~:))
                                                   (expand-user-path (car ~:))
@@ -116,8 +118,15 @@
                                                                            [else (dispatch-digimon tamer digimon ::1?)])] 
                                                [{list tamer} (cond [(false? (sakuyamon-tamer-terminus?)) (chain:make)]
                                                                    [else (dispatch-tamer tamer ::1?)])]
+                                               [{or 'racket-docs} (file:make #:url->path {λ [uri] (~path (find-doc-dir) uri 1 #false)}
+                                                                             #:path->mime-type path->mime)]
                                                [else (dispatch-main ::1?)])
-                                             (lift:make {λ [req] (response:404)})))})))})
+                                             (lift:make {λ [req] (let ([referer (and (sakuyamon-digimon-terminus?)
+                                                                                     (dict-ref (request-headers req) 'referer #false))])
+                                                                   (syslog 'debug 'request "~s" referer)
+                                                                   (cond [(and (bytes? referer) (regexp-match #px"^[^:]+://[^/]+/~[^:]+:[^/]+/" referer))
+                                                                          => {λ _ (redirect-to (string-append "/~:" (url->string (request-uri req))))}]
+                                                                         [else (response:404)]))})))})))})
         
         (define dispatch-digimon
           {lambda [real-tamer digimon ::1?]
@@ -161,7 +170,7 @@
                                               (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Tamer")]
                                                     [(member method allows) (next-dispatcher)]
                                                     [else (response:501)]))})
-                        (filter:make #px"^/~[^/]*/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
+                        (filter:make #px"^/~[^:/]*/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
                                                                 [else (filter:make #px"/refresh-servlet$"
                                                                                    (lift:make {λ _ (response:rs refresh-servlet!)}))]))
                         (timeout:make (sakuyamon-timeout-servlet-connection))
@@ -201,7 +210,13 @@
                         (servlet:make #:responders-servlet-loading (curryr response:exn #"Loading")
                                       #:responders-servlet (curryr response:exn #"Handling")
                                       url->servlet)
-                        (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime))})
+                        (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime)
+                        (lift:make {λ [req] (match (and (sakuyamon-digimon-terminus?) (find-doc-dir) (dict-ref (request-headers req) 'referer #false))
+                                              [{pregexp #px"^.+?://.+?/~.+?:.+?/"} (let ([file:// (url->string (request-uri req))])
+                                                                                     (redirect-to ((curry format "/~~:~a")
+                                                                                                   (string-trim file:// #:right? #false
+                                                                                                                (path->string (find-doc-dir))))))]
+                                              [else (next-dispatcher)])}))})
 
         (define realm.rktd->lookups
           {lambda [realm.rktd]

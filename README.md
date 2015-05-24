@@ -62,7 +62,8 @@ tested with Ubuntu and MacOSX.**_
 >       + 📑Server Side Redirections
 >         + 📑dir -> dir/
 >           - 💚 1 - 302: .
->           - 💚 2 - 302: stone
+>           - 💚 2 - 302: ~:
+>           - 💚 3 - 302: stone
 >         + 📑rktl -> html
 >           - 💚 1 - 302: seo.rktl
 >           - 💚 2 - 302: dir/dot.lp.rktl
@@ -71,7 +72,7 @@ tested with Ubuntu and MacOSX.**_
 >       + 📑Bad Users
 >         - 💚 1 - 418: ../tamer/.realm.rktd
 >
-> 📌26 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌27 examples, 0 failures, 0 errors, 100.00% Okay.
 >
 >
 [🐈<sub>🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾🐾</sub>](http://gyoudmon.org/~wargrey:sakuyamon)

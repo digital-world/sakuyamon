@@ -88,11 +88,8 @@
                                         /dev/net/stdin))])
                     (match-define {list code _ headers _} status)
                     (with-handlers ([void {λ _ status}])
-                      (cond [(and (location) (member code '{301 302 307}))
-                             => {λ _ (case code
-                                       [{301} (cond [(member (http-method) '{#"GET" #"HEAD"}) (retry (dict-ref headers 'location))]
-                                                    [else status])]
-                                       [{302 307} (retry (dict-ref headers 'location))])}]
+                      (cond [(and (location) (member code '{301 302 307 308}) (member (http-method) '{#"GET" #"HEAD"}))
+                             => {λ _ (retry (dict-ref headers 'location))}]
                             [(and (user:pwd) (anyauth) (eq? code 401))
                              => {λ _ (let-values ([{WWW-Authenticate} (dict-ref headers 'www-authenticate)]
                                                   [{px.k=v} #px#"(\\w+)=\"(.+?)\""])

@@ -68,7 +68,7 @@
                                        (unless (zero? (setuid uid)) (exit-with-errno (saved-errno))))
                                      (when (zero? (getuid))
                                        (syslog-perror 'error "misconfigured: Privilege Has Not Dropped!"))
-                                     (syslog-perror 'info "listen on ~a ~a SSL~n" confirmation (if (sakuyamon-ssl?) "with" "without"))
+                                     (syslog-perror 'info "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
                                      (when (place-channel? (tamer-pipe)) ;;; for testing
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
                                      (cond [daemon? (do-not-return)]

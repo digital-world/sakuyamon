@@ -1,6 +1,7 @@
 /* System Headers */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <syslog.h>
@@ -10,16 +11,12 @@
 
 /* Quote Headers */
 
-/* Typedef Declaration */
-
+/** User and Group  **/
 /* Constants Declaration */
 #define BUFSIZE 32
 static char lgnbuf[BUFSIZE];
 static char grpbuf[BUFSIZE];
 
-/* Procedures Implementation */
-
-/** User and Group  **/
 int fetch_tamer_ids(char* name, uid_t* uid, gid_t* gid) {
     struct passwd pwd, *passwords;
     char *buf;
@@ -85,8 +82,17 @@ exit_with_errno:
 
 /* syslog */
 void rsyslog(int priority, const char *topic, const char *message) {
-    openlog("sakuyamon", LOG_PID | LOG_CONS, (getppid() == 1 ? LOG_DAEMON : LOG_USER));
-    setlogmask(LOG_UPTO(LOG_INFO));
+    int facility;
+
+    if (getppid() == 1) {
+        facility = LOG_DAEMON;
+    } else {
+        facility = LOG_USER;
+    }
+                         
+    
+    openlog("sakuyamon", LOG_PID | LOG_CONS, facility);
+    setlogmask(LOG_UPTO(LOG_DEBUG));
     syslog(priority, "%s[%u]: %s\n", topic, getuid(), message);
     closelog();
 }
