@@ -35,6 +35,7 @@
 
 (define-posix getuid (_fun -> _uint32))
 (define-posix getgid (_fun -> _uint32))
+(define-posix getppid (_fun -> _int32))
 (define-posix setuid (_fun #:save-errno 'posix _uint32 -> _int))
 (define-posix setgid (_fun #:save-errno 'posix _uint32 -> _int))
 

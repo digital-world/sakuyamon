@@ -25,7 +25,8 @@
           (error 'make "Failed to separate privileges!"))
     
       (make ([sakuyamon.plist [/stone/launchd.plist (quote-source-file)] (sudo.make sakuyamon.plist /stone/launchd.plist "root:wheel")]
-             [sakuyamon.asl [/stone/sakuyamon.asl (quote-source-file)] (sudo.make sakuyamon.asl /stone/sakuyamon.asl "root:wheel")]
+             [sakuyamon.asl [/stone/sakuyamon.asl (quote-source-file)] (and (sudo.make sakuyamon.asl /stone/sakuyamon.asl "root:wheel")
+                                                                            (system "kill -s HUP `cat /var/run/syslog.pid`"))]
              [sakuyamon.sh [/stone/initd.sh (quote-source-file)] (sudo.make sakuyamon.sh /stone/initd.sh "root:root")])
             (case (system-type 'os)
               [{macosx} (list sakuyamon.plist sakuyamon.asl)]

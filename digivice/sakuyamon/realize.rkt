@@ -46,7 +46,7 @@
             [{{DSC : dispatch-server-config^}} sakuyamon-config@ DS]))
     (define-values/invoke-unit/infer sakuyamon@)
 
-    (define |id -u| (getuid))
+    (define daemon? (eq? (getppid) 1)) ;;; child of the init process. Maybe BUG for zombie process.
     (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
     (define exit-with-errno {λ [no] (exit ({λ _ no} (syslog 'error "system error: ~a; errno=~a~n" (strerror no) no)))})
     
@@ -57,22 +57,22 @@
     (dynamic-wind {λ _ (void)}
                   {λ _ (cond [(and (exn:fail:network:errno? confirmation) confirmation)
                               => (compose1 exit {λ _ (car (exn:fail:network:errno-errno confirmation))} (curry syslog-perror 'error) exn-message)]
-                             [(and (zero? |id -u|) (not (zero? errno)) errno)
+                             [(and daemon? (not (zero? errno)) errno)
                               => exit-with-errno]
                              [else (with-handlers ([exn:break? {λ _ (unless (port-closed? (current-output-port)) (newline))}])
-                                     (when (zero? |id -u|) ; I am root
+                                     (when daemon? ; I am root
                                        ;;; setuid would drop the privilege of seting gid.
                                        (unless (zero? (setgid gid)) (exit-with-errno (saved-errno)))
                                        (unless (zero? (setuid uid)) (exit-with-errno (saved-errno))))
                                      (when (zero? (getuid))
                                        (syslog-perror 'error "misconfigured: Privilege Has Not Dropped!"))
                                      (syslog-perror 'notice "listen on ~a ~a SSL~n" confirmation (if (sakuyamon-ssl?) "with" "without"))
-                                     (when (place-channel? (tamer-pipe))
+                                     (when (place-channel? (tamer-pipe)) ;;; for testing
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
-                                     (cond [(or (tamer-pipe) (terminal-port? /dev/stdin)) (let do-not-return ([stdin /dev/stdin])
-                                                                                            (unless (eof-object? (read-line stdin))
-                                                                                              (sync/enable-break (handle-evt stdin do-not-return))))]
-                                           [else (do-not-return)]))])}
+                                     (cond [daemon? (do-not-return)]
+                                           [else (let do-not-return ([stdin /dev/stdin])
+                                                   (unless (eof-object? (read-line stdin))
+                                                     (sync/enable-break (handle-evt stdin do-not-return))))]))])}
                   {λ _ (shutdown)}))
 
   (call-as-normal-termination
