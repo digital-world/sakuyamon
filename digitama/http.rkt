@@ -25,7 +25,8 @@
                [getuid (-> Natural)]
                [getgid (-> Natural)]
                [fetch_tamer_name (-> Natural (Values Natural Bytes))]
-               [fetch_tamer_group (-> Natural (Values Natural Bytes))])
+               [fetch_tamer_group (-> Natural (Values Natural Bytes))]
+               [syslog (-> Symbol Symbol String String * Void)])
 
 (require/typed/provide web-server/http
                        [#:opaque Redirection-Status redirection-status?]
@@ -158,6 +159,7 @@
 
 (define response:401 : (-> URL Header * Response)
   {lambda [url . headers]
+    (syslog 'notice 'unauthorized "~a" (url->string url))
     (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*))
                   #"Unauthorized" "Authentication Failed!" headers)})
 
