@@ -43,7 +43,6 @@ are @litchar{default.rkt} and @litchar{index.html}, respectively.
          (test-case (format "302: ~a" rpath)
                     (match-let ([{list status reason headers _} (curl (/htdocs rpath))])
                       (check-eq? status 302 reason)
-                      (check-pred procedure? reason)
                       (check-regexp-match #px"/$" (dict-ref headers 'location)))))]
 
 @handbook-rule{Paths reference to any @litchar{*.rktl} should be redirected to their @litchar{*.html} counterparts.}
