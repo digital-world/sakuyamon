@@ -121,12 +121,7 @@
                                                [{or 'racket-docs} (file:make #:url->path {λ [uri] (~path (find-doc-dir) uri 1 #false)}
                                                                              #:path->mime-type path->mime)]
                                                [else (dispatch-main ::1?)])
-                                             (lift:make {λ [req] (let ([referer (and (sakuyamon-digimon-terminus?)
-                                                                                     (dict-ref (request-headers req) 'referer #false))])
-                                                                   (syslog 'debug 'request "~s" referer)
-                                                                   (cond [(and (bytes? referer) (regexp-match #px"^[^:]+://[^/]+/~[^:]+:[^/]+/" referer))
-                                                                          => {λ _ (redirect-to (string-append "/~:" (url->string (request-uri req))))}]
-                                                                         [else (response:404)]))})))})))})
+                                             (lift:make {λ [req] (response:404)})))})))})
         
         (define dispatch-digimon
           {lambda [real-tamer digimon ::1?]
@@ -211,12 +206,13 @@
                                       #:responders-servlet (curryr response:exn #"Handling")
                                       url->servlet)
                         (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime)
-                        (lift:make {λ [req] (match (and (sakuyamon-digimon-terminus?) (find-doc-dir) (dict-ref (request-headers req) 'referer #false))
-                                              [{pregexp #px"^.+?://.+?/~.+?:.+?/"} (let ([file:// (url->string (request-uri req))])
-                                                                                     (redirect-to ((curry format "/~~:~a")
-                                                                                                   (string-trim file:// #:right? #false
-                                                                                                                (path->string (find-doc-dir))))))]
-                                              [else (next-dispatcher)])}))})
+                        (cond [(false? (and (sakuyamon-digimon-terminus?) (find-doc-dir))) (chain:make)]
+                              [else (lift:make {λ [req] (and (or (regexp-match? #px"^.+?://.+?/~.+?:.+?/" (dict-ref (request-headers req) 'referer ""))
+                                                                 (next-dispatcher))
+                                                             (let ([~: (string-trim (url->string (request-uri req))
+                                                                                    (path->string (find-doc-dir))
+                                                                                    #:right? #false)])
+                                                               (redirect-to (string-append "/~:" ~:))))})]))})
 
         (define realm.rktd->lookups
           {lambda [realm.rktd]
