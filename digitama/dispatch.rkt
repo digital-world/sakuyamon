@@ -95,9 +95,10 @@
                (hash-ref! termuni ~:?
                           {λ _ (parameterize ([current-custodian (current-server-custodian)])
                                  (chain:make (timeout:make initial-connection-timeout)
-                                             (lift:make {λ [req] (let ([now (current-date)]
-                                                                       [a-headers (request-headers req)])
-                                                                   (syslog 'info 'request "~s"
+                                             (lift:make {λ [req] (let* ([now (current-date)]
+                                                                        [a-headers (request-headers req)]
+                                                                        [auth? (dict-ref a-headers 'authorization #false)])
+                                                                   (syslog (if auth? 'notice 'info) 'request "~s"
                                                                            (list (format "~a-~a-~a ~a:~a:~a"
                                                                                          (date-year now) (~date (date-month now))
                                                                                          (~date (date-day now)) (~date (date-hour now))
@@ -107,7 +108,8 @@
                                                                                  (url->string (request-uri req))
                                                                                  (request-client-ip req)
                                                                                  (dict-ref a-headers 'host #false)
-                                                                                 (dict-ref a-headers 'referer #false)))
+                                                                                 (dict-ref a-headers 'referer #false)
+                                                                                 auth?))
                                                                    (next-dispatcher))})
                                              (match ~:? ; Why exclusive conditions? branches have already been stored in different caches.
                                                [{list tamer digimon} (cond [(false? (sakuyamon-digimon-terminus?)) (chain:make)]
