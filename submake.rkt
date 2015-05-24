@@ -9,7 +9,7 @@
 (define /stone/launchd.plist (build-path (digimon-stone) "launchd.plist"))
 
 (define sakuyamon.asl "/etc/asl/org.gyoudmon.sakuyamon")
-(define /stone/sakuyamon.asl (build-path (digimon-stone) "asl.d.conf"))
+(define /stone/sakuyamon.asl (build-path (digimon-stone) "asld.conf"))
 
 (define sakuyamon.sh "/etc/init.d/sakuyamon")
 (define /stone/initd.sh (build-path (digimon-stone) "initd.sh"))

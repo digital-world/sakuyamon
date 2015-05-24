@@ -97,7 +97,7 @@
                                  (chain:make (timeout:make initial-connection-timeout)
                                              (lift:make {λ [req] (let ([now (current-date)]
                                                                        [a-headers (request-headers req)])
-                                                                   (syslog 'notice 'request "~s"
+                                                                   (syslog 'info 'request "~s"
                                                                            (list (format "~a-~a-~a ~a:~a:~a"
                                                                                          (date-year now) (~date (date-month now))
                                                                                          (~date (date-day now)) (~date (date-hour now))
