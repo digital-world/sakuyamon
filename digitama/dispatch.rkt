@@ -31,7 +31,7 @@
 (define sakuyamon-tcp@ (lazy (cond [(false? (sakuyamon-ssl?)) tcp@]
                                    [else (let ([sakuyamon.crt (build-path (digimon-stone) (format "~a.crt" (current-digimon)))]
                                                [sakuyamon.key (build-path (digimon-stone) (format "~a.key" (current-digimon)))])
-                                           (unless (andmap file-exists? (list sakuyamon.crt sakuyamon.key))
+                                           (unless (andmap file-readable? (list sakuyamon.crt sakuyamon.key))
                                              (error 'sakuyamon "Please be patient, the age of plaintext transmission is almost over!"))
                                            (make-ssl-tcp@ sakuyamon.crt sakuyamon.key #f #f #f #f #f))])))
 
@@ -147,7 +147,7 @@
                         (file:make #:path->mime-type path->mime
                                    #:url->path {λ [uri] (~path /htdocs uri 1 #false)})
                         (filter:make (pregexp (string-append "^/(~.*)?:.+?/" (path->string (file-name-from-path robots.txt)) "$"))
-                                     (lift:make {λ _ (cond [(file-exists? robots.txt) (file-response 200 #"OK" robots.txt)]
+                                     (lift:make {λ _ (cond [(file-readable? robots.txt) (file-response 200 #"OK" robots.txt)]
                                                            [else (next-dispatcher)])}))
                         (lift:make {λ _ (cond [(directory-exists? /htdocs) (next-dispatcher)]
                                               [else (response:503)])}))})
@@ -156,7 +156,7 @@
           {lambda [real-tamer ::1?]
             (define /zone (build-path (expand-user-path real-tamer) "DigitalWorld" "Kuzuhamon"))
             (define /htdocs (build-path /zone (find-relative-path (digimon-zone) (digimon-terminus))))
-            (define 404.html (build-path /zone (find-relative-path (digimon-zone) (digimon-stone)) "404.html"))
+            (define page {λ [code] (build-path /zone (find-relative-path (digimon-zone) (digimon-stone)) (format "~a.html" code))})
             (define realm.rktd (build-path /zone ".realm.rktd"))
             (define url->path {λ [default.rkt uri] (~path /htdocs uri 1 default.rkt)})
             (define-values {refresh-servlet! url->servlet} (path->servlet (curry url->path "default.rkt") null))
@@ -165,29 +165,29 @@
                                                   [allows '{"GET" "HEAD" "POST"}])
                                               (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Tamer")]
                                                     [(member method allows) (next-dispatcher)]
-                                                    [else (response:501)]))})
-                        (filter:make #px"^/~[^:/]*/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]
+                                                    [else (response:501 #:page (page 501))]))})
+                        (filter:make #px"^/~[^:/]*/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403 #:page (page 403))})]
                                                                 [else (filter:make #px"/refresh-servlet$"
                                                                                    (lift:make {λ _ (response:rs refresh-servlet!)}))]))
                         (timeout:make (sakuyamon-timeout-servlet-connection))
                         (cond [::1? (chain:make)]
                               [else (lift:make {λ [req] (match (lookup-realm (url->string (request-uri req)))
                                                           [#false (next-dispatcher)]
-                                                          [realm (with-handlers ([exn? {λ [e] (response:exn e)}])
+                                                          [realm (with-handlers ([exn? {λ [e] (response:exn (request-uri req) e #"Authorizing")}])
                                                                    (let ([credit (request->digest-credentials req)]
                                                                          [authorize (make-check-digest-credentials lookup-HA1)])
                                                                      (when (and credit (authorize (bytes->string/utf-8 (request-method req)) credit))
                                                                        (next-dispatcher))
                                                                      (define private (symbol->string (gensym (current-digimon))))
                                                                      (define opaque (symbol->string (gensym (current-digimon))))
-                                                                     (response:401 (request-uri req) (make-md5-auth-header realm private opaque))))])})])
-                        (servlet:make #:responders-servlet-loading (curryr response:exn #"Loading")
-                                      #:responders-servlet (curryr response:exn #"Handling")
+                                                                     (response:401 #:page (page 401) (request-uri req)
+                                                                                   (make-md5-auth-header realm private opaque))))])})])
+                        (servlet:make #:responders-servlet-loading (curryr response:exn #:page (page 500) #"Loading")
+                                      #:responders-servlet (curryr response:exn #:page (page 500) #"Handling")
                                       url->servlet)
                         (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime)
-                        (lift:make {λ _ (cond [(directory-exists? /htdocs) (next-dispatcher)]
-                                              [(file-exists? 404.html) (file-response 404 #"File Not Found" 404.html)]
-                                              [else (response:503)])}))})
+                        (lift:make {λ _ (cond [(directory-exists? /htdocs) (response:404 #:page (page 404))]
+                                              [else (response:503 #:page (page 404))])}))})
         
         (define dispatch-main
           {lambda [::1?]
@@ -219,7 +219,7 @@
           {lambda [realm.rktd]
             (define timestamp (box #f))
             (define realm-cache (box #f))
-            (define update-realms! {λ _ (when (and (file-exists? realm.rktd) (memq 'read (file-or-directory-permissions realm.rktd)))
+            (define update-realms! {λ _ (when (file-readable? realm.rktd)
                                           (let ([cur-mtime (file-or-directory-modify-seconds realm.rktd)])
                                             (when (or (not (unbox timestamp))
                                                       (> cur-mtime (unbox timestamp))

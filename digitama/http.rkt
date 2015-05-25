@@ -26,10 +26,11 @@
                [getgid (-> Natural)]
                [fetch_tamer_name (-> Natural (Values Natural Bytes))]
                [fetch_tamer_group (-> Natural (Values Natural Bytes))]
-               [syslog (-> Symbol Symbol String String * Void)])
+               [syslog (-> Symbol Symbol String Any * Void)])
 
 (require/typed/provide web-server/http
                        [#:opaque Redirection-Status redirection-status?]
+                       [TEXT/HTML-MIME-TYPE Bytes]
                        [#:struct header {[field : Bytes]
                                          [value : Bytes]}
                                  #:extra-constructor-name make-header]
@@ -57,6 +58,7 @@
                                            [headers : (Listof Header)]
                                            [output : (-> Output-Port Void)]}]
                        [headers-assq* (-> Bytes (Listof Header) (Option Header))]
+                       [response/full (-> Natural Bytes Number (Option Bytes) (Listof Header) (Listof Bytes) Response)]
                        [response/xexpr (-> Any [#:code Natural] [#:message Bytes] [#:headers (Listof Header)] Response)]
                        [response/output (-> (-> Output-Port Void) [#:code Natural] [#:message Bytes] [#:headers (Listof Header)] Response)]
                        [redirect-to (->* {String} {Redirection-Status #:headers (Listof Header)} Response)]
@@ -108,24 +110,29 @@
                                #", nonce=\"" nonce #"\""
                                #", opaque=\"" opaque #"\""))})
 
-(define response:ddd : (-> Any Bytes String (Listof Header) Response)
-  {lambda [code-sexp message desc headers]
+(define response:ddd : (-> Any Bytes String (Option Path-String) (Listof Header) Response)
+  {lambda [code-sexp message desc ddd.html headers]
     (define status-code : Natural (cast (car.eval code-sexp (module->namespace 'racket/base)) Natural))
-    (response/xexpr #:code status-code #:message message #:headers headers
-                    `(html (head (title ,(bytes->string/utf-8 message))
-                                 (link ([rel "stylesheet"] [href "/stone/error.css"])))
-                           (body (div ([class "section"])
-                                      (div ([class "title"]) "Sakuyamon")
-                                      (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                         ,(string-replace (format "~a" code-sexp) #px"\\s+" "" #:all? #true) ")"
-                                         (pre "» " ,(number->string status-code)
-                                              " - " ,desc))))))})
+    (cond [(or (and ddd.html (file-readable? ddd.html) ddd.html)
+               (let ([spare.html (build-path (digimon-stone) (format "~a.html" status-code))])
+                 (and (file-readable? spare.html) spare.html)))
+           => {λ [[ddd.html : Path-String]] (response/full status-code message (current-seconds) TEXT/HTML-MIME-TYPE
+                                                           headers (file->bytes-lines ddd.html))}]
+          [else (response/xexpr #:code status-code #:message message #:headers headers
+                                `(html (head (title ,(bytes->string/utf-8 message))
+                                             (link ([rel "stylesheet"] [href "/stone/error.css"])))
+                                       (body (div ([class "section"])
+                                                  (div ([class "title"]) "Sakuyamon")
+                                                  (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
+                                                     ,(string-replace (format "~a" code-sexp) #px"\\s+" "" #:all? #true) ")"
+                                                     (pre "» " ,(number->string status-code)
+                                                          " - " ,desc))))))])})
 
 (define response:options : (-> URL (Listof String) Bytes Header * Response)
   {lambda [uri allows terminus . headers]
     (match-define-values {_ id-un} (fetch_tamer_name (getuid)))
     (match-define-values {_ id-gn} (fetch_tamer_group (getgid)))
-    (response/output void #:code 200
+    (response/output void #:code 200 #:message #"Metainformation"
                      #:headers (list* (make-header #"Allow" (string->bytes/utf-8 (string-join allows ",")))
                                       (make-header #"Terminus" terminus)
                                       (make-header #"Daemon" id-un)
@@ -138,6 +145,7 @@
     (define bb : Nonnegative-Integer (current-memory-use))
     (define ab : Nonnegative-Integer (let ([_ (collect-garbage)]) (current-memory-use)))
     (define message : String (format "[~aMB = ~aMB - ~aMB]" (~mb (- bb ab)) (~mb bb) (~mb ab)))
+    (syslog 'notice 'realize "collect garbage: ~a" message)
     (response/xexpr #:code 200 #:message (string->bytes/utf-8 message) #:headers headers
                     `(html (head (title "Collect Garbage")
                                  (link ([rel "stylesheet"] [href "/stone/error.css"])))
@@ -157,58 +165,51 @@
                                       (p "> (" (a ([href "http://racket-lang.org"]) "refresh-servlet!") ")"
                                          (pre))))))})
 
-(define response:401 : (-> URL Header * Response)
-  {lambda [url . headers]
+(define response:401 : (-> URL [#:page (Option Path-String)] Header * Response)
+  {lambda [url #:page [401.html #false] . headers]
     (syslog 'notice 'unauthorized "~a" (url->string url))
     (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*))
-                  #"Unauthorized" "Authentication Failed!" headers)})
+                  #"Unauthorized" "Authentication Failed!" 401.html headers)})
 
-(define response:403 : (-> Header * Response)
-  {lambda headers
+(define response:403 : (-> [#:page (Option Path-String)] Header * Response)
+  {lambda [#:page [403.html #false] . headers]
     (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*)(*))
-                  #"Forbidden" "Access Denied!" headers)})
+                  #"Forbidden" "Access Denied!" 403.html headers)})
 
-(define response:404 : (-> Header * Response)
-  {lambda headers
+(define response:404 : (-> [#:page (Option Path-String)] Header * Response)
+  {lambda [#:page [404.html #false] . headers]
     (response:ddd '(*(+(*)(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))))(+(*)(*)(*)(*)))
-                  #"File Not Found" "Resource Not Found!" headers)})
+                  #"File Not Found" "Resource Not Found!" 404.html headers)})
                   
-(define response:418 : (-> Header * Response)
-  {lambda headers
+(define response:418 : (-> [#:page (Option Path-String)] Header * Response)
+  {lambda [#:page [418.html #false] . headers]
     (response:ddd '(+(*(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*)(*))
-                  #"I am a teapot" "Have a cup of tea?" headers)})
+                  #"I am a teapot" "Have a cup of tea?" 418.html headers)})
 
-(define response:exn : (-> (Option URL) exn Bytes Header * Response)
-  {lambda [url x stage . headers]
-    (cond [(false? (exn? x)) (raise x)]
-          [(exn:fail:user? x) (response:418)]
-          [else (let ([tr : (-> String String) {λ [str] (string-replace str (digimon-world) "")}])
-                  (response/xexpr #:code 500 #:headers headers
-                                  #:message (let ([msgs ((inst call-with-input-string (Listof Bytes)) (exn-message x) port->bytes-lines)])
-                                              (bytes-append stage #": " (bytes-join msgs (string->bytes/utf-8 (string cat#)))))
-                                  `(html (head (title ,(format "Uncaught Exception when ~a" stage))
-                                               (link ([rel "stylesheet"] [href "/stone/error.css"])))
-                                         (body (div ([class "section"])
-                                                    (div ([class "title"]) "Sakuyamon")
-                                                    (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
-                                                       "(*(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)))(+(*)(*)(*)(*)(*)))" ")"
-                                                       (pre ,@(map {λ [v] (format "» ~a~n" v)}
-                                                                   (list (if url (tr (url->string url)) "#false")
-                                                                         (object-name x)
-                                                                         (tr (exn-message x))))
-                                                            ,@(filter-map {λ [[stack : (Pairof (Option Symbol) Any)]]
-                                                                            (and (cdr stack)
-                                                                                 (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
-                                                                                   (and srcinfo (regexp-match? #px"^[^/]" srcinfo)
-                                                                                        (format "»»» ~a: ~a~n" (tr srcinfo) (or (car stack) 'λ)))))}
-                                                                          (continuation-mark-set->context (exn-continuation-marks x))))))))))])})
+(define response:exn : (-> (Option URL) exn Bytes [#:page (Option Path-String)] Header * Response)
+  {lambda [url x stage #:page [500.html #false] . headers]
+    (define tr : (-> String String) {λ [str] (string-replace str (digimon-world) "")})
+    (define messages : (Listof Bytes) ((inst call-with-input-string (Listof Bytes)) (exn-message x) port->bytes-lines))
+    (syslog 'fatal 'outage "~a: ~a~n~a~n~a" stage (and url (url->string url))
+            (string-join (map {λ [[msg : Bytes]] (format "» ~a" msg)} messages) (string #\newline))
+            (string-join (filter-map {λ [[stack : (Pairof (Option Symbol) Any)]]
+                                       (and (cdr stack)
+                                            (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
+                                              (and srcinfo (regexp-match? #px"^[^/]" srcinfo)
+                                                   (format "»» ~a: ~a~n" (tr srcinfo) (or (car stack) 'λ)))))}
+                                     (continuation-mark-set->context (exn-continuation-marks x)))
+                         (string #\newline)))
+    (cond [(exn:fail:user? x) (response:418)]
+          [else (response:ddd '(*(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)))(+(*)(*)(*)(*)(*)))
+                              (bytes-append stage #": " (bytes-join messages (string->bytes/utf-8 (string cat#))))
+                              "Service Outage!" 500.html headers)])})
 
-(define response:501 : (-> Header * Response)
-  {lambda headers
+(define response:501 : (-> [#:page (Option Path-String)] Header * Response)
+  {lambda [#:page [501.html #false] . headers]
     (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*))
-                  #"Method Not Implemented" "Method Beyond Capabilities!" headers)})
+                  #"Method Not Implemented" "Method Beyond Capabilities!" 501.html headers)})
 
-(define response:503 : (-> Header * Response)
-  {lambda headers
+(define response:503 : (-> [#:page (Option Path-String)] Header * Response)
+  {lambda [#:page [503.html #false] . headers]
     (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)(*)))(*)(*)(*))
-                  #"Service Unavailable" "Service Under Construction!" headers)})
+                  #"Service Unavailable" "Service Under Construction!" 503.html headers)})
