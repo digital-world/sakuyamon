@@ -48,6 +48,6 @@
 {module+ postmake
   (when (string=? (getenv "USER") "root")
     (case (system-type 'os)
-      [{macosx} (and (system (format "launchctl unload ~a" sakuyamon.plist))
-                     (system (format "launchctl load ~a" sakuyamon.plist)))]
+      [{macosx} (or (system (format "pkill -1 -u `id -u tamer`"))
+                    (system (format "launchctl load ~a" sakuyamon.plist)))]
       [{unix} (system (format "sh ~a restart" sakuyamon.sh))]))}
