@@ -47,14 +47,11 @@
             [{{DSC : dispatch-server-config^}} sakuyamon-config@ DS]))
     (define-values/invoke-unit/infer sakuyamon@)
 
-    (define daemon? (eq? (getppid) 1)) ;;; child of the init process. Maybe BUG for zombie process.
+    (define daemon? (zero? (getuid))) ;;; I am root
     (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
-    (define exit-with-errno {λ [no] (exit ({λ _ no} (syslog 'error "system error: ~a; errno=~a~n" (strerror no) no)))})
+    (define exit-with-errno {λ [no] (exit ({λ _ no} (syslog-perror 'error "system error: ~a; errno=~a" (strerror no) no)))})
     
     (define sakuyamon-pipe (make-async-channel #false))
-    ;;; Restore to real uid and gid after handling SIGHUP.
-    (unless (zero? (seteuid (getuid))) (exit-with-errno (saved-errno)))
-    (unless (zero? (setegid (getgid))) (exit-with-errno (saved-errno)))
     (define shutdown (parameterize ([error-display-handler void]) (serve #:confirmation-channel sakuyamon-pipe)))
     (define confirmation (async-channel-get sakuyamon-pipe))
 
@@ -70,15 +67,18 @@
                                                                                                       [else 'SIGINT]))
                                                                                  (when (exn:break:hang-up? signal) (raise signal)))}])
                                      (when daemon?
-                                       (unless (zero? (seteuid uid)) (exit-with-errno (saved-errno)))
-                                       (unless (zero? (setegid gid)) (exit-with-errno (saved-errno))))
+                                       ;;; if change uid first, then gid cannot be changed again.
+                                       (unless (zero? (setegid gid)) (exit-with-errno (saved-errno)))
+                                       (unless (zero? (seteuid uid)) (exit-with-errno (saved-errno))))
                                      (when (zero? (geteuid))
-                                       (syslog-perror 'error "misconfigured: Privilege Has Not Dropped!"))
+                                       (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!"))
                                      (syslog-perror 'notice "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
                                      (when (place-channel? (tamer-pipe)) ;;; for testing
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
                                      (do-not-return))])}
-                  {λ _ (shutdown)}))
+                  {λ _ (void (unless (zero? (seteuid (getuid))) (exit-with-errno (saved-errno)))
+                             (unless (zero? (setegid (getgid))) (exit-with-errno (saved-errno)))
+                             (shutdown))}))
 
   (parse-command-line (format "~a ~a" (cadr (quote-module-name)) (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
                       (current-command-line-arguments)
