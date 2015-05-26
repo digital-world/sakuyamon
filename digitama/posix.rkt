@@ -35,9 +35,13 @@
 
 (define-posix getuid (_fun -> _uint32))
 (define-posix getgid (_fun -> _uint32))
+(define-posix geteuid (_fun -> _uint32))
+(define-posix getegid (_fun -> _uint32))
 (define-posix getppid (_fun -> _int32))
 (define-posix setuid (_fun #:save-errno 'posix _uint32 -> _int))
 (define-posix setgid (_fun #:save-errno 'posix _uint32 -> _int))
+(define-posix seteuid (_fun #:save-errno 'posix _uint32 -> _int))
+(define-posix setegid (_fun #:save-errno 'posix _uint32 -> _int))
 
 (define-digitama fetch_tamer_ids (_fun #:save-errno 'posix
                                        _bytes {u : (_ptr o _uint32)} {g : (_ptr o _uint32)}

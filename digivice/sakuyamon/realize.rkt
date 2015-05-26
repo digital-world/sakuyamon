@@ -32,9 +32,10 @@
     {lambda [severity maybe . argl]
       (define message (apply format maybe argl))
       (define topic 'realize)
-      (case severity
-        [{notice} (printf "~a: ~a~n" topic message)]
-        [else (eprintf "~a: ~a~n" topic message)])
+      (unless (port-closed? (current-output-port))
+        (case severity
+          [{notice} (printf "~a: ~a~n" topic message)]
+          [else (eprintf "~a: ~a~n" topic message)]))
       (rsyslog (severity.c severity) topic message)})
   
   (define {serve-forever}
@@ -51,6 +52,9 @@
     (define exit-with-errno {λ [no] (exit ({λ _ no} (syslog 'error "system error: ~a; errno=~a~n" (strerror no) no)))})
     
     (define sakuyamon-pipe (make-async-channel #false))
+    ;;; Restore to real uid and gid after handling SIGHUP.
+    (unless (zero? (seteuid (getuid))) (exit-with-errno (saved-errno)))
+    (unless (zero? (setegid (getgid))) (exit-with-errno (saved-errno)))
     (define shutdown (parameterize ([error-display-handler void]) (serve #:confirmation-channel sakuyamon-pipe)))
     (define confirmation (async-channel-get sakuyamon-pipe))
 
@@ -59,39 +63,37 @@
                               => (compose1 exit {λ _ (car (exn:fail:network:errno-errno confirmation))} (curry syslog-perror 'error) exn-message)]
                              [(and daemon? (not (zero? errno)) errno)
                               => exit-with-errno]
-                             [else (with-handlers ([exn:break? {λ _ (unless (port-closed? (current-output-port))
-                                                                      (newline)
-                                                                      (syslog-perror 'info "terminated due to breaking."))}])
-                                     (when daemon? ; I am root
-                                       ;;; setuid would drop the privilege of seting gid.
-                                       (unless (zero? (setgid gid)) (exit-with-errno (saved-errno)))
-                                       (unless (zero? (setuid uid)) (exit-with-errno (saved-errno))))
-                                     (when (zero? (getuid))
+                             [else (with-handlers ([exn:break? {λ [signal] (void (unless (port-closed? (current-output-port)) (newline))
+                                                                                 (syslog-perror 'notice "terminated by ~a."
+                                                                                                (cond [(exn:break:hang-up? signal) 'SIGHUP]
+                                                                                                      [(exn:break:terminate? signal) 'SIGTERM]
+                                                                                                      [else 'SIGINT]))
+                                                                                 (when (exn:break:hang-up? signal) (raise signal)))}])
+                                     (when daemon?
+                                       (unless (zero? (seteuid uid)) (exit-with-errno (saved-errno)))
+                                       (unless (zero? (setegid gid)) (exit-with-errno (saved-errno))))
+                                     (when (zero? (geteuid))
                                        (syslog-perror 'error "misconfigured: Privilege Has Not Dropped!"))
-                                     (syslog-perror 'info "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
+                                     (syslog-perror 'notice "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
                                      (when (place-channel? (tamer-pipe)) ;;; for testing
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
-                                     (cond [daemon? (do-not-return)]
-                                           [else (let do-not-return ([stdin /dev/stdin])
-                                                   (cond [(eof-object? (read-line stdin)) (syslog-perror 'info "terminated manually.")]
-                                                         [else (sync/enable-break (handle-evt stdin do-not-return))]))]))])}
+                                     (do-not-return))])}
                   {λ _ (shutdown)}))
 
-  (call-as-normal-termination
-   {λ _ (parse-command-line (format "~a ~a" (cadr (quote-module-name)) (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
-                            (current-command-line-arguments)
-                            `{{usage-help ,(format "~a~n" desc)}
-                              {once-each [{"-p"} ,{λ [flag port] (sakuyamon-port (string->number port))}
-                                                 {"Use an alternative <port>." "port"}]
-                                         [{"-w"} ,{λ [flag mw] (sakuyamon-max-waiting (string->number mw))}
-                                                 {"Maximum number of clients can be waiting for acceptance." "mw"}]
-                                         [{"-t"} ,{λ [flag ict] (sakuyamon-connection-timeout (string->number ict))}
-                                                 {"Initial connection timeout." "ict"}]
-                                         [{"--SSL"} ,{λ [flag] (sakuyamon-ssl? #true)} {"Enable SSL with 443 as default port."}]
-                                         [{"--TAMER"} ,{λ [flag] (sakuyamon-tamer-terminus? #true)} {"Enable Per-Tamer Terminus."}]
-                                         [{"--DIGIMON"} ,{λ [flag] (sakuyamon-digimon-terminus? #true)} {"Enable Per-Digimon Terminus."}]}}
-                            {λ [!] (serve-forever)} null
-                            (compose1 exit display (curryr string-replace #px"  -- : .+?-h --'\\s*" "")))})}
+  (parse-command-line (format "~a ~a" (cadr (quote-module-name)) (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
+                      (current-command-line-arguments)
+                      `{{usage-help ,(format "~a~n" desc)}
+                        {once-each [{"-p"} ,{λ [flag port] (sakuyamon-port (string->number port))}
+                                           {"Use an alternative <port>." "port"}]
+                                   [{"-w"} ,{λ [flag mw] (sakuyamon-max-waiting (string->number mw))}
+                                           {"Maximum number of clients can be waiting for acceptance." "mw"}]
+                                   [{"-t"} ,{λ [flag ict] (sakuyamon-connection-timeout (string->number ict))}
+                                           {"Initial connection timeout." "ict"}]
+                                   [{"--SSL"} ,{λ [flag] (sakuyamon-ssl? #true)} {"Enable SSL with 443 as default port."}]
+                                   [{"--TAMER"} ,{λ [flag] (sakuyamon-tamer-terminus? #true)} {"Enable Per-Tamer Terminus."}]
+                                   [{"--DIGIMON"} ,{λ [flag] (sakuyamon-digimon-terminus? #true)} {"Enable Per-Digimon Terminus."}]}}
+                      {λ [!] (serve-forever)} null
+                      (compose1 exit display (curryr string-replace #px"  -- : .+?-h --'\\s*" "")))}
 
 {module digitama racket/base
   (provide (all-defined-out))

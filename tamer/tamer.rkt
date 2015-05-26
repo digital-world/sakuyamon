@@ -36,13 +36,13 @@
         {place* #:in #false #:out #false #:err #false pipe
                 (parameterize ([current-command-line-arguments (place-channel-get pipe)]
                                [tamer-pipe pipe])
-                  (dynamic-require `(submod ,(build-path (digimon-digivice) "sakuyamon/realize.rkt") sakuyamon) #false))})
+                  (call-as-normal-termination
+                   {λ _ (dynamic-require `(submod ,(build-path (digimon-digivice) "sakuyamon/realize.rkt") sakuyamon) #false)}))})
       (place-channel-put sakuyamon (list->vector (if (member "-p" arglist) arglist (list* "-p" "0" arglist))))
       (define {shutdown #:kill? [kill? #false]}
         (let ([sakuyamon-zone (current-custodian)]) ; place is also managed by custodian
-          {λ _ (dynamic-wind {λ _ (close-output-port place-in)}
-                             {λ _ (and (when kill? (place-kill sakuyamon))
-                                       (place-wait sakuyamon))}
+          {λ _ (dynamic-wind {λ _ (if kill? (place-kill sakuyamon) (place-break sakuyamon 'terminate))}
+                             {λ _ (place-wait sakuyamon)}
                              {λ _ (custodian-shutdown-all sakuyamon-zone)})}))
       (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown #:kill? #true) "" (exn-message b)))}])
         (match ((curry sync/timeout/enable-break 1.618) (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt})

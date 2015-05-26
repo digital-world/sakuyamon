@@ -11,9 +11,6 @@ Please do not ask me why I choose @bold{Racket}. Meanwhile I don't know more tha
 whether it is suitable for this kind of tasks since its real world applications are damn harder
 to be found than to be heard of. So you get it, I mean I like it and just for fun, maybe also paid for it.
 
-The infrasturctures are designed as lightweight as possible. Instances include almost all batteries with zero configuration,
-and they should communicate with each other easily. Keep it simple but also ready for large-scale extension.
-
 It is intentionally designed not to work with @exec{raco setup}, nor any other installing processes. Another good news is that, you
 are safe to run it as @bold{root}, after making as usual it will work properly. @italic{@bold{Only tested with Ubuntu and MacOSX.}}
 

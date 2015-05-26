@@ -8,16 +8,20 @@
 (define sakuyamon.plist "/System/Library/LaunchDaemons/org.gyoudmon.sakuyamon.plist")
 (define /stone/launchd.plist (build-path (digimon-stone) "launchd.plist"))
 
+(define sakuyamon.sh "/etc/init.d/sakuyamon")
+(define /stone/initd.sh (build-path (digimon-stone) "initd.sh"))
+
 (define sakuyamon.asl "/etc/asl/org.gyoudmon.sakuyamon")
 (define /stone/sakuyamon.asl (build-path (digimon-stone) "asld.conf"))
 
-(define sakuyamon.sh "/etc/init.d/sakuyamon")
-(define /stone/initd.sh (build-path (digimon-stone) "initd.sh"))
+(define sakuyamon.rsyslog "/etc/asl/org.gyoudmon.sakuyamon")
+(define /stone/sakuyamon.rsyslog (build-path (digimon-stone) "rsyslog.conf"))
 
 {module+ make:files 
   {module+ make
     (define sudo.make {λ [dest src [chown #false]] (and (with-output-to-file dest #:exists 'replace
-                                                          {λ _ (dynamic-require src #false)})
+                                                          {λ _ (and (putenv (path->string "destname" (file-name-from-path dest)))
+                                                                    (dynamic-require src #false))})
                                                         (when chown (system (format "chown ~a ~a" chown dest))))})
     
     (when (string=? (getenv "USER") "root")
@@ -25,24 +29,25 @@
           (error 'make "Failed to separate privileges!"))
     
       (make ([sakuyamon.plist [/stone/launchd.plist (quote-source-file)] (sudo.make sakuyamon.plist /stone/launchd.plist "root:wheel")]
+             [sakuyamon.sh [/stone/initd.sh (quote-source-file)] (sudo.make sakuyamon.sh /stone/initd.sh "root:root")]
              [sakuyamon.asl [/stone/sakuyamon.asl (quote-source-file)] (and (sudo.make sakuyamon.asl /stone/sakuyamon.asl "root:wheel")
                                                                             (system "kill -s HUP `cat /var/run/syslog.pid`"))]
-             [sakuyamon.sh [/stone/initd.sh (quote-source-file)] (sudo.make sakuyamon.sh /stone/initd.sh "root:root")])
+             [sakuyamon.rsyslog [/stone/sakuyamon.rsyslog (quote-source-file)] (and (sudo.make sakuyamon.rsyslog /stone/sakuyamon.rsyslog "root:root")
+                                                                                    (system "kill -s HUP `cat /var/run/rsyslog.pid`"))])
             (case (system-type 'os)
               [{macosx} (list sakuyamon.plist sakuyamon.asl)]
-              [{unix} (list sakuyamon.sh)])))}
+              [{unix} (list sakuyamon.sh sakuyamon.rsyslog)])))}
 
   {module+ clobber
     (when (string=? (getenv "USER") "root")
       (system (format "sh ~a ~a delete" (build-path (digimon-stone) "tamer.sh") (system-type 'os)))
       (for-each delete-file (case (system-type 'os)
                               [{macosx} (list sakuyamon.plist sakuyamon.asl)]
-                              [{unix} (list sakuyamon.sh)])))}}
+                              [{unix} (list sakuyamon.sh sakuyamon.rsyslog)])))}}
 
 {module+ postmake
   (when (string=? (getenv "USER") "root")
     (case (system-type 'os)
-      [{macosx} (and (system (format "rm -fr ~a ~a" (build-path (digimon-stone) "stderr.log") (build-path (digimon-stone) "stdout.log")))
-                     (system (format "launchctl unload ~a" sakuyamon.plist))
+      [{macosx} (and (system (format "launchctl unload ~a" sakuyamon.plist))
                      (system (format "launchctl load ~a" sakuyamon.plist)))]
       [{unix} (system (format "sh ~a restart" sakuyamon.sh))]))}

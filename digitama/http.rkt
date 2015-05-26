@@ -22,8 +22,8 @@
                [current-memory-use (->* [] [(Option Custodian)] Nonnegative-Integer)])
 
 (require/typed "posix.rkt"
-               [getuid (-> Natural)]
-               [getgid (-> Natural)]
+               [geteuid (-> Natural)]
+               [getegid (-> Natural)]
                [fetch_tamer_name (-> Natural (Values Natural Bytes))]
                [fetch_tamer_group (-> Natural (Values Natural Bytes))]
                [syslog (-> Symbol Symbol String Any * Void)])
@@ -130,8 +130,8 @@
 
 (define response:options : (-> URL (Listof String) Bytes Header * Response)
   {lambda [uri allows terminus . headers]
-    (match-define-values {_ id-un} (fetch_tamer_name (getuid)))
-    (match-define-values {_ id-gn} (fetch_tamer_group (getgid)))
+    (match-define-values {_ id-un} (fetch_tamer_name (geteuid)))
+    (match-define-values {_ id-gn} (fetch_tamer_group (getegid)))
     (response/output void #:code 200 #:message #"Metainformation"
                      #:headers (list* (make-header #"Allow" (string->bytes/utf-8 (string-join allows ",")))
                                       (make-header #"Terminus" terminus)
@@ -157,6 +157,7 @@
 (define response:rs : (-> (-> Void) Header * Response)
   {lambda [refresh-servlet! . headers]
     (refresh-servlet!)
+    (syslog 'notice 'realize "refresh servlet")
     (response/xexpr #:code 200 #:message #"Servlet Refreshed" #:headers headers
                     `(html (head (title "Refresh Servlet")
                                  (link ([rel "stylesheet"] [href "/stone/error.css"])))
