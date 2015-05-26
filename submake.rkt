@@ -50,4 +50,5 @@
     (case (system-type 'os)
       [{macosx} (or (system (format "pkill -1 -u `id -u tamer`"))
                     (system (format "launchctl load ~a" sakuyamon.plist)))]
-      [{unix} (system (format "sh ~a restart" sakuyamon.sh))]))}
+      [{unix} (or (system (format "sh ~a reload" sakuyamon.sh))
+                  (system (format "sh ~a start" sakuyamon.plist)))]))}
