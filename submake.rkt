@@ -20,7 +20,7 @@
 {module+ make:files 
   {module+ make
     (define sudo.make {λ [dest src [chown #false]] (and (with-output-to-file dest #:exists 'replace
-                                                          {λ _ (and (putenv (path->string "destname" (file-name-from-path dest)))
+                                                          {λ _ (and (putenv "destname" (path->string (file-name-from-path dest)))
                                                                     (dynamic-require src #false))})
                                                         (when chown (system (format "chown ~a ~a" chown dest))))})
     
