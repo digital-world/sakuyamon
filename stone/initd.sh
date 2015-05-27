@@ -103,7 +103,7 @@ case "$1" in
         ;;
     status)
         status_of_proc "$DAEMON" "$NAME" && exit 0 || exit $?
-	     ;;
+        ;;
     reload|force-reload)
         #log_daemon_msg "Reloading $DESC" "$NAME"
         do_reload
@@ -112,7 +112,7 @@ case "$1" in
     *)
         echo "Usage: $SCRIPTNAME {start|stop|status|reload|force-reload}" >&2
         exit 3
-	     ;;
+        ;;
 esac
 
 :
