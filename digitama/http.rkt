@@ -189,7 +189,6 @@
 
 (define response:exn : (-> (Option URL) exn Bytes [#:page (Option Path-String)] Header * Response)
   {lambda [url x stage #:page [500.html #false] . headers]
-    (define tr : (-> String String) {λ [str] (string-replace str (digimon-world) "")})
     (define messages : (Listof Bytes) ((inst call-with-input-string (Listof Bytes)) (exn-message x) port->bytes-lines))
     (syslog 'fatal 'outage "~a: ~a~n~a~n~a" stage (and url (url->string url))
             (string-join (map {λ [[msg : Bytes]] (format "» ~a" msg)} messages) (string #\newline))
@@ -197,7 +196,7 @@
                                        (and (cdr stack)
                                             (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
                                               (and srcinfo (regexp-match? #px"^[^/]" srcinfo)
-                                                   (format "»» ~a: ~a~n" (tr srcinfo) (or (car stack) 'λ)))))}
+                                                   (format "»» ~a: ~a~n" srcinfo (or (car stack) 'λ)))))}
                                      (continuation-mark-set->context (exn-continuation-marks x)))
                          (string #\newline)))
     (cond [(exn:fail:user? x) (response:418)]
