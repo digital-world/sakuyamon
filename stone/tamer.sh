@@ -1,6 +1,6 @@
 #!/bin/sh
 
-function syslots {
+syslots() {
     read a;
     test $? -eq 0 && read b;
     while test $? -eq 0; do
@@ -11,7 +11,7 @@ function syslots {
     test -n "$a" && echo `expr $a + 1`;
 }
 
-function dstamer {
+dstamer() {
     case "$1" in
         create)
             dscl . read /Groups/$2;
@@ -40,7 +40,7 @@ function dstamer {
     esac
 }
 
-function modtamer {
+modtamer() {
     case "$1" in
         create)
             getent group $2 || groupadd -r $2;

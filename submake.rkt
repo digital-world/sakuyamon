@@ -29,14 +29,15 @@
           (error 'make "Failed to separate privileges!"))
     
       (make ([sakuyamon.plist [/stone/launchd.plist (quote-source-file)] (sudo.make sakuyamon.plist /stone/launchd.plist "root:wheel")]
-             [sakuyamon.sh [/stone/initd.sh (quote-source-file)] (sudo.make sakuyamon.sh /stone/initd.sh "root:root")]
+             [sakuyamon.sh [/stone/initd.sh (quote-source-file)] (and (sudo.make sakuyamon.sh /stone/initd.sh "root:root")
+                                                                      (system (format "chmod a+x ~a" sakuyamon.sh)))]
              [sakuyamon.asl [/stone/sakuyamon.asl (quote-source-file)] (and (sudo.make sakuyamon.asl /stone/sakuyamon.asl "root:wheel")
                                                                             (system "kill -s HUP `cat /var/run/syslog.pid`"))]
              [sakuyamon.rsyslog [/stone/sakuyamon.rsyslog (quote-source-file)] (and (sudo.make sakuyamon.rsyslog /stone/sakuyamon.rsyslog "root:root")
                                                                                     (system "kill -s HUP `cat /var/run/rsyslog.pid`"))])
             (case (system-type 'os)
               [{macosx} (list sakuyamon.plist sakuyamon.asl)]
-              [{unix} (list sakuyamon.sh sakuyamon.rsyslog)])))}
+              [{unix} (list sakuyamon.sh)])))}
 
   {module+ clobber
     (when (string=? (getenv "USER") "root")
@@ -50,5 +51,5 @@
     (case (system-type 'os)
       [{macosx} (or (system (format "pkill -1 -u `id -u tamer`"))
                     (system (format "launchctl load ~a" sakuyamon.plist)))]
-      [{unix} (or (system (format "sh ~a reload" sakuyamon.sh))
-                  (system (format "sh ~a start" sakuyamon.plist)))]))}
+      [{unix} (or (system (format "service sakuyamon reload"))
+                  (system (format "service sakuyamon start")))]))}
