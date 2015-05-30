@@ -19,49 +19,53 @@ tested with Ubuntu and MacOSX.**_
 
 > + 📚Behaviors and Features
 >     + 📖
-[sakuyamon.rktl](http://gyoudmon.org/~wargrey:sakuyamon/sakuyamon.rktl)>
-+ 📑Sakuyamon, Realize!                                          >
-- 💚 1 - realize --port 8443 \[fresh\]                           >
-- 💚 2 - realize --port 8443 \[already in use\]                  >
-+ 📑Keep Realms Safe!                                            >
-- 💚 1 - realm --in-place                                      >     + 📖
-[dispatch.rktl](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rktl)>
-+ 📑Main Terminus                                                >
-- 💚 1 - HTTP OPTIONS                                          >
-+ 📑Function URLs                                              >
-- 💚 1 - 200: /d-arc/collect-garbage@::1                     >
-- 💚 2 - 403: /d-arc/collect-garbage@127                     >
-- 💚 3 - 200: /d-arc/refresh-servlet@::1                     >
-- 💚 4 - 403: /d-arc/refresh-servlet@127                     >       +
-📑Per-Tamer Terminus                                           >
-- 💚 1 - HTTP OPTIONS                                          >
-+ 📑Function URLs                                              >
-- 💚 1 - 200: /~wargrey/d-arc/refresh-servlet@::1            >
-- 💚 2 - 403: /~wargrey/d-arc/refresh-servlet@127            >         +
-📑Digest Authentication                                      >
-- 💚 1 - 200: guest@::1:digest                               >
-- 💚 2 - 401: guest@127:digest                               >
-- 💚 3 - 200: wargrey@127:digest                             >       +
-📑Per-Digimon Terminus                                         >
-- 💚 1 - HTTP OPTIONS                                          >
-+ 📑Basic Authentication                                       >
-- 💚 1 - 200: guest@::1:basic                                >
-- 💚 2 - 401: guest@127:basic                                >
-- 💚 3 - 200: wargrey@127:basic                              >     + 📖
-[seo.rktl](http://gyoudmon.org/~wargrey:sakuyamon/seo.rktl)>       +
-📑/robots.txt                                                  >
-- 💚 1 - 200|503: /robots.txt                                  >
-- 💚 2 - 200|503: /~wargrey/robots.txt                         >
-- 💚 3 - 200|503: /~wargrey:sakuyamon/robots.txt               >       +
-📑Server Side Redirections                                     >
-+ 📑dir -> dir/                                                >
-- 💚 1 - 302: .                                              >
-- 💚 2 - 302: ~:                                             >
-- 💚 3 - 302: stone                                          >         +
-📑rktl -> html                                               >
-- 💚 1 - 302: seo.rktl                                       >
-- 💚 2 - 302: dir/dot.lp.rktl                                >     + 📖
-[security.rktl](http://gyoudmon.org/~wargrey:sakuyamon/security.rktl)>
-+ 📑Bad Users                                                    >
-- 💚 1 - 418: ../tamer/.realm.rktd                             >
+[sakuyamon.rktl](http://gyoudmon.org/~wargrey:sakuyamon/sakuyamon.rktl
+)>       + 📑Sakuyamon, Realize!
+>         - 💚 1 - realize --port 8443 \[fresh\]
+>         - 💚 2 - realize --port 8443 \[already in use\]
+>       + 📑Keep Realms Safe!
+>         - 💚 1 - realm --in-place
+>     + 📖
+[dispatch.rktl](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rktl
+)>       + 📑Main Terminus
+>         - 💚 1 - HTTP OPTIONS
+>         + 📑Function URLs
+>           - 💚 1 - 200: /d-arc/collect-garbage@::1
+>           - 💚 2 - 403: /d-arc/collect-garbage@127
+>           - 💚 3 - 200: /d-arc/refresh-servlet@::1
+>           - 💚 4 - 403: /d-arc/refresh-servlet@127
+>       + 📑Per-Tamer Terminus
+>         - 💚 1 - HTTP OPTIONS
+>         + 📑Function URLs
+>           - 💚 1 - 200: /~wargrey/d-arc/refresh-servlet@::1
+>           - 💚 2 - 403: /~wargrey/d-arc/refresh-servlet@127
+>         + 📑Digest Authentication
+>           - 💚 1 - 200: guest@::1:digest
+>           - 💚 2 - 401: guest@127:digest
+>           - 💚 3 - 200: wargrey@127:digest
+>       + 📑Per-Digimon Terminus
+>         - 💚 1 - HTTP OPTIONS
+>         + 📑Basic Authentication
+>           - 💚 1 - 200: guest@::1:basic
+>           - 💚 2 - 401: guest@127:basic
+>           - 💚 3 - 200: wargrey@127:basic
+>     + 📖
+[seo.rktl](http://gyoudmon.org/~wargrey:sakuyamon/seo.rktl
+)>       + 📑/robots.txt
+>         - 💚 1 - 200|503: /robots.txt
+>         - 💚 2 - 200|503: /~wargrey/robots.txt
+>         - 💚 3 - 200|503: /~wargrey:sakuyamon/robots.txt
+>       + 📑Server Side Redirections
+>         + 📑dir -> dir/
+>           - 💚 1 - 302: .
+>           - 💚 2 - 302: ~:
+>           - 💚 3 - 302: stone
+>         + 📑rktl -> html
+>           - 💚 1 - 302: seo.rktl
+>           - 💚 2 - 302: dir/dot.lp.rktl
+>     + 📖
+[security.rktl](http://gyoudmon.org/~wargrey:sakuyamon/security.rktl
+)>       + 📑Bad Users
+>         - 💚 1 - 418: ../tamer/.realm.rktd
+>
 > 📌27 examples, 0 failures, 0 errors, 100.00% Okay.
