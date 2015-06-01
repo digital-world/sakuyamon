@@ -30,7 +30,11 @@ int fetch_tamer_ids(char* name, uid_t* uid, gid_t* gid) {
     buf = malloc(bufsize);
     if (buf == NULL) goto exit_with_errno;
 
+#if defined(__sun) && defined(__SVR4)
+    status = getpwnam_r(name, &pwd, buf, bufsize);
+#else
     status = getpwnam_r(name, &pwd, buf, bufsize, &passwords);
+#endif
     if (passwords == NULL) {
         if (status == 0)
             errno = ENOENT;
