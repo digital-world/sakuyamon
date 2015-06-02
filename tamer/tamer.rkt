@@ -18,13 +18,12 @@
 (provide (all-from-out "../../DigiGnome/digitama/tamer.rkt"))
 (provide (all-from-out net/head net/base64 net/http-client web-server/http web-server/test))
 
-(define whoami (getenv "USER"))
 (define /htdocs (curry format "/~a"))
-(define /tamer (curry format "/~~~a/~a" whoami))
-(define /digimon (curry format "/~~~a:~a/~a" whoami (current-digimon)))
+(define /tamer (curry format "/~~~a/~a" (current-tamer)))
+(define /digimon (curry format "/~~~a:~a/~a" (current-tamer) (current-digimon)))
 
 (define ~htdocs (curry build-path (digimon-terminus)))
-(define ~tamer (curry build-path (expand-user-path (format "~~~a" whoami)) "DigitalWorld" "Kuzuhamon" "terminus"))
+(define ~tamer (curry build-path (expand-user-path (format "~~~a" (current-tamer))) "DigitalWorld" "Kuzuhamon" "terminus"))
 (define ~digimon (curry build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook"))
 
 (define realm.rktd (path->string (build-path (digimon-stone) "realm.rktd")))
@@ -45,9 +44,7 @@
                              {λ _ (place-wait sakuyamon)}
                              {λ _ (custodian-shutdown-all sakuyamon-zone)})}))
       (with-handlers ([exn:break? {λ [b] (and (newline) (values (shutdown #:kill? #true) "" (exn-message b)))}])
-        (match ((curry sync/timeout/enable-break 22.618) (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt})
-                                                        (handle-evt sakuyamon (curry cons sakuyamon)))
-          [#false (values (shutdown #:kill? #true) "" "sakuyamon is delayed!")]
+        (match (sync/enable-break (handle-evt (place-dead-evt sakuyamon) {λ _ 'dead-evt}) (handle-evt sakuyamon (curry cons sakuyamon)))
           ['dead-evt (values (shutdown) (port->string place-out) (port->string place-err))]
           [{list-no-order _ {? boolean? ssl?} {? number? port}} (values (shutdown) (sakuyamon-agent ssl? port "::1")
                                                                         (sakuyamon-agent ssl? port "127.0.0.1"))])))})

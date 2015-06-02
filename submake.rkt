@@ -24,7 +24,7 @@
                                                                     (dynamic-require src #false))})
                                                         (when chown (system (format "chown ~a ~a" chown dest))))})
     
-    (when (string=? (getenv "USER") "root")
+    (when (string=? (current-tamer) "root")
       (or (system (format "sh ~a ~a create" (build-path (digimon-stone) "tamer.sh") (system-type 'os)))
           (error 'make "Failed to separate privileges!"))
     
@@ -39,14 +39,14 @@
               [{macosx} (list sakuyamon.plist sakuyamon.asl)])))}
 
   {module+ clobber
-    (when (string=? (getenv "USER") "root")
+    (when (string=? (current-tamer) "root")
       (system (format "sh ~a ~a delete" (build-path (digimon-stone) "tamer.sh") (system-type 'os)))
       (for-each delete-file (case (digimon-system)
                               [{solaris} (list sakuyamon.smf sakuyamon.rsyslog)]
                               [{macosx} (list sakuyamon.plist sakuyamon.asl)])))}}
 
 {module+ postmake
-  (when (string=? (getenv "USER") "root")
+  (when (string=? (current-tamer) "root")
     (case (digimon-system)
       [{solaris} (or (system (format "service sakuyamon reload"))
                      (system (format "service sakuyamon start")))]
