@@ -12,8 +12,9 @@ for it.
 
 It is intentionally designed not to work with `raco setup`, nor any
 other installing processes. Another good news is that, you are safe to
-run it as **root**, after making as usual it will work properly. _**Only
-tested with Ubuntu and MacOSX.**_
+run it as **root**, after making as usual it will work properly.
+
+_**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 
 ---
 

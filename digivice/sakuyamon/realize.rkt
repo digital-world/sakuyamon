@@ -49,7 +49,7 @@
 
     (define daemon? (zero? (getuid))) ;;; I am root
     (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
-    (define exit-with-errno {λ [no] (exit ({λ _ no} (syslog-perror 'error "system error: ~a; errno=~a" (strerror no) no)))})
+    (define exit-with-eperm {λ [no] (exit ({λ _ 'EPERM} (syslog-perror 'error "system error: ~a; errno=~a" (strerror no) no)))})
     
     (define sakuyamon-pipe (make-async-channel #false))
     (define shutdown (parameterize ([error-display-handler void]) (serve #:confirmation-channel sakuyamon-pipe)))
@@ -57,9 +57,9 @@
 
     (dynamic-wind {λ _ (void)}
                   {λ _ (cond [(and (exn:fail:network:errno? confirmation) confirmation)
-                              => (compose1 exit {λ _ (car (exn:fail:network:errno-errno confirmation))} (curry syslog-perror 'error) exn-message)]
+                              => (compose1 exit {λ _ 'FATAL} (curry syslog-perror 'error) exn-message)]
                              [(and daemon? (not (zero? errno)) errno)
-                              => exit-with-errno]
+                              => exit-with-eperm]
                              [else (with-handlers ([exn:break? {λ [signal] (void (unless (port-closed? (current-output-port)) (newline))
                                                                                  (syslog-perror 'notice "terminated by ~a."
                                                                                                 (cond [(exn:break:hang-up? signal) 'SIGHUP]
@@ -68,16 +68,17 @@
                                                                                  (when (exn:break:hang-up? signal) (raise signal)))}])
                                      (when daemon?
                                        ;;; if change uid first, then gid cannot be changed again.
-                                       (unless (zero? (setegid gid)) (exit-with-errno (saved-errno)))
-                                       (unless (zero? (seteuid uid)) (exit-with-errno (saved-errno))))
+                                       (unless (zero? (setegid gid)) (exit-with-eperm (saved-errno)))
+                                       (unless (zero? (seteuid uid)) (exit-with-eperm (saved-errno))))
                                      (when (zero? (geteuid))
-                                       (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!"))
+                                       (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!")
+                                       (exit 'ECONFIG))
                                      (syslog-perror 'notice "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
                                      (when (place-channel? (tamer-pipe)) ;;; for testing
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
                                      (do-not-return))])}
-                  {λ _ (void (unless (zero? (seteuid (getuid))) (exit-with-errno (saved-errno)))
-                             (unless (zero? (setegid (getgid))) (exit-with-errno (saved-errno)))
+                  {λ _ (void (unless (zero? (seteuid (getuid))) (exit-with-eperm (saved-errno)))
+                             (unless (zero? (setegid (getgid))) (exit-with-eperm (saved-errno)))
                              (shutdown))}))
 
   (parse-command-line (format "~a ~a" (cadr (quote-module-name)) (path-replace-suffix (file-name-from-path (quote-source-file)) #""))

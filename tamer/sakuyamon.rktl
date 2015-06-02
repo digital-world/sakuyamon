@@ -57,7 +57,8 @@ As usual @racket[sakuyamon-realize] itself should be checked first:
          (test-spec "realize --port 8443 [already in use]"
                     (let ([$? (shutdown=>errno)])
                       (check-pred string? stderr)
-                      (check-pred (curryr member '{48 125}) $? stderr))))]
+                      (check-pred positive? $?)
+                      (check-regexp-match #px"errno=(48|125)" stderr))))]
 
 @handbook-scenario{Keep Realms Safe!}
 
