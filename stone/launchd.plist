@@ -3,7 +3,6 @@
 (require "../digitama/digicore.rkt")
 
 (require racket/string)
-(require racket/match)
 
 (require setup/dirs)
 
