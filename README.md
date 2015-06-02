@@ -20,14 +20,14 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 
 > + 📚Behaviors and Features
 >     + 📖
-[sakuyamon.rktl](http://gyoudmon.org/~wargrey:sakuyamon/sakuyamon.rktl)
+[sakuyamon.rkt](http://gyoudmon.org/~wargrey:sakuyamon/sakuyamon.rkt)
 >       + 📑Sakuyamon, Realize!
 >         - 💚 1 - realize --port 8443 \[fresh\]
 >         - 💚 2 - realize --port 8443 \[already in use\]
 >       + 📑Keep Realms Safe!
 >         - 💚 1 - realm --in-place
 >     + 📖
-[dispatch.rktl](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rktl)
+[dispatch.rkt](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rkt)
 >       + 📑Main Terminus
 >         - 💚 1 - HTTP OPTIONS
 >         + 📑Function URLs
@@ -51,7 +51,7 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >           - 💚 2 - 401: guest@127:basic
 >           - 💚 3 - 200: wargrey@127:basic
 >     + 📖
-[seo.rktl](http://gyoudmon.org/~wargrey:sakuyamon/seo.rktl)
+[seo.rkt](http://gyoudmon.org/~wargrey:sakuyamon/seo.rkt)
 >       + 📑/robots.txt
 >         - 💚 1 - 200|503: /robots.txt
 >         - 💚 2 - 200|503: /~wargrey/robots.txt
@@ -61,11 +61,11 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >           - 💚 1 - 302: .
 >           - 💚 2 - 302: ~:
 >           - 💚 3 - 302: stone
->         + 📑rktl -> html
->           - 💚 1 - 302: seo.rktl
->           - 💚 2 - 302: dir/dot.lp.rktl
+>         + 📑rkt -> html
+>           - 💚 1 - 302: seo.rkt
+>           - 💚 2 - 302: dir/dot.lp.rkt
 >     + 📖
-[security.rktl](http://gyoudmon.org/~wargrey:sakuyamon/security.rktl)
+[security.rkt](http://gyoudmon.org/~wargrey:sakuyamon/security.rkt)
 >       + 📑Bad Users
 >         - 💚 1 - 418: ../tamer/.realm.rktd
 >

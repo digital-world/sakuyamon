@@ -19,7 +19,7 @@ are safe to run it as @bold{root}, after making as usual it will work properly.
 @tamer-smart-summary[]
 @handbook-smart-table[]
 
-@include-section[(submod "sakuyamon.rktl" doc)]
-@include-section[(submod "dispatch.rktl" doc)]
-@include-section[(submod "seo.rktl" doc)]
-@include-section[(submod "security.rktl" doc)]
+@include-section[(submod "sakuyamon.rkt" doc)]
+@include-section[(submod "dispatch.rkt" doc)]
+@include-section[(submod "seo.rkt" doc)]
+@include-section[(submod "security.rkt" doc)]

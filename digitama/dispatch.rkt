@@ -135,7 +135,7 @@
                                               (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Digimon")]
                                                     [(member method allows) (next-dispatcher)]
                                                     [else (response:501)]))})
-                        (filter:make #px"\\.rktl$" (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
+                        (filter:make #px"\\.rkt$" (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
                                                                         (define to (string-replace (substring (path->string src) 1) #px"[/.]" "_"))
                                                                         (define render-depth? (directory-exists? (build-path /htdocs to)))
                                                                         (redirect-to (format "/~a:~a/~a" real-tamer digimon 
