@@ -47,38 +47,40 @@
             [{{DSC : dispatch-server-config^}} sakuyamon-config@ DS]))
     (define-values/invoke-unit/infer sakuyamon@)
 
-    (define daemon? (zero? (getuid))) ;;; I am root
+    (define root? (zero? (getuid)))
+    (define exit-with-eperm {λ [tips no] (exit ({λ _ 'EPERM} (syslog-perror 'error "~a error: ~a; errno=~a" tips (strerror no) no)))})
+
+    (unless (zero? (seteuid (getuid))) (exit-with-eperm 'regain-uid (saved-errno)))
+    (unless (zero? (setegid (getgid))) (exit-with-eperm 'regain-gid (saved-errno)))
     (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
-    (define exit-with-eperm {λ [no] (exit ({λ _ 'EPERM} (syslog-perror 'error "system error: ~a; errno=~a" (strerror no) no)))})
+    (when (and root? (not (zero? errno))) (exit-with-eperm 'fetch-tamer-id errno))
 
     (define sakuyamon-pipe (make-async-channel #false))
-    (unless (zero? (seteuid (getuid))) (exit-with-eperm (saved-errno)))
-    (unless (zero? (setegid (getgid))) (exit-with-eperm (saved-errno)))
     (define shutdown (parameterize ([error-display-handler void]) (serve #:confirmation-channel sakuyamon-pipe)))
     (define confirmation (async-channel-get sakuyamon-pipe))
+    
+    (when (exn:fail:network:errno? confirmation)
+      (syslog-perror 'error (exn-message confirmation))
+      (exit 'FATAL))
 
     (dynamic-wind {λ _ (void)}
-                  {λ _ (cond [(and (exn:fail:network:errno? confirmation) confirmation)
-                              => (compose1 exit {λ _ 'FATAL} (curry syslog-perror 'error) exn-message)]
-                             [(and daemon? (not (zero? errno)) errno)
-                              => exit-with-eperm]
-                             [else (with-handlers ([exn:break? {λ [signal] (void (unless (port-closed? (current-output-port)) (newline))
-                                                                                 (syslog-perror 'notice "terminated by ~a."
-                                                                                                (cond [(exn:break:hang-up? signal) 'SIGHUP]
-                                                                                                      [(exn:break:terminate? signal) 'SIGTERM]
-                                                                                                      [else 'SIGINT]))
-                                                                                 (when (exn:break:hang-up? signal) (raise signal)))}])
-                                     (when daemon?
-                                       ;;; if change uid first, then gid cannot be changed again.
-                                       (unless (zero? (setegid gid)) (exit-with-eperm (saved-errno)))
-                                       (unless (zero? (seteuid uid)) (exit-with-eperm (saved-errno))))
-                                     (when (zero? (geteuid))
-                                       (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!")
-                                       (exit 'ECONFIG))
-                                     (syslog-perror 'notice "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
-                                     (when (place-channel? (tamer-pipe)) ;;; for testing
-                                       (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
-                                     (do-not-return))])}
+                  {λ _ (with-handlers ([exn:break? {λ [signal] (void (unless (port-closed? (current-output-port)) (newline))
+                                                                     (syslog-perror 'notice "terminated by ~a."
+                                                                                    (cond [(exn:break:hang-up? signal) 'SIGHUP]
+                                                                                          [(exn:break:terminate? signal) 'SIGTERM]
+                                                                                          [else 'SIGINT]))
+                                                                     (when (exn:break:hang-up? signal) (raise signal)))}])
+                         (when root?
+                           ;;; if change uid first, then gid cannot be changed again.
+                           (unless (zero? (setegid gid)) (exit-with-eperm 'drop-gid (saved-errno)))
+                           (unless (zero? (seteuid uid)) (exit-with-eperm 'drop-uid (saved-errno))))
+                         (when (zero? (geteuid))
+                           (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!")
+                           (exit 'ECONFIG))
+                         (syslog-perror 'notice "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
+                         (when (place-channel? (tamer-pipe)) ;;; for testing
+                           (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
+                         (do-not-return))}
                   {λ _ (shutdown)}))
 
   (parse-command-line (format "~a ~a" (cadr (quote-module-name)) (path-replace-suffix (file-name-from-path (quote-source-file)) #""))

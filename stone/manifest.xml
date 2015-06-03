@@ -8,22 +8,26 @@
 (define name (format "network/~a" (current-digimon)))
 (define exec (format "~a/~a.rkt realize" (digimon-digivice) (current-digimon)))
 (define PATH (format "~a:/sbin:/usr/sbin:/bin:/usr/bin" (find-console-bin-dir)))
-(define instance `{instance {[name ,(current-digimon)] [enabled "true"]}
-                            {dependency {[name "network"] [grouping "require_all"] [restart_on "error"] [type "service"]}
-                                        {service_fmri {[value "svc:/milestone/network:default"]}}}
-                            {dependency {[name "local"] [grouping "require_all"] [restart_on "none"] [type "service"]}
-                                        {service_fmri {[value "svc:/system/filesystem/local:default"]}}}
-                            {dependency {[name "autofs"] [grouping "optional_all"] [restart_on "error"] [type "service"]}
-                                        {service_fmri {[value "svc:/system/filesystem/autofs:default"]}}}         
-                            {exec_method {[type "method"] [name "start"] [exec ,exec] [timeout_seconds "60"]}
-                                         {method_context {method_environment {envvar {[name "PATH"] [value ,PATH]}}}}}
-                            {exec_method {[type "method"] [name "stop"] [exec ":kill -TERM"] [timeout_seconds "60"]}}
-                            {exec_method {[type "method"] [name "refresh"] [exec ":kill -HUP"] [timeout_seconds "60"]}}
-                            {template {common_name {loctext {[xml:lang "C"]} ,(info-ref 'collection)}}
-                                      {description {loctext {[xml:lang "C"]} ,(info-ref 'pkg-desc)}}
-                                      {documentation {doc_link {[name "gyoudmon.org"]
-                                                                [uri ,(format "http://gyoudmon.org/~~wargrey:~a"
-                                                                              (current-digimon))]}}}}})
+
+#| ORDER IS IMPORTANT |#
+(define service `{service {[name ,name] [type "service"] [version "1"]}
+                          {dependency {[name "network"] [grouping "require_all"] [restart_on "error"] [type "service"]}
+                                      {service_fmri {[value "svc:/milestone/network:default"]}}}
+                          {dependency {[name "local"] [grouping "require_all"] [restart_on "none"] [type "service"]}
+                                      {service_fmri {[value "svc:/system/filesystem/local:default"]}}}
+                          {dependency {[name "autofs"] [grouping "optional_all"] [restart_on "error"] [type "service"]}
+                                      {service_fmri {[value "svc:/system/filesystem/autofs:default"]}}}
+                          {method_context {method_environment {envvar {[name "PATH"] [value ,PATH]}}}}
+                          {exec_method {[type "method"] [name "start"] [exec ,exec] [timeout_seconds "60"]}}
+                          {exec_method {[type "method"] [name "stop"] [exec ":kill -TERM"] [timeout_seconds "60"]}}
+                          {exec_method {[type "method"] [name "refresh"] [exec ":kill -HUP"] [timeout_seconds "60"]}}
+                          {instance {[name "default"] [enabled "true"]}}
+                          {stability {[value "Evolving"]}}
+                          {template {common_name {loctext {[xml:lang "C"]} ,(info-ref 'collection)}}
+                                    {description {loctext {[xml:lang "C"]} ,(info-ref 'pkg-desc)}}
+                                    {documentation {doc_link {[name "gyoudmon.org"]
+                                                              [uri ,(format "http://gyoudmon.org/~~wargrey:~a"
+                                                                            (current-digimon))]}}}}})
 
 (parameterize ([empty-tag-shorthand 'always])
   (write-xml (document (prolog (list (p-i #false #false 'xml "version=\"1.0\""))
@@ -31,8 +35,5 @@
                                               (external-dtd/system "/usr/share/lib/xml/dtd/service_bundle.dtd.1")
                                               #false)
                                null)
-                       (xexpr->xml (list 'service_bundle `{[name ,name] [type "manifest"]}
-                                         (list 'service `{[name ,name] [type "service"] [version "1"]}
-                                               (list 'stability "Evolving")
-                                               instance)))
+                       (xexpr->xml (list 'service_bundle `{[name ,name] [type "manifest"]} service))
                        null)))

@@ -40,6 +40,22 @@ dstamer() {
     esac
 }
 
+roletamer() {
+    case "$1" in
+        create)
+            getent group $2 || groupadd $2;
+            getent passwd $2 || roleadd -d / -g $2 -s `which false` -c "Digimon Tamer Daemon" $2;
+            ;;
+        delete)
+            getent passwd $2 && roledel $2;
+            getent group $2 && groupdel $2;
+            ;;
+        *)
+            false;
+            ;;
+    esac
+}
+
 modtamer() {
     case "$1" in
         create)
@@ -57,10 +73,13 @@ modtamer() {
 }
 
 case "$1" in
+    solaris)
+        roletamer $2 tamer;
+        ;;
     macosx)
         dstamer $2 tamer;
         ;;
-    unix)
+    linux)
         modtamer $2 tamer;
         ;;
     *)
