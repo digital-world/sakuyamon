@@ -50,8 +50,10 @@
     (define daemon? (zero? (getuid))) ;;; I am root
     (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
     (define exit-with-eperm {λ [no] (exit ({λ _ 'EPERM} (syslog-perror 'error "system error: ~a; errno=~a" (strerror no) no)))})
-    
+
     (define sakuyamon-pipe (make-async-channel #false))
+    (unless (zero? (seteuid (getuid))) (exit-with-eperm (saved-errno)))
+    (unless (zero? (setegid (getgid))) (exit-with-eperm (saved-errno)))
     (define shutdown (parameterize ([error-display-handler void]) (serve #:confirmation-channel sakuyamon-pipe)))
     (define confirmation (async-channel-get sakuyamon-pipe))
 
@@ -77,9 +79,7 @@
                                      (when (place-channel? (tamer-pipe)) ;;; for testing
                                        (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
                                      (do-not-return))])}
-                  {λ _ (void (unless (zero? (seteuid (getuid))) (exit-with-eperm (saved-errno)))
-                             (unless (zero? (setegid (getgid))) (exit-with-eperm (saved-errno)))
-                             (shutdown))}))
+                  {λ _ (shutdown)}))
 
   (parse-command-line (format "~a ~a" (cadr (quote-module-name)) (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
                       (current-command-line-arguments)
