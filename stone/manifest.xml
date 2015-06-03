@@ -5,6 +5,7 @@
 (require setup/dirs)
 (require xml)
 
+(define name (format "network/~a" (current-digimon)))
 (define exec (format "~a/~a.rkt realize" (digimon-digivice) (current-digimon)))
 (define PATH (format "~a:/sbin:/usr/sbin:/bin:/usr/bin" (find-console-bin-dir)))
 (define instance `{instance {[name ,(current-digimon)] [enabled "true"]}
@@ -18,7 +19,8 @@
                                          {method_context {method_environment {envvar {[name "PATH"] [value ,PATH]}}}}}
                             {exec_method {[type "method"] [name "stop"] [exec ":kill -TERM"] [timeout_seconds "60"]}}
                             {exec_method {[type "method"] [name "refresh"] [exec ":kill -HUP"] [timeout_seconds "60"]}}
-                            {template {common_name {loctext {[xml:lang "C"]} "Sakuyamon the Lightweight HTTP Server"}}
+                            {template {common_name {loctext {[xml:lang "C"]} ,(info-ref 'collection)}}
+                                      {description {loctext {[xml:lang "C"]} ,(info-ref 'pkg-desc)}}
                                       {documentation {doc_link {[name "gyoudmon.org"]
                                                                 [uri ,(format "http://gyoudmon.org/~~wargrey:~a"
                                                                               (current-digimon))]}}}}})
@@ -29,9 +31,8 @@
                                               (external-dtd/system "/usr/share/lib/xml/dtd/service_bundle.dtd.1")
                                               #false)
                                null)
-                       (xexpr->xml (list 'service_bundle `{[name ,(format "GYDM~a" (current-digimon))]
-                                                           [type "manifest"]}
-                                         (list 'service '{[name "network/http"] [type "service"] [version "1"]}
+                       (xexpr->xml (list 'service_bundle `{[name ,name] [type "manifest"]}
+                                         (list 'service `{[name ,name] [type "service"] [version "1"]}
                                                (list 'stability "Evolving")
                                                instance)))
                        null)))
