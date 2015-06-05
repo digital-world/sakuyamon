@@ -86,16 +86,16 @@ HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in th
 
 @chunk[|<testcase: authentication>|
        (let ([rpath (rhtdocs .realm-path)])
-         (test-case (format "200: guest@::1:~a" type)
+         (test-case (format "200|503: guest@::1:~a" type)
                     (match-let ([{list status reason _ _} (curl "--location" rpath)])
-                      (check-eq? status 200 reason)))
-         (test-case (format "401: guest@127:~a" type)
+                      (check-eq? status (if root? 503 200) reason)))
+         (test-case (format "401|503: guest@127:~a" type)
                     (match-let ([{list status reason _ _} (127.curl "--location" rpath)])
-                      (check-eq? status 401 reason)))
-         (test-case (format "200: wargrey@127:~a" type)
+                      (check-eq? status (if root? 503 401) reason)))
+         (test-case (format "200|503: wargrey@127:~a" type)
                     (match-let ([{list status reason _ _} (127.curl "--location" "--anyauth"
                                                                     "-u" "wargrey:gyoudmon" rpath)])
-                      (check-eq? status 200 reason))))]
+                      (check-eq? status (if root? 503 200) reason))))]
 
 By the way, users can custom @hyperlink["http://en.wikipedia.org/wiki/HTTP_404"]{404 pages} by putting a
 @litchar{404.html} in their own @racket[racket-stone].
@@ -172,17 +172,19 @@ since the @itech{.realm.rktd} is checked every request.
            |<testsuite: basic access authentication>|)}]
 
 @chunk[|<authenticate: setup and teardown>|
-       #:before (thunk (let ([.realm.dtkr (path-replace-suffix .realm.rktd ".dtkr")])
-                         (for-each make-directory* (list (path-only .realm.rktd) (lhtdocs)))
-                         (when (file-exists? .realm.rktd)
-                           (rename-file-or-directory .realm.rktd .realm.dtkr))
-                         (if (symbol=? type 'digest)
-                             (with-output-to-file .realm.rktd #:exists 'replace
-                               (thunk (parameterize ([exit-handler void])
-                                        (sakuyamon "realm" realm.rktd))))
-                             (copy-file realm.rktd .realm.rktd #true))
-                         (copy-file .realm.rktd (lhtdocs .realm-path))))
-       #:after (thunk (let ([.realm.dtkr (path-replace-suffix .realm.rktd ".dtkr")])
-                        (for-each delete-file (list .realm.rktd (lhtdocs .realm-path)))
-                        (when (file-exists? .realm.dtkr)
-                          (rename-file-or-directory .realm.dtkr .realm.rktd))))]
+       #:before (thunk (unless root?
+                         (let ([.realm.dtkr (path-replace-suffix .realm.rktd ".dtkr")])
+                           (for-each make-directory* (list (path-only .realm.rktd) (lhtdocs)))
+                           (when (file-exists? .realm.rktd)
+                             (rename-file-or-directory .realm.rktd .realm.dtkr))
+                           (if (symbol=? type 'digest)
+                               (with-output-to-file .realm.rktd #:exists 'replace
+                                 (thunk (parameterize ([exit-handler void])
+                                          (sakuyamon "realm" realm.rktd))))
+                               (copy-file realm.rktd .realm.rktd #true))
+                           (copy-file .realm.rktd (lhtdocs .realm-path)))))
+       #:after (thunk (unless root?
+                        (let ([.realm.dtkr (path-replace-suffix .realm.rktd ".dtkr")])
+                          (for-each delete-file (list .realm.rktd (lhtdocs .realm-path)))
+                          (when (file-exists? .realm.dtkr)
+                            (rename-file-or-directory .realm.dtkr .realm.rktd)))))]

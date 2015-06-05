@@ -40,15 +40,15 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >           - 💚 1 - 200: /~wargrey/d-arc/refresh-servlet@::1
 >           - 💚 2 - 403: /~wargrey/d-arc/refresh-servlet@127
 >         + 📑Digest Authentication
->           - 💚 1 - 200: guest@::1:digest
->           - 💚 2 - 401: guest@127:digest
->           - 💚 3 - 200: wargrey@127:digest
+>           - 💚 1 - 200|503: guest@::1:digest
+>           - 💚 2 - 401|503: guest@127:digest
+>           - 💚 3 - 200|503: wargrey@127:digest
 >       + 📑Per-Digimon Terminus
 >         - 💚 1 - HTTP OPTIONS
 >         + 📑Basic Authentication
->           - 💚 1 - 200: guest@::1:basic
->           - 💚 2 - 401: guest@127:basic
->           - 💚 3 - 200: wargrey@127:basic
+>           - 💚 1 - 200|503: guest@::1:basic
+>           - 💚 2 - 401|503: guest@127:basic
+>           - 💚 3 - 200|503: wargrey@127:basic
 >     + 📖
 [seo.rkt](http://gyoudmon.org/~wargrey:sakuyamon/seo.rkt)
 >       + 📑/robots.txt

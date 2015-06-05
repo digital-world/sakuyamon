@@ -21,6 +21,9 @@
 (provide (all-from-out "../../DigiGnome/digitama/tamer.rkt"))
 (provide (all-from-out net/head net/base64 net/http-client web-server/http web-server/test))
 
+(define root? (string=? (current-tamer) "root"))
+(define realm.rktd (path->string (build-path (digimon-stone) "realm.rktd")))
+
 (define /htdocs (curry format "/~a"))
 (define /tamer (curry format "/~~~a/~a" (current-tamer)))
 (define /digimon (curry format "/~~~a:~a/~a" (current-tamer) (current-digimon)))
@@ -28,8 +31,6 @@
 (define ~htdocs (curry build-path (digimon-terminus)))
 (define ~tamer (curry build-path (expand-user-path (format "~~~a" (current-tamer))) "DigitalWorld" "Kuzuhamon" "terminus"))
 (define ~digimon (curry build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook"))
-
-(define realm.rktd (path->string (build-path (digimon-stone) "realm.rktd")))
 
 (define sakuyamon-agent
   (lambda [ssl? port host . arglist]
@@ -119,7 +120,7 @@
 
 
 (define tamer-errmsg (make-parameter #false))
-(define tamer-port (if (string=? (current-tamer) "root") 80 16180))
+(define tamer-port (if root? 80 16180))
 (define curl (curry sakuyamon-agent #false tamer-port "::1"))
 (define 127.curl (curry sakuyamon-agent #false tamer-port "127.0.0.1"))
 
