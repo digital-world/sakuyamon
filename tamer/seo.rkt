@@ -17,7 +17,6 @@ are @litchar{default.rkt} and @litchar{index.html}, respectively.
 @chunk[|<seo taming start>|
        (require "tamer.rkt")
        (tamer-taming-start)
-       (define-values {shutdown curl 127.curl} (sakuyamon-realize))
        |<seo:*>|]
 
 @handbook-scenario{Robots Exclusion Protocol}
@@ -61,16 +60,13 @@ The rendered @litchar{*.html}s will be placed within directories that up to 2 de
 @handbook-appendix{SEO Auxiliaries}
 
 @chunk[|<seo:*>|
-       {module+ main (call-as-normal-termination tamer-prove)}
-       {module+ story
+       (module+ main (call-as-normal-termination tamer-prove))
+       (module+ story
          (define-tamer-suite robots.txt "/robots.txt"
-           |<seo: check #:before>|
+           #:before (check-ready? 'robots.txt)
            |<testcase: robots.txt>|)
          
          (define-tamer-suite redirections "Server Side Redirections"
-           |<seo: check #:before>| #:after {λ _ (shutdown)}
+           #:before (check-ready? 'redirections)
            (test-suite "dir -> dir/" |<testcase: dir to dir/>|)
-           (test-suite "rkt -> html" |<testcase: rkt to html>|))}]
-
-@chunk[|<seo: check #:before>|
-       #:before {λ _ (when (string? 127.curl) (raise-result-error 'realize "procedure?" 127.curl))}]
+           (test-suite "rkt -> html" |<testcase: rkt to html>|)))]

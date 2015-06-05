@@ -14,7 +14,6 @@ nonetheless, we can always choose to make things interesting.
 @chunk[|<security taming start>|
        (require "tamer.rkt")
        (tamer-taming-start)
-       (define-values {shutdown curl 127.curl} (sakuyamon-realize))
        |<security:*>|]
 
 @handbook-scenario{Would you like a cup of tea?}
@@ -38,8 +37,5 @@ then enjoy it yourself!
        {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
          (define-tamer-suite I-am-a-teapot "Bad Users"
-           |<security: check #:before>| #:after {λ _ (shutdown)}
+           #:before (check-ready? 'teapot)
            |<testcase: I-am-a-teapot>|)}]
-
-@chunk[|<security: check #:before>|
-       #:before {λ _ (when (string? 127.curl) (raise-result-error 'realize "procedure?" 127.curl))}]

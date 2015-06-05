@@ -22,8 +22,7 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >     + 📖
 [sakuyamon.rkt](http://gyoudmon.org/~wargrey:sakuyamon/sakuyamon.rkt)
 >       + 📑Sakuyamon, Realize!
->         - 💚 1 - realize --port 8443 \[fresh\]
->         - 💚 2 - realize --port 8443 \[already in use\]
+>         - 💚 1 - realize?
 >       + 📑Keep Realms Safe!
 >         - 💚 1 - realm --in-place
 >     + 📖
@@ -69,4 +68,4 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >       + 📑Bad Users
 >         - 💚 1 - 418: ../tamer/.realm.rktd
 >
-> 📌27 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌26 examples, 0 failures, 0 errors, 100.00% Okay.

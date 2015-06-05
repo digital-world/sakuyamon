@@ -14,8 +14,7 @@ that serves 3 types of @deftech[#:key "terminus"]{termini}, or @deftech{htdocs}.
 
 @chunk[|<dispatch taming start>|
        (require "tamer.rkt")
-       (tamer-taming-start)       
-       (define-values {shutdown curl 127.curl} (sakuyamon-realize))
+       (tamer-taming-start)
        |<dispatch:*>|]
 
 @para[#:style "GYDMWarning"]{For @hyperlink["http://en.wikipedia.org/wiki/Localhost"]{loopback addresses},
@@ -59,7 +58,7 @@ if they organize it as a @hyperlink["https://github.com/digital-world/DigiGnome#
 called @deftech{Kuzuhamon}. The first @italic{path element} of URL always has the shape of @litchar{~username}
 and the rest parts are relative to its own @racket[digimon-terminus]s.
 
-@tamer-note['dispatch-user]
+@tamer-note['dispatch-tamer]
 
 @chunk[|<testcase: dispatch tamer>|
        (test-case "HTTP OPTIONS"
@@ -70,7 +69,7 @@ and the rest parts are relative to its own @racket[digimon-terminus]s.
 Note that @itech{Per-Tamer Terminus} does support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].
 So users should be responsible for their own @itech{function URL}s.
 
-@chunk[|<testcase: dispatch-user-funtion-URLs>|
+@chunk[|<testcase: dispatch-tamer-funtion-URLs>|
        (for ([d-arc (in-list (list "d-arc/refresh-servlet"))])
          (let ([rhtdocs /tamer]) |<check: function url>|))]
 
@@ -157,36 +156,33 @@ since the @itech{.realm.rktd} is checked every request.
                              (dynamic-require (build-path (digimon-digivice) "sakuyamon.rkt") 'main)))
          
          (define-tamer-suite dispatch-main "Main Terminus"
-           |<dispatch: check #:before>|
+           #:before (check-ready? 'dispath-main)
            |<testcase: dispatch main>|
            (test-suite "Function URLs" |<testcase: dispatch funtion URLs>|))
 
-         (define-tamer-suite dispatch-user "Per-Tamer Terminus"
-           |<dispatch: check #:before>|
+         (define-tamer-suite dispatch-tamer "Per-Tamer Terminus"
+           #:before (check-ready? 'dispath-tamer)
            |<testcase: dispatch tamer>|
-           (list (test-suite "Function URLs" |<testcase: dispatch-user-funtion-URLs>|)
+           (list (test-suite "Function URLs" |<testcase: dispatch-tamer-funtion-URLs>|)
                  |<testsuite: digest access authentication>|))
 
          (define-tamer-suite dispatch-digimon "Per-Digimon Terminus"
-           |<dispatch: check #:before>| #:after {λ _ (shutdown)}
+           #:before (check-ready? 'dispath-digimon)
            |<testcase: dispatch digimon>|
            |<testsuite: basic access authentication>|)}]
 
-@chunk[|<dispatch: check #:before>|
-       #:before {λ _ (when (string? 127.curl) (raise-result-error 'realize "procedure?" 127.curl))}]
-
 @chunk[|<authenticate: setup and teardown>|
-       #:before {λ _ (let ([.realm.dtkr (path-replace-suffix .realm.rktd ".dtkr")])
-                       (for-each make-directory* (list (path-only .realm.rktd) (lhtdocs)))
-                       (when (file-exists? .realm.rktd)
-                         (rename-file-or-directory .realm.rktd .realm.dtkr))
-                       (if (symbol=? type 'digest)
-                           (with-output-to-file .realm.rktd #:exists 'replace
-                             {λ _ (parameterize ([exit-handler void])
-                                    (sakuyamon "realm" realm.rktd))})
-                           (copy-file realm.rktd .realm.rktd #true))
-                       (copy-file .realm.rktd (lhtdocs .realm-path)))}
-       #:after {λ _ (let ([.realm.dtkr (path-replace-suffix .realm.rktd ".dtkr")])
-                      (for-each delete-file (list .realm.rktd (lhtdocs .realm-path)))
-                      (when (file-exists? .realm.dtkr)
-                        (rename-file-or-directory .realm.dtkr .realm.rktd)))}]
+       #:before (thunk (let ([.realm.dtkr (path-replace-suffix .realm.rktd ".dtkr")])
+                         (for-each make-directory* (list (path-only .realm.rktd) (lhtdocs)))
+                         (when (file-exists? .realm.rktd)
+                           (rename-file-or-directory .realm.rktd .realm.dtkr))
+                         (if (symbol=? type 'digest)
+                             (with-output-to-file .realm.rktd #:exists 'replace
+                               (thunk (parameterize ([exit-handler void])
+                                        (sakuyamon "realm" realm.rktd))))
+                             (copy-file realm.rktd .realm.rktd #true))
+                         (copy-file .realm.rktd (lhtdocs .realm-path))))
+       #:after (thunk (let ([.realm.dtkr (path-replace-suffix .realm.rktd ".dtkr")])
+                        (for-each delete-file (list .realm.rktd (lhtdocs .realm-path)))
+                        (when (file-exists? .realm.dtkr)
+                          (rename-file-or-directory .realm.dtkr .realm.rktd))))]

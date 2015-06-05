@@ -4,7 +4,7 @@
 
 (define desc "Launch the Web Server with Listening All Addresses")
 
-{module+ sakuyamon
+(module+ sakuyamon
   (require racket/unit)
   (require racket/path)
   (require racket/string)
@@ -28,15 +28,27 @@
   (require "../../digitama/dispatch.rkt")
   (require "../../digitama/posix.rkt")
 
-  (define syslog-perror
-    {lambda [severity maybe . argl]
-      (define message (apply format maybe argl))
-      (define topic 'realize)
-      (unless (port-closed? (current-output-port))
-        (case severity
-          [{notice} (printf "~a: ~a~n" topic message)]
-          [else (eprintf "~a: ~a~n" topic message)]))
-      (rsyslog (severity.c severity) topic message)})
+  (define {syslog-perror severity maybe . argl}
+    (define message (apply format maybe argl))
+    (define topic 'realize)
+    (unless (port-closed? (current-output-port))
+      (case severity
+        [{notice} (printf "~a: ~a~n" topic message)]
+        [else (eprintf "~a: ~a~n" topic message)]))
+    (rsyslog (severity.c severity) topic message))
+
+
+  (define {exit-with-eperm tips no}
+    (syslog-perror 'error "~a error: ~a; errno=~a" tips (strerror no) no)
+    (exit 'EPERM))
+
+  (define {signal-handler signal}
+    (unless (port-closed? (current-output-port)) (newline))
+    (syslog-perror 'notice "terminated by ~a."
+                   (cond [(exn:break:hang-up? signal) 'SIGHUP]
+                         [(exn:break:terminate? signal) 'SIGTERM]
+                         [else 'SIGINT]))
+    (when (exn:break:hang-up? signal) (raise signal)))
   
   (define {serve-forever}
     (define-compound-unit sakuyamon@
@@ -48,8 +60,6 @@
     (define-values/invoke-unit/infer sakuyamon@)
 
     (define root? (zero? (getuid)))
-    (define exit-with-eperm {λ [tips no] (exit ({λ _ 'EPERM} (syslog-perror 'error "~a error: ~a; errno=~a" tips (strerror no) no)))})
-
     (unless (zero? (seteuid (getuid))) (exit-with-eperm 'regain-uid (saved-errno)))
     (unless (zero? (setegid (getgid))) (exit-with-eperm 'regain-gid (saved-errno)))
     (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
@@ -63,25 +73,19 @@
       (syslog-perror 'error (exn-message confirmation))
       (exit 'FATAL))
 
-    (dynamic-wind {λ _ (void)}
-                  {λ _ (with-handlers ([exn:break? {λ [signal] (void (unless (port-closed? (current-output-port)) (newline))
-                                                                     (syslog-perror 'notice "terminated by ~a."
-                                                                                    (cond [(exn:break:hang-up? signal) 'SIGHUP]
-                                                                                          [(exn:break:terminate? signal) 'SIGTERM]
-                                                                                          [else 'SIGINT]))
-                                                                     (when (exn:break:hang-up? signal) (raise signal)))}])
-                         (when root?
-                           ;;; if change uid first, then gid cannot be changed again.
-                           (unless (zero? (setegid gid)) (exit-with-eperm 'drop-gid (saved-errno)))
-                           (unless (zero? (seteuid uid)) (exit-with-eperm 'drop-uid (saved-errno))))
-                         (when (zero? (geteuid))
-                           (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!")
-                           (exit 'ECONFIG))
-                         (syslog-perror 'notice "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
-                         (when (place-channel? (tamer-pipe)) ;;; for testing
-                           (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
-                         (do-not-return))}
-                  {λ _ (shutdown)}))
+    ((λ [fv] (dynamic-wind void fv shutdown))
+     (thunk (with-handlers ([exn:break? signal-handler])
+              (when root?
+                ;;; if change uid first, then gid cannot be changed again.
+                (unless (zero? (setegid gid)) (exit-with-eperm 'drop-gid (saved-errno)))
+                (unless (zero? (seteuid uid)) (exit-with-eperm 'drop-uid (saved-errno))))
+              (when (zero? (geteuid))
+                (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!")
+                (exit 'ECONFIG))
+              (syslog-perror 'notice "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
+              (when (place-channel? (tamer-pipe)) ;;; for testing
+                (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
+              (do-not-return)))))
 
   (parse-command-line (format "~a ~a" (cadr (quote-module-name)) (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
                       (current-command-line-arguments)
@@ -95,10 +99,11 @@
                                    [{"--SSL"} ,{λ [flag] (sakuyamon-ssl? #true)} {"Enable SSL with 443 as default port."}]
                                    [{"--TAMER"} ,{λ [flag] (sakuyamon-tamer-terminus? #true)} {"Enable Per-Tamer Terminus."}]
                                    [{"--DIGIMON"} ,{λ [flag] (sakuyamon-digimon-terminus? #true)} {"Enable Per-Digimon Terminus."}]}}
-                      {λ [!] (serve-forever)} null
-                      (compose1 exit display (curryr string-replace #px"  -- : .+?-h --'\\s*" "")))}
+                      {λ [!] (serve-forever)}
+                      null
+                      (compose1 exit display (curryr string-replace #px"  -- : .+?-h --'\\s*" ""))))
 
-{module digitama racket/base
+(module digitama racket/base
   (provide (all-defined-out))
 
-  (define tamer-pipe (make-parameter #false))}
+  (define tamer-pipe (make-parameter #false)))

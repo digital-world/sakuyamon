@@ -16,50 +16,35 @@ in order to make sure we could talk with the @itech{digimon}s as expected.
        (require "tamer.rkt")
        (tamer-taming-start)
 
-       (define sakuyamon (parameterize ([current-command-line-arguments (vector)]
-                                        [current-output-port /dev/null]
-                                        [current-error-port /dev/null]
-                                        [exit-handler void])
-                           (dynamic-require (build-path (digimon-digivice) "sakuyamon.rkt") 'main)))
+       (define sakuyamon
+         (parameterize ([current-command-line-arguments (vector)]
+                        [current-output-port /dev/null]
+                        [current-error-port /dev/null]
+                        [exit-handler void])
+           (dynamic-require (build-path (digimon-digivice) "sakuyamon.rkt") 'main)))
        
        |<sakuyamon:*>|]
 
+@tamer-action[(parameterize ([exit-handler void])
+                (sakuyamon "help"))]
+
 @handbook-scenario{Sakuyamon, Realize!}
 
-Once @itech{sakuyamon} has realized she would keep doing her duty before @racketidfont{shutdown}ing manually.
-All the options are designed for taming rather than real world surviving, so the default port is @racket[0]
-which means she can always be talked with via @racketidfont{curl} as long as she@literal{'}s ready.
-
-@tamer-action[(define {realize-with-flush . arglist}
-                (call-with-values {λ _ (apply sakuyamon-realize arglist)}
-                                  {λ [shutdown /maybe/stdout /maybe/stderr]
-                                    (let ([$? (shutdown)])
-                                      (when (string? /maybe/stdout)
-                                        (cond [(zero? $?) (printf "~a~n" /maybe/stdout)]
-                                              [else (eprintf "~a~n" /maybe/stderr)])))}))
-              (realize-with-flush "--help")
-              (realize-with-flush "--SSL")
+@tamer-action[(parameterize ([exit-handler void])
+                (sakuyamon "realize" "--help"))
+              (parameterize ([exit-handler void])
+                (sakuyamon "realize" "--SSL"))
               (code:comment @#,t{@hyperlink["https://letsencrypt.org"]{@racketcommentfont{Let@literal{'}s Encrypt}} is a kind of service})
               (code:comment @#,t{that allow administrator enabling HTTPS esaily, freely and automatically.})]
 
-As usual @racket[sakuyamon-realize] itself should be checked first:
+@itech{Sakuyamon} herself is designed as a daemon, hence the taming strategy is following this fact.
+If the @itech{tamer} is @italic{root}, she will not realize automatically since she should have already been deloyed
+and listen on port @racket[80], otherwise she will realize and listen on port @racket[16180] during the taming process.
 
 @tamer-note['realize]
 @chunk[|<testcase: realize>|
-       (let*-values ([{shutdown ::1.sendrecv 127.sendrecv} (sakuyamon-realize "-p" "8443")]
-                     [{shutdown=>errno stdout stderr} (sakuyamon-realize "-p" "8443")]
-                     [{shutdown ::1.curl 127.curl} (and (shutdown) (sakuyamon-realize "-p" "8443"))])
-         (test-spec "realize --port 8443 [fresh]"
-                    (let ([$? (shutdown)])
-                      (check-pred procedure? 127.sendrecv)
-                      (check-pred procedure? 127.curl)
-                      (check-pred zero? $?)))
-         (test-spec "realize --port 8443 [already in use]"
-                    (let ([$? (shutdown=>errno)])
-                      (check-pred string? stderr)
-                      (check-pred positive? $?)
-                      (check-regexp-match #px"errno=(48|125)" stderr))))]
-
+       (test-spec "realize?" (check-not-exn (check-ready? 'realize)))]
+ 
 @handbook-scenario{Keep Realms Safe!}
 
 Apart from heavy-weight authentication solutions implemented by website developers on their own,
@@ -88,22 +73,22 @@ Note that @exec{realm} will do nothing for those passwords that have already bee
        (let-values ([{realm.dtkr} (path->string (path-replace-suffix realm.rktd ".dtkr"))]
                     [{digest-in digest-out} (make-pipe #false 'digest-in 'digest-out)])
          (test-spec "realm --in-place"
-                    #:before {λ _ (copy-file realm.rktd realm.dtkr)}
-                    #:after {λ _ (delete-file realm.dtkr)}
+                    #:before (thunk (copy-file realm.rktd realm.dtkr))
+                    #:after (thunk (delete-file realm.dtkr))
                     (parameterize ([current-output-port digest-out]
                                    [current-error-port digest-out])
                       (check-equal? (parameterize ([exit-handler void])
-                                      (thread {λ _ (sakuyamon "realm" realm.dtkr)})
+                                      (thread (thunk (sakuyamon "realm" realm.dtkr)))
                                       (read digest-in))
                                     (parameterize ([exit-handler void])
-                                      (thread {λ _ (and (sakuyamon "realm" "--in-place" realm.dtkr)
-                                                        (sakuyamon "realm" realm.dtkr))})
+                                      (thread (thunk (and (sakuyamon "realm" "--in-place" realm.dtkr)
+                                                          (sakuyamon "realm" realm.dtkr))))
                                       (read digest-in))))))]
 
 @handbook-appendix[]
 
 @chunk[|<sakuyamon:*>|
-       {module+ main (call-as-normal-termination tamer-prove)}
-       {module+ story
+       (module+ main (call-as-normal-termination tamer-prove))
+       (module+ story
          (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)
-         (define-tamer-suite realm "Keep Realms Safe!" |<testcsae: realm in-place>|)}]
+         (define-tamer-suite realm "Keep Realms Safe!" |<testcsae: realm in-place>|))]
