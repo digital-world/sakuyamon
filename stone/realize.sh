@@ -1,7 +1,7 @@
 #!/bin/sh
 
 svcadm_restart() {
-    svcs sakuyamon >/dev/null 2>&1 || svcadm disable sakuyamon:default;
+    svcs sakuyamon >/dev/null 2>&1 && svcadm disable sakuyamon:default;
     svccfg import -V $1 || exit 1;
     if test "`svcs -H -o state sakuyamon:default`" != "online"; then
         svcadm enable sakuyamon:default;
@@ -10,7 +10,13 @@ svcadm_restart() {
 
 launchctl_restart() {
     pkill -HUP -u `id -u tamer`;
-    test $0 -eq 0 || launchctl load $1;
+    test $? -eq 0 || launchctl load $1;
+}
+
+smf_daemonize() {
+    # this function works as the daemon start method in Solaris
+    # $1 maight be the tamer/tamer.rkt
+    racket $1;
 }
 
 case "$1" in
@@ -19,6 +25,9 @@ case "$1" in
         ;;
     macosx)
         launchctl_restart $2;
+        ;;
+    method)
+        smf_daemonize $2;
         ;;
     *)
         false;

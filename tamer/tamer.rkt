@@ -4,14 +4,11 @@
 @require{../digitama/digicore.rkt}
 @require{../../DigiGnome/digitama/tamer.rkt}
 
-(require (submod "../digivice/sakuyamon/realize.rkt" digitama))
-
 (require file/md5)
 (require net/head)
 (require net/base64)
 (require net/http-client)
 (require web-server/http)
-(require web-server/test)
 
 (require setup/dirs)
 (require syntax/location)
@@ -19,9 +16,10 @@
 (provide (all-defined-out))
 (provide (all-from-out "../digitama/digicore.rkt"))
 (provide (all-from-out "../../DigiGnome/digitama/tamer.rkt"))
-(provide (all-from-out net/head net/base64 net/http-client web-server/http web-server/test))
+(provide (all-from-out net/head net/base64 net/http-client web-server/http))
 
 (define root? (string=? (current-tamer) "root"))
+(define smf-daemon? (getenv "SMF_METHOD"))
 (define realm.rktd (path->string (build-path (digimon-stone) "realm.rktd")))
 
 (define /htdocs (curry format "/~a"))
@@ -134,15 +132,16 @@
            (curl "-X" "Options" (~a "/" tips)))))
 
 (parameterize ([current-custodian (make-custodian)]
-               [current-subprocess-custodian-mode 'interrupt])
+               [current-subprocess-custodian-mode (if smf-daemon? #false 'interrupt)])
   (plumber-add-flush! (current-plumber) (λ [this] (custodian-shutdown-all (current-custodian))))
   ;;; These code will be evaluated in a flexibility way.
   ; * compile one file
   ; * compile multi files
   ; * run standalone
   ; * run as scribble
-  ;;; In any situation, it will run and only run once.
-  (define {fork-unless-ready efne}
+  ;;; In any situation, it will fork and only fork once.
+  
+  (define {try-fork efne}
     (define {raise-unless-ready efne}
       (define errno (car (exn:fail:network:errno-errno efne)))
       (unless (eq? errno 146) (raise efne)))
@@ -155,21 +154,16 @@
                   (format "~a/~a.rkt" (digimon-digivice) (current-digimon))
                   "realize" "-p" (number->string tamer-port)))
 
-    (let rewaiting ([times 0])
-      (with-handlers ([exn:break? (λ [eb] (subprocess-kill sakuyamon 'interrupt))])
-        (define {wait-if-running efne}
-          (raise-unless-ready efne)
-          (match (sync/timeout/enable-break 0.256 sakuyamon /dev/errin)
-            [#false (when (< times 8) (rewaiting (add1 times)))]
-            [_ (let ([errmsg (port->string /dev/errin)])
-                 (unless (regexp-match? #px"^\\s*$" errmsg)
-                   (tamer-errmsg errmsg)))]))
-        (with-handlers ([exn:fail:network:errno? wait-if-running])
-          ((check-ready? 'forking))))))
+    (with-handlers ([exn:break? (compose1 (curry subprocess-kill sakuyamon) (const 'interrupt))])
+      (unless (sync/enable-break /dev/outin (wrap-evt sakuyamon (const #false)))
+        (tamer-errmsg (port->string /dev/errin))))
+
+    ;;; has already forked as Solaris SMF daemon
+    (when smf-daemon? (exit (subprocess-status sakuyamon))))
 
   ;;; to make the drracket background expansion happy
   (unless (regexp-match? #px#"drracket$" (find-system-path 'run-file))
-    (unless root? ;;; test for the deployed one
-      (with-handlers ([exn:fail:network:errno? fork-unless-ready])
+    (when (or smf-daemon? (not root?)) ;;; test for the deployed one
+      (with-handlers ([exn:fail:network:errno? try-fork])
         ((check-ready? (quote-source-file))))))
   (void))

@@ -28,12 +28,14 @@
 
 (provide sakuyamon-tcp@ sakuyamon-config@)
 
-(define sakuyamon-tcp@ (lazy (cond [(false? (sakuyamon-ssl?)) tcp@]
-                                   [else (let ([sakuyamon.crt (build-path (digimon-stone) (format "~a.crt" (current-digimon)))]
-                                               [sakuyamon.key (build-path (digimon-stone) (format "~a.key" (current-digimon)))])
-                                           (unless (andmap file-readable? (list sakuyamon.crt sakuyamon.key))
-                                             (error 'sakuyamon "Please be patient, the age of plaintext transmission is almost over!"))
-                                           (make-ssl-tcp@ sakuyamon.crt sakuyamon.key #f #f #f #f #f))])))
+(define sakuyamon-tcp@
+  (lazy (cond [(false? (sakuyamon-ssl?)) tcp@]
+              [else (let ([sakuyamon.crt (build-path (digimon-stone) (format "~a.crt" (current-digimon)))]
+                          [sakuyamon.key (build-path (digimon-stone) (format "~a.key" (current-digimon)))])
+                      (unless (andmap file-readable? (list sakuyamon.crt sakuyamon.key))
+                        (eprintf "~a: Please be patient, the age of plaintext transmission is almost over!~n" (current-digimon))
+                        (exit 'ECONFIG))
+                      (make-ssl-tcp@ sakuyamon.crt sakuyamon.key #f #f #f #f #f))])))
 
 (define sakuyamon-config@
   {unit (import)

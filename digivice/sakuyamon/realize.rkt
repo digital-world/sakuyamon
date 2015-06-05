@@ -22,8 +22,6 @@
   (require web-server/private/dispatch-server-sig)
   (require web-server/private/dispatch-server-unit)
 
-  (require (submod ".." digitama))
-  
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/dispatch.rkt")
   (require "../../digitama/posix.rkt")
@@ -33,7 +31,8 @@
     (define topic 'realize)
     (unless (port-closed? (current-output-port))
       (case severity
-        [{notice} (printf "~a: ~a~n" topic message)]
+        [{notice} (and (printf "~a: ~a~n" topic message)
+                       (flush-output))]
         [else (eprintf "~a: ~a~n" topic message)]))
     (rsyslog (severity.c severity) topic message))
 
@@ -83,8 +82,6 @@
                 (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!")
                 (exit 'ECONFIG))
               (syslog-perror 'notice "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
-              (when (place-channel? (tamer-pipe)) ;;; for testing
-                (place-channel-put (tamer-pipe) (list (sakuyamon-ssl?) confirmation)))
               (do-not-return)))))
 
   (parse-command-line (format "~a ~a" (cadr (quote-module-name)) (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
@@ -102,8 +99,3 @@
                       {λ [!] (serve-forever)}
                       null
                       (compose1 exit display (curryr string-replace #px"  -- : .+?-h --'\\s*" ""))))
-
-(module digitama racket/base
-  (provide (all-defined-out))
-
-  (define tamer-pipe (make-parameter #false)))
