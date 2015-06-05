@@ -169,6 +169,7 @@
 
   ;;; to make the drracket background expansion happy
   (unless (regexp-match? #px#"drracket$" (find-system-path 'run-file))
-    (with-handlers ([exn:fail:network:errno? fork-unless-ready])
-      ((check-ready? (quote-source-file)))))
+    (unless root? ;;; test for the deployed one
+      (with-handlers ([exn:fail:network:errno? fork-unless-ready])
+        ((check-ready? (quote-source-file))))))
   (void))
