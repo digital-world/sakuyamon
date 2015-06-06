@@ -81,7 +81,7 @@
               (when (zero? (geteuid))
                 (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!")
                 (exit 'ECONFIG))
-              (syslog-perror 'notice "listen on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
+              (syslog-perror 'notice "listening on ~a ~a SSL." confirmation (if (sakuyamon-ssl?) "with" "without"))
               (do-not-return)))))
 
   (parse-command-line (format "~a ~a" (cadr (quote-module-name)) (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
