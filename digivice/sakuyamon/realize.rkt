@@ -29,7 +29,7 @@
   (define {syslog-perror severity maybe . argl}
     (define message (apply format maybe argl))
     (define topic 'realize)
-    (unless (port-closed? (current-output-port))
+    (with-handlers ([exn:fail? void]) ;;; maybe broken pipe or closed port
       (case severity
         [{notice} (and (printf "~a: ~a~n" topic message)
                        (flush-output))]

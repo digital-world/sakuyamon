@@ -13,21 +13,12 @@ launchctl_restart() {
     test $? -eq 0 || launchctl load $1;
 }
 
-smf_daemonize() {
-    # this function works as the daemon start method in Solaris
-    # $1 maight be the tamer/tamer.rkt
-    racket $1;
-}
-
 case "$1" in
     solaris)
         svcadm_restart $2;
         ;;
     macosx)
         launchctl_restart $2;
-        ;;
-    method)
-        smf_daemonize $2;
         ;;
     *)
         false;

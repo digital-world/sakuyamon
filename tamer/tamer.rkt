@@ -1,6 +1,10 @@
+#|
+# also works as solaris smf method script
+exec racket --require "$0"
+|#
+
 #lang at-exp racket/base
 
-;;; To force makefile.rkt counting the required file
 @require{../digitama/digicore.rkt}
 @require{../../DigiGnome/digitama/tamer.rkt}
 
@@ -139,7 +143,7 @@
   ; * compile multi files
   ; * run standalone
   ; * run as scribble
-  ;;; In any situation, it will fork and only fork once.
+  ;;; In all situations, it will fork and only fork once.
   
   (define {try-fork efne}
     (define {raise-unless-ready efne}
@@ -156,14 +160,12 @@
 
     (with-handlers ([exn:break? (compose1 (curry subprocess-kill sakuyamon) (const 'interrupt))])
       (unless (sync/enable-break /dev/outin (wrap-evt sakuyamon (const #false)))
-        (tamer-errmsg (port->string /dev/errin))))
-
-    ;;; has already forked as Solaris SMF daemon
-    (when smf-daemon? (exit (subprocess-status sakuyamon))))
+        (tamer-errmsg (port->string /dev/errin))
+        (exit (subprocess-status sakuyamon)))))
 
   ;;; to make the drracket background expansion happy
   (unless (regexp-match? #px#"drracket$" (find-system-path 'run-file))
     (when (or smf-daemon? (not root?)) ;;; test for the deployed one
       (with-handlers ([exn:fail:network:errno? try-fork])
-        ((check-ready? (quote-source-file))))))
+        ((check-ready? (file-name-from-path (quote-source-file)))))))
   (void))
