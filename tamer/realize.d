@@ -13,6 +13,7 @@
 #pragma D option quiet
 
 int svc_startd;
+int sub_startd;
 
 dtrace:::BEGIN
 {
@@ -71,43 +72,44 @@ dtrace:::BEGIN
 /** initialize **/
 
 proc::cfork:create
-/ ppid == 1 /
+/ ppid == 1 && execname == "svc.startd" /
 { 
     /* svc.startd */
     svc_startd = args[0]->pr_ppid;
-    smf[args[0]->pr_pid] = 1;
-    smf[svc_startd] = 1;
+    sub_startd = args[0]->pr_pid;
+    smf[sub_startd, svc_startd] = 1;
+    smf[sub_startd, sub_startd] = 1;
 }
 
 proc::cfork:create
-/ smf[pid] == 1 /
+/ smf[sub_startd, pid] == 1 /
 {
     printf("%s[%d]: fork %s[%d:%d]: %s.\n", execname, pid, args[0]->pr_fname,
                                             args[0]->pr_pid, args[0]->pr_pgid,
                                             args[0]->pr_psargs);
-    smf[args[0]->pr_pid] = 1;
+    smf[sub_startd, args[0]->pr_pid] = 1;
 }
 
 /** monitor events and signals **/
 
 proc::exec_common:exec
-/ smf[pid] == 1 /
+/ smf[sub_startd, pid] == 1 /
 {
     printf("%s[%d]: exec %s.\n", execname, pid, args[0]);
 }
 
 proc::psig:signal-handle
-/ smf[pid] == 1 && arg0 != 11 /
+/ smf[sub_startd, pid] == 1 && arg0 != 11 /
 {
     /* filter out SIGSEGV */
     printf("%s[%d]: received SIG%s!\n", execname, pid, strsig[args[0]]);
 }
 
 proc::proc_exit:exit
-/ smf[pid] == 1 /
+/ smf[sub_startd, pid] == 1 /
 {
     printf("%s[%d]: exited because of %s!\n", execname, pid, strchld[args[0]]);
-    smf[pid] = 0;
+    smf[sub_startd, pid] = 0;
 }
 
 /** monitor syslog **/
