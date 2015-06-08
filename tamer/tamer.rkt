@@ -125,11 +125,12 @@ exec racket --require "$0"
 (define tamer-port (if root? 80 16180))
 (define curl (curry sakuyamon-agent #false tamer-port "::1"))
 (define 127.curl (curry sakuyamon-agent #false tamer-port "127.0.0.1"))
+(define ECONNREFUSED (case (digimon-system) [{solaris} 146] [{macosx} 61] [{linux} 111]))
 
 (define {check-ready? tips}
   (define {wrap-raise efne}
     (define errno (car (exn:fail:network:errno-errno efne)))
-    (raise (cond [(not (and (eq? errno 146) (tamer-errmsg))) efne]
+    (raise (cond [(not (and (eq? errno ECONNREFUSED) (tamer-errmsg))) efne]
                  [else (struct-copy exn:fail:network:errno efne
                                     [message #:parent exn (tamer-errmsg)])])))
   (thunk (with-handlers ([exn:fail:network:errno? wrap-raise])
@@ -148,7 +149,7 @@ exec racket --require "$0"
   (define {try-fork efne}
     (define {raise-unless-ready efne}
       (define errno (car (exn:fail:network:errno-errno efne)))
-      (unless (eq? errno 146) (raise efne)))
+      (unless (eq? errno ECONNREFUSED) (raise efne)))
 
     (raise-unless-ready efne)
     (unless (find-executable-path "racket")
