@@ -14,7 +14,7 @@
 (define sakuyamon.asl "/etc/asl/org.gyoudmon.sakuyamon")
 (define /stone/sakuyamon.asl (build-path (digimon-stone) "asld.conf"))
 
-(define sakuyamon.rsyslog "/etc/asl/org.gyoudmon.sakuyamon")
+(define sakuyamon.rsyslog "/etc/rsyslog.d/8-sakuyamon.conf")
 (define /stone/sakuyamon.rsyslog (build-path (digimon-stone) "rsyslog.conf"))
 
 (module+ premake
@@ -42,9 +42,9 @@
                                  (system "kill -s HUP `cat /var/run/syslog.pid`"))]
              [sakuyamon.rsyslog [/stone/sakuyamon.rsyslog (quote-source-file)]
                                 (and (sudo.make sakuyamon.rsyslog /stone/sakuyamon.rsyslog "root:root")
-                                     (system "kill -s HUP `cat /var/run/rsyslog.pid`"))])
+                                     (system "kill -s HUP `cat /var/run/rsyslogd.pid`"))])
             (case (digimon-system)
-              [{solaris} (list sakuyamon.smf)]
+              [{solaris} (list sakuyamon.smf sakuyamon.rsyslog)]
               [{macosx} (list sakuyamon.plist sakuyamon.asl)]))))
 
   (module+ clobber

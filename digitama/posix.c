@@ -88,7 +88,7 @@ exit_with_errno:
 void rsyslog(int priority, const char *topic, const char *message) {
     int facility;
 
-    if (getppid() == 1) {
+    if (getuid() == 0) { /* svc.startd's pid is 10 rather than 1 */
         facility = LOG_DAEMON;
     } else {
         facility = LOG_USER;

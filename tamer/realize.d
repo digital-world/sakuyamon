@@ -2,7 +2,6 @@
 
 /*
  * The original purpose is tracing solaris smf method,
- * It can be also used to monitoring syslog dynamically.
  *
  * TODO: Maybe BUGS?
  * Service is working, but keeps forking and exiting.
@@ -66,7 +65,7 @@ dtrace:::BEGIN
     strchld[5] = "CLD_STOPPED";
     strchld[6] = "CLD_CONTINUED";
 
-    printf("svc.startd: syslog monitor\n");
+    printf("svc.startd monitor\n");
 }
 
 /** initialize **/
@@ -110,14 +109,5 @@ proc::proc_exit:exit
 {
     printf("%s[%d]: exited because of %s!\n", execname, pid, strchld[args[0]]);
     smf[sub_startd, pid] = 0;
-}
-
-/** monitor syslog **/
-
-syscall::write:entry
-/ execname == "racket" && strlen(copyinstr(arg1)) > strlen("sakuyamon") /
-{
-    /* Also trace makefile.rkt */
-    printf("%s[%d]: %s", execname, pid, copyinstr(arg1));
 }
 
