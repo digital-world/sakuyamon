@@ -97,7 +97,7 @@ void rsyslog(int priority, const char *topic, const char *message) {
     
     openlog("sakuyamon", LOG_PID | LOG_CONS, facility);
     setlogmask(LOG_UPTO(LOG_DEBUG));
-    syslog(priority, "%s[%u]: %s\n", topic, geteuid(), message);
+    syslog(priority, "%s: %s\n", topic, message);
     closelog();
 }
 
