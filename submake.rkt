@@ -14,8 +14,11 @@
 (define sakuyamon.asl "/etc/asl/org.gyoudmon.sakuyamon")
 (define /stone/sakuyamon.asl (build-path (digimon-stone) "asld.conf"))
 
-(define sakuyamon.rsyslog "/etc/rsyslog.d/8-sakuyamon.conf")
+(define sakuyamon.rsyslog "/etc/rsyslog.d/sakuyamon.conf")
 (define /stone/sakuyamon.rsyslog (build-path (digimon-stone) "rsyslog.conf"))
+
+(define sakuyamon.logadm "/etc/logadm.d/sakuyamon.conf")
+(define /stone/sakuyamon.logadm (build-path (digimon-stone) "logadm.conf"))
 
 (module+ premake
   (when (string=? (current-tamer) "root")
@@ -42,9 +45,11 @@
                                  (system "kill -s HUP `cat /var/run/syslog.pid`"))]
              [sakuyamon.rsyslog [/stone/sakuyamon.rsyslog (quote-source-file)]
                                 (and (sudo.make sakuyamon.rsyslog /stone/sakuyamon.rsyslog "root:root")
-                                     (system "kill -s HUP `cat /var/run/rsyslogd.pid`"))])
+                                     (system "svcadm restart system-log:rsyslog"))]
+             [sakuyamon.logadm [/stone/sakuyamon.logadm (quote-source-file)]
+                               (sudo.make sakuyamon.logadm /stone/sakuyamon.logadm "root:sys")])
             (case (digimon-system)
-              [{solaris} (list sakuyamon.smf sakuyamon.rsyslog)]
+              [{solaris} (list sakuyamon.smf sakuyamon.rsyslog sakuyamon.logadm)]
               [{macosx} (list sakuyamon.plist sakuyamon.asl)]))))
 
   (module+ clobber
@@ -53,7 +58,7 @@
                       (build-path (digimon-stone) "tamer.sh")
                       (digimon-system)))
       (for-each delete-file (case (digimon-system)
-                              [{solaris} (list sakuyamon.smf sakuyamon.rsyslog)]
+                              [{solaris} (list sakuyamon.smf sakuyamon.rsyslog sakuyamon.logadm)]
                               [{macosx} (list sakuyamon.plist sakuyamon.asl)])))))
 
 (module+ postmake
