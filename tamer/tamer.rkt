@@ -122,7 +122,7 @@ exec racket --require "$0"
 
 
 (define tamer-errmsg (make-parameter #false))
-(define tamer-port (if root? 80 16180))
+(define tamer-port (if root? (or (sakuyamon-port) 80) 16180))
 (define curl (curry sakuyamon-agent #false tamer-port "::1"))
 (define 127.curl (curry sakuyamon-agent #false tamer-port "127.0.0.1"))
 (define ECONNREFUSED (case (digimon-system) [{solaris} 146] [{macosx} 61] [{linux} 111]))

@@ -3,10 +3,6 @@
 /*
  * The original purpose is tracing solaris smf method,
  *
- * TODO: Maybe BUGS?
- * Service is working, but keeps forking and exiting.
- * Process Group?
- * 
  */
 
 #pragma D option quiet

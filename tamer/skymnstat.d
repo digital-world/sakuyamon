@@ -15,7 +15,7 @@ dtrace:::BEGIN
 }
 
 tcp:::send
-/ args[4]->tcp_sport == 80 || args[4]->tcp_dport == 80 /
+/ args[4]->tcp_dport == 80 /
 {
     this->length = args[2]->ip_plength - args[4]->tcp_offset;
     printf(" %3d %16s:%-5d -> %16s:%-5d %6d (",
@@ -24,7 +24,7 @@ tcp:::send
 }
 
 tcp:::receive
-/ args[4]->tcp_sport == 80 || args[4]->tcp_dport == 80 /
+/ args[4]->tcp_sport == 80 /
 {
     this->length = args[2]->ip_plength - args[4]->tcp_offset;
     printf(" %3d %16s:%-5d <- %16s:%-5d %6d (",
