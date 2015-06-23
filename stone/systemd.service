@@ -1,0 +1,25 @@
+#lang scribble/text
+
+@(require "../digitama/digicore.rkt")
+
+@(require racket/port)
+@(require racket/system)
+
+@(require setup/dirs)
+
+[Unit]
+Description=@(info-ref 'pkg-desc)
+After=network.target
+
+[Service]
+Type=forking
+Restart=on-success
+Environment=PATH=@(format "~a:/sbin:/usr/sbin:/bin:/usr/bin" (find-console-bin-dir))
+Environment=SMF_METHOD=start
+ExecStart=@(digimon-tamer)/tamer.rkt
+ExecReload=/bin/kill -HUP $MAINPID
+TimeoutStopSec=5
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

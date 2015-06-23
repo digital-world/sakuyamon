@@ -1,5 +1,7 @@
+#!/bin/sh
+
 #|
-# also works as solaris smf method script
+# also works as solaris smf and linux systemd launcher
 exec racket --require "$0"
 |#
 
@@ -23,7 +25,7 @@ exec racket --require "$0"
 (provide (all-from-out net/head net/base64 net/http-client web-server/http))
 
 (define root? (string=? (current-tamer) "root"))
-(define smf-daemon? (getenv "SMF_METHOD"))
+(define smf-or-systemd? (getenv "SMF_METHOD"))
 (define realm.rktd (path->string (build-path (digimon-stone) "realm.rktd")))
 
 (define /htdocs (curry format "/~a"))
@@ -137,7 +139,7 @@ exec racket --require "$0"
            (curl "-X" "Options" (~a "/" tips)))))
 
 (parameterize ([current-custodian (make-custodian)]
-               [current-subprocess-custodian-mode (if smf-daemon? #false 'interrupt)])
+               [current-subprocess-custodian-mode (if smf-or-systemd? #false 'interrupt)])
   (plumber-add-flush! (current-plumber) (λ [this] (custodian-shutdown-all (current-custodian))))
   ;;; These code will be evaluated in a flexibility way.
   ; * compile one file
@@ -145,7 +147,7 @@ exec racket --require "$0"
   ; * run standalone
   ; * run as scribble
   ;;; In all situations, it will fork and only fork once.
-  
+ 
   (define {try-fork efne}
     (define {raise-unless-ready efne}
       (define errno (car (exn:fail:network:errno-errno efne)))
@@ -166,7 +168,7 @@ exec racket --require "$0"
 
   ;;; to make the drracket background expansion happy
   (unless (regexp-match? #px#"drracket$" (find-system-path 'run-file))
-    (when (or smf-daemon? (not root?)) ;;; test for the deployed one
+    (when (or smf-or-systemd? (not root?)) ;;; test the deployed one
       (with-handlers ([exn:fail:network:errno? try-fork])
         ((check-ready? (file-name-from-path (quote-source-file)))))))
   (void))
