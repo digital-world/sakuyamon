@@ -23,11 +23,14 @@
 (define sakuyamon.logadm "/etc/logadm.d/sakuyamon.conf")
 (define /stone/sakuyamon.logadm (build-path (digimon-stone) "logadm.conf"))
 
+(define sakuyamon.logrotate "/etc/logrotate.d/sakuyamon")
+(define /stone/sakuyamon.logrotate (build-path (digimon-stone) "logrotate.conf"))
+
 (define targets
   (case (digimon-system)
     [{solaris} (list sakuyamon.smf sakuyamon.rsyslog sakuyamon.logadm)]
     [{macosx} (list sakuyamon.plist sakuyamon.asl)]
-    [{linux} (list sakuyamon.service sakuyamon.rsyslog)]))
+    [{linux} (list sakuyamon.service sakuyamon.rsyslog sakuyamon.logrotate)]))
 
 (module+ premake
   (when (string=? (current-tamer) "root")
@@ -56,10 +59,13 @@
                                  (system "kill -s HUP `cat /var/run/syslog.pid`"))]
              [sakuyamon.rsyslog [/stone/sakuyamon.rsyslog (quote-source-file)]
                                 (and (sudo.make sakuyamon.rsyslog /stone/sakuyamon.rsyslog "root:root")
-                                     (or (system "svcadm restart system-log:rsyslog")
-                                         (system "systemctl restart rsyslog")))]
+                                     (case (digimon-system)
+                                       [{solaris} (system "svcadm restart system-log:rsyslog")]
+                                       [{linux} (system "systemctl restart rsyslog")]))]
              [sakuyamon.logadm [/stone/sakuyamon.logadm (quote-source-file)]
-                               (sudo.make sakuyamon.logadm /stone/sakuyamon.logadm "root:sys")])
+                               (sudo.make sakuyamon.logadm /stone/sakuyamon.logadm "root:sys")]
+             [sakuyamon.logrotate [/stone/sakuyamon.logrotate (quote-source-file)]
+                                  (sudo.make sakuyamon.logrotate /stone/sakuyamon.logrotate "root:root")])
             targets)))
 
   (module+ clobber
