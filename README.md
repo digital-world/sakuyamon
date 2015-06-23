@@ -1,4 +1,4 @@
-# [🏡](http://gyoudmon.org/~wargrey:sakuyamon)[<sub>🐈</sub>](http://gyoudmon.org/~wargrey:digignome)Tamer's Handbook: Sakuyamon
+# [🏡](http://gyoudmon.org/~wargrey:sakuyamon)[<sub>🐈</sub>](http://gyoudmon.org/~wargrey:DigiGnome)Tamer's Handbook: Sakuyamon
 
 > _**Sakuyamon**_ is the Queen of [gyoudmon.org](http://gyoudmon.org)  as
 > well as the _[**digital
