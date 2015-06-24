@@ -167,7 +167,7 @@ exec racket --require "$0"
         (exit (subprocess-status sakuyamon)))))
 
   ;;; to make the drracket background expansion happy
-  (unless (regexp-match? #px#"drracket$" (find-system-path 'run-file))
+  (unless (regexp-match? #px#"[Dd]r[Rr]acket$" (find-system-path 'run-file))
     (when (or smf-or-systemd? (not root?)) ;;; test the deployed one
       (with-handlers ([exn:fail:network:errno? try-fork])
         ((check-ready? (file-name-from-path (quote-source-file)))))))

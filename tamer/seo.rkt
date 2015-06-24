@@ -31,6 +31,14 @@ are @litchar{default.rkt} and @litchar{index.html}, respectively.
                     (match-let ([{list status reason _ _} (curl (/webroot "robots.txt"))])
                       (check-pred (curryr member '{200 503}) status reason))))]
 
+@handbook-rule{@italic{robots} should be told that do not index @italic{Racket Documentation}.}
+
+@chunk[|<testcase: disallow: /~:/>|
+       (test-case "disallow: /~:/"
+                  (match-let ([{list status reason _ /dev/net/stdin} (curl (/htdocs "robots.txt"))])
+                    (check-eq? status 200 reason)
+                    (check-regexp-match #px"\\s[Dd]isallow:\\s+/~:/\\s" (port->string /dev/net/stdin))))]
+
 @handbook-scenario{Server Side Redirection}
 
 @tamer-note['redirections]
@@ -64,7 +72,8 @@ The rendered @litchar{*.html}s will be placed within directories that up to 2 de
        (module+ story
          (define-tamer-suite robots.txt "/robots.txt"
            #:before (check-ready? 'robots.txt)
-           |<testcase: robots.txt>|)
+           |<testcase: robots.txt>|
+           |<testcase: disallow: /~:/>|)
          
          (define-tamer-suite redirections "Server Side Redirections"
            #:before (check-ready? 'redirections)

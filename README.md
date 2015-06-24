@@ -55,6 +55,7 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >         - 💚 1 - 200|503: /robots.txt
 >         - 💚 2 - 200|503: /~wargrey/robots.txt
 >         - 💚 3 - 200|503: /~wargrey:sakuyamon/robots.txt
+>         - 💚 4 - disallow: /~:/
 >       + 📑Server Side Redirections
 >         + 📑dir -> dir/
 >           - 💚 1 - 302: .
@@ -68,4 +69,4 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >       + 📑Bad Users
 >         - 💚 1 - 418: ../tamer/.realm.rktd
 >
-> 📌26 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌27 examples, 0 failures, 0 errors, 100.00% Okay.
