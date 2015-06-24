@@ -189,7 +189,7 @@
                                       url->servlet)
                         (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime)
                         (lift:make {λ _ (cond [(directory-exists? /htdocs) (response:404 #:page (page 404))]
-                                              [else (response:503 #:page (page 404))])}))})
+                                              [else (response:503 #:page (page 503))])}))})
         
         (define dispatch-main
           {lambda [::1?]
@@ -208,14 +208,7 @@
                         (servlet:make #:responders-servlet-loading (curryr response:exn #"Loading")
                                       #:responders-servlet (curryr response:exn #"Handling")
                                       url->servlet)
-                        (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime)
-                        (cond [(false? (and (sakuyamon-digimon-terminus?) (find-doc-dir))) (chain:make)]
-                              [else (lift:make {λ [req] (and (or (regexp-match? #px"^.+?://.+?/~.+?:.+?/" (dict-ref (request-headers req) 'referer ""))
-                                                                 (next-dispatcher))
-                                                             (let ([~: (string-trim (url->string (request-uri req))
-                                                                                    (path->string (find-doc-dir))
-                                                                                    #:right? #false)])
-                                                               (redirect-to (string-append "/~:" ~:))))})]))})
+                        (file:make #:url->path (curry url->path #false) #:path->mime-type path->mime))})
 
         (define realm.rktd->lookups
           {lambda [realm.rktd]
