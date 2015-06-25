@@ -1,8 +1,6 @@
 # [🏡](http://gyoudmon.org/~wargrey:sakuyamon)[<sub>🐈</sub>](http://gyoudmon.org/~wargrey:DigiGnome)Tamer's Handbook: Sakuyamon
 
-> _**Sakuyamon**_ is the Queen of [gyoudmon.org](http://gyoudmon.org)  as
-> well as the _[**digital
-> world**](https://github.com/digital-world/DigiGnome#digital-world)_.
+> _**Sakuyamon**_ is the Queen of [gyoudmon.org](http://gyoudmon.org).
 
 Please do not ask me why I choose **Racket**. Meanwhile I don’t know
 more than you about whether it is suitable for this kind of tasks since
