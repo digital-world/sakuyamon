@@ -1,14 +1,15 @@
 #!/usr/sbin/dtrace -s
 
-/*
- * The original purpose is tracing solaris smf method,
- *
- */
-
 #pragma D option quiet
 
 int svc_startd;
 int sub_startd;
+int sakuyamon;
+
+dtrace:::BEGIN
+{
+    printf("Troubleshooting: Racket Web Server eats the entire CPU core in Solaris!\n");
+}
 
 dtrace:::BEGIN
 {
@@ -60,8 +61,6 @@ dtrace:::BEGIN
     strchld[4] = "CLD_TRAPPED";
     strchld[5] = "CLD_STOPPED";
     strchld[6] = "CLD_CONTINUED";
-
-    printf("svc.startd monitor\n");
 }
 
 /** initialize **/
@@ -79,9 +78,10 @@ proc::cfork:create
 proc::cfork:create
 / smf[sub_startd, pid] == 1 /
 {
-    printf("%s[%d]: fork %s[%d:%d]: %s.\n", execname, pid, args[0]->pr_fname,
-                                            args[0]->pr_pid, args[0]->pr_pgid,
-                                            args[0]->pr_psargs);
+    printf("%s[%d]: fork %s[%d:%d]: %s.\n",
+            execname, pid, args[0]->pr_fname,
+            args[0]->pr_pid, args[0]->pr_pgid,
+            args[0]->pr_psargs);
     smf[sub_startd, args[0]->pr_pid] = 1;
 }
 
@@ -91,6 +91,7 @@ proc::exec_common:exec
 / smf[sub_startd, pid] == 1 /
 {
     printf("%s[%d]: exec %s.\n", execname, pid, args[0]);
+    sakuyamon=(execname == "sakuyamon.rkt" ? pid : sakuyamon);
 }
 
 proc::psig:signal-handle
@@ -105,5 +106,44 @@ proc::proc_exit:exit
 {
     printf("%s[%d]: exited because of %s!\n", execname, pid, strchld[args[0]]);
     smf[sub_startd, pid] = 0;
+}
+
+/* monitor TCP */
+tcp:::send
+/ args[4]->tcp_dport == 80 /
+{
+    this->length = args[2]->ip_plength - args[4]->tcp_offset;
+    printf("TCP: %d %s:%d -> %s:%d %d (",
+            cpu, args[2]->ip_saddr, args[4]->tcp_sport,
+            args[2]->ip_daddr, args[4]->tcp_dport, this->length);
+    printf("%s", args[4]->tcp_flags & TH_FIN ? "FIN|" : "");
+    printf("%s", args[4]->tcp_flags & TH_SYN ? "SYN|" : "");
+    printf("%s", args[4]->tcp_flags & TH_RST ? "RST|" : "");
+    printf("%s", args[4]->tcp_flags & TH_PUSH ? "PUSH|" : "");
+    printf("%s", args[4]->tcp_flags & TH_ACK ? "ACK|" : "");
+    printf("%s", args[4]->tcp_flags & TH_URG ? "URG|" : "");
+    printf("%s", args[4]->tcp_flags & TH_ECE ? "ECE|" : "");
+    printf("%s", args[4]->tcp_flags & TH_CWR ? "CWR|" : "");
+    printf("%s", args[4]->tcp_flags == 0 ? "null " : "");
+    printf("\b)\n");
+}
+
+tcp:::receive
+/ args[4]->tcp_sport == 80 /
+{
+    this->length = args[2]->ip_plength - args[4]->tcp_offset;
+    printf("TCP: %d %s:%d <- %s:%d %d (",
+            cpu, args[2]->ip_daddr, args[4]->tcp_dport,
+            args[2]->ip_saddr, args[4]->tcp_sport, this->length);
+    printf("%s", args[4]->tcp_flags & TH_FIN ? "FIN|" : "");
+    printf("%s", args[4]->tcp_flags & TH_SYN ? "SYN|" : "");
+    printf("%s", args[4]->tcp_flags & TH_RST ? "RST|" : "");
+    printf("%s", args[4]->tcp_flags & TH_PUSH ? "PUSH|" : "");
+    printf("%s", args[4]->tcp_flags & TH_ACK ? "ACK|" : "");
+    printf("%s", args[4]->tcp_flags & TH_URG ? "URG|" : "");
+    printf("%s", args[4]->tcp_flags & TH_ECE ? "ECE|" : "");
+    printf("%s", args[4]->tcp_flags & TH_CWR ? "CWR|" : "");
+    printf("%s", args[4]->tcp_flags == 0 ? "null " : "");
+    printf("\b)\n");
 }
 
