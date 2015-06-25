@@ -4,8 +4,7 @@
 
 @handbook-title[]
 
-@margin-note{@deftech{@bold{Sakuyamon}} is the Queen of @hyperlink["http://gyoudmon.org"]{gyoudmon.org}
-              as well as the @deftech{@hyperlink["https://github.com/digital-world/DigiGnome#digital-world"]{@bold{digital world}}}.}
+@margin-note{@deftech{@bold{Sakuyamon}} is the Queen of @hyperlink["http://gyoudmon.org"]{gyoudmon.org}.}
 
 Please do not ask me why I choose @bold{Racket}. Meanwhile I don't know more than you about
 whether it is suitable for this kind of tasks since its real world applications are damn harder
