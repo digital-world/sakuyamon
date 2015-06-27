@@ -24,7 +24,7 @@
 
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/dispatch.rkt")
-  (require "../../digitama/posix.rkt")
+  (require "../../digitama/daemon.rkt")
 
   (define {syslog-perror severity maybe . argl}
     (define message (apply format maybe argl))
@@ -35,7 +35,6 @@
                        (flush-output))]
         [else (eprintf "~a: ~a~n" topic message)]))
     (rsyslog (severity.c severity) topic message))
-
 
   (define {exit-with-eperm tips no}
     (syslog-perror 'error "~a error: ~a; errno=~a" tips (strerror no) no)
