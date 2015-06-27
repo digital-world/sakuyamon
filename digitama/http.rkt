@@ -3,10 +3,9 @@
 @require{digicore.rkt}
 @require{daemon.rkt}
 
-@require{typed/file/md5.rkt}
 @require{typed/web-server/http.rkt}
-@require{typed/web-server/configuration.rkt}
 @require{typed/web-server/private.rkt}
+@require{typed/web-server/configuration/responders.rkt}
 
 (require typed/net/url)
 (require typed/net/base64)
@@ -14,10 +13,9 @@
 (provide (except-out (all-defined-out) response:ddd))
 (provide (all-from-out typed/net/url))
 
-(provide (all-from-out "typed/file/md5.rkt" 
-                       "typed/web-server/http.rkt"
-                       "typed/web-server/configuration.rkt"
-                       "typed/web-server/private.rkt"))
+(provide (all-from-out "typed/web-server/http.rkt"
+                       "typed/web-server/private.rkt"
+                       "typed/web-server/configuration/responders.rkt"))
 
 (require/typed racket/base
                [srcloc->string (-> srcloc (Option String))]

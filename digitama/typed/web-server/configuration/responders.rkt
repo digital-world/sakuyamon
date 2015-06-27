@@ -1,6 +1,6 @@
 #lang typed/racket
 
-(require "http.rkt")
+(require "../http.rkt")
 
 (require typed/net/url)
 

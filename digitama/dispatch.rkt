@@ -83,22 +83,25 @@
 
         (define fields '{date user-agent uri client host referer authorization})
         (syslog 'info 'request "fields: '~s" fields)
+
+        (define {request-head-value req name}
+          (define h (headers-assq* name (request-headers/raw req)))
+          (and h (header-value h)))
         
         (define {syslog-request req}
           (define now (current-date))
-          (define a-headers (request-headers req))
           (syslog 'notice 'request "~s"
                   (list (format "~a-~a-~a ~a:~a:~a"
                                 (date-year now) (~date (date-month now))
                                 (~date (date-day now)) (~date (date-hour now))
                                 (~date (date-minute now)) (~date (date-second now)))
-                        (dict-ref a-headers 'user-agent #false)
+                        (request-head-value req #"user-agent")
                         (~method (request-method req))
                         (url->string (request-uri req))
                         (request-client-ip req)
-                        (dict-ref a-headers 'host #false)
-                        (dict-ref a-headers 'referer #false)
-                        (dict-ref a-headers 'authorization #false))))
+                        (request-head-value req #"host")
+                        (request-head-value req #"referer")
+                        (request-head-value req #"authorization"))))
 
         (define dispatch
           (lambda [conn req]
