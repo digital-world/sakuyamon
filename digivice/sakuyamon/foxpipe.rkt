@@ -6,8 +6,7 @@
 
 (module+ sakuyamon
   (require "../../digitama/digicore.rkt")
-  
-  (require "../../digitama/posixed.rkt")
+  (require "../../digitama/daemon.rkt")
 
   (require/typed racket/base
                  [exn:break:hang-up? (-> Any Boolean)]
@@ -15,14 +14,35 @@
 
   (define max-size 65535)
   (define log-pool (make-bytes max-size))
+  (define foxpipe (udp-open-socket))
+  
+  (define syslog-perror : (-> Symbol String Any * Void)
+    (lambda [severity maybe . argl]
+      (define message (apply format maybe argl))
+      (define topic 'foxpipe)
+      (with-handlers ([exn:fail? void]) ;;; maybe broken pipe or closed port
+        (case severity
+          [{notice} (and (printf "~a: ~a~n" topic message) (flush-output))]
+          [else (eprintf "~a: ~a~n" topic message)]))
+      (rsyslog (severity.c severity) topic message)))
+
+  (define exit-with-eperm : (-> Symbol Natural Nothing)
+    (lambda [tips no]
+      (syslog-perror 'error "~a error: ~a; errno=~a" tips (strerror no) no)
+      (exit 'EPERM)))
+
+  (define exit-with-fatal : (-> exn Nothing)
+    (lambda [e]
+      (syslog-perror 'error (exn-message e))
+      (exit 'FATAL)))
   
   (define signal-handler : (-> exn Void)
     (lambda [signal]
       (unless (port-closed? (current-output-port)) (newline))
-      (syslog 'notice 'foxpipe "terminated by ~a."
-              (cond [(exn:break:hang-up? signal) 'SIGHUP]
-                    [(exn:break:terminate? signal) 'SIGTERM]
-                    [else 'SIGINT]))
+      (syslog-perror 'notice "terminated by ~a."
+                     (cond [(exn:break:hang-up? signal) 'SIGHUP]
+                           [(exn:break:terminate? signal) 'SIGTERM]
+                           [else 'SIGINT]))
       (when (exn:break:hang-up? signal) (raise signal))))
   
   (define serve-forever : (-> (Evtof (List Natural String Natural)) Void)
@@ -48,19 +68,13 @@
    `{{usage-help ,(format "~a~n" desc)}}
    (lambda [[flags : Any]]
      (parameterize ([current-custodian (make-custodian)])
-       (define exit-with-eperm : (-> Symbol Natural Nothing)
-         (lambda [tips no]
-           (syslog 'error 'foxpipe "~a error: ~a; errno=~a" tips (strerror no) no)
-           (exit 'EPERM)))
-       
-       (define foxpipe (udp-open-socket))
        (dynamic-wind (thunk (let ([root? (zero? (getuid))])
                               (unless (zero? (seteuid (getuid))) (exit-with-eperm 'regain-uid (saved-errno)))
                               (unless (zero? (setegid (getgid))) (exit-with-eperm 'regain-gid (saved-errno)))
                               (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
                               (when (and root? (not (zero? errno))) (exit-with-eperm 'fetch-tamer-id errno))
                               
-                              (with-handlers ([exn:fail:network? void])
+                              (with-handlers ([exn:fail:network? exit-with-fatal])
                                 (udp-bind! foxpipe "127.0.0.1" (or (sakuyamon-foxpipe-port) 514)))
                               
                               (when root?
@@ -69,11 +83,11 @@
                                 (unless (zero? (seteuid uid)) (exit-with-eperm 'drop-uid (saved-errno))))
                               
                               (when (zero? (geteuid))
-                                (syslog 'error 'foxpipe "Misconfigured: Privilege Has Not Dropped!")
+                                (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!")
                                 (exit 'ECONFIG))
                               
                               (match-let-values ([{_ port _ _} (udp-addresses foxpipe #true)])
-                                (syslog 'notice 'foxpipe "waiting rsyslog packets on ~a." port))))
+                                (syslog-perror 'notice "waiting rsyslog packets on ~a." port))))
                      (thunk (serve-forever (udp-receive!-evt foxpipe log-pool)))
                      (thunk (custodian-shutdown-all (current-custodian))))))
    null
