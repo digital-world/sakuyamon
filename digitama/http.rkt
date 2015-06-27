@@ -4,7 +4,6 @@
 @require{daemon.rkt}
 
 @require{typed/web-server/http.rkt}
-@require{typed/web-server/private.rkt}
 @require{typed/web-server/configuration/responders.rkt}
 
 (require typed/net/url)
@@ -14,7 +13,6 @@
 (provide (all-from-out typed/net/url))
 
 (provide (all-from-out "typed/web-server/http.rkt"
-                       "typed/web-server/private.rkt"
                        "typed/web-server/configuration/responders.rkt"))
 
 (require/typed racket/base

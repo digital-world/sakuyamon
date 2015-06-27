@@ -9,12 +9,15 @@
  
 (require net/tcp-unit)
 (require net/ssl-tcp-unit)
-(require web-server/private/dispatch-server-sig)
 
 (require web-server/servlet/setup)
 (require web-server/dispatchers/dispatch)
 (require web-server/dispatchers/filesystem-map)
 (require web-server/configuration/namespace)
+
+(require web-server/private/mime-types)
+(require web-server/private/web-server-structs)
+(require web-server/private/dispatch-server-sig)
 
 (require (prefix-in http: web-server/http/request))
 (require (prefix-in chain: web-server/dispatchers/dispatch-sequencer))
