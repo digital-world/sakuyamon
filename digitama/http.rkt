@@ -1,6 +1,7 @@
 #lang at-exp typed/racket
 
 @require{digicore.rkt}
+@require{posixed.rkt}
 
 (require typed/net/url)
 (require typed/net/base64)
@@ -20,13 +21,6 @@
 (require/typed racket/base
                [srcloc->string (-> srcloc (Option String))]
                [current-memory-use (->* [] [(Option Custodian)] Nonnegative-Integer)])
-
-(require/typed "posix.rkt"
-               [geteuid (-> Natural)]
-               [getegid (-> Natural)]
-               [fetch_tamer_name (-> Natural (Values Natural Bytes))]
-               [fetch_tamer_group (-> Natural (Values Natural Bytes))]
-               [syslog (-> Symbol Symbol String Any * Void)])
 
 (require/typed/provide web-server/http
                        [#:opaque Redirection-Status redirection-status?]
