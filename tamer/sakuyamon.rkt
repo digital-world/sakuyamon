@@ -59,30 +59,30 @@ As lightweight as they are, the only requirement is a @racket[read]able data fil
 @tamer-racketbox[#:line-start-with 1 (build-path (digimon-stone) "realm.rktd")]
 
 Like @hyperlink["http://en.wikipedia.org/wiki/Digest_access_authentication#The_.htdigest_file"]{@exec{htdigest}},
-@itech{Sakuyamon} has a tool @exec{realm} to help users to digest their flat @itech{.realm.rktd}s.
+@itech{Sakuyamon} has a tool @exec{sphere} to help users to digest their flat @itech{.realm.rktd}s.
 
 @tamer-action[(parameterize ([exit-handler void])
-                (sakuyamon "realm" "--help"))
+                (sakuyamon "sphere" "--help"))
               (parameterize ([exit-handler void])
-                (sakuyamon "realm" realm.rktd))]
+                (sakuyamon "sphere" realm.rktd))]
 
-Note that @exec{realm} will do nothing for those passwords that have already been updated.
+Note that @exec{sphere} will do nothing for those passwords that have already been updated.
 
-@tamer-note['realm]
-@chunk[|<testcsae: realm in-place>|
+@tamer-note['sphere]
+@chunk[|<testcsae: sphere in-place>|
        (let-values ([{realm.dtkr} (path->string (path-replace-suffix realm.rktd ".dtkr"))]
                     [{digest-in digest-out} (make-pipe #false 'digest-in 'digest-out)])
-         (test-spec "realm --in-place"
+         (test-spec "sphere --in-place"
                     #:before (thunk (copy-file realm.rktd realm.dtkr))
                     #:after (thunk (delete-file realm.dtkr))
                     (parameterize ([current-output-port digest-out]
                                    [current-error-port digest-out])
                       (check-equal? (parameterize ([exit-handler void])
-                                      (thread (thunk (sakuyamon "realm" realm.dtkr)))
+                                      (thread (thunk (sakuyamon "sphere" realm.dtkr)))
                                       (read digest-in))
                                     (parameterize ([exit-handler void])
-                                      (thread (thunk (and (sakuyamon "realm" "--in-place" realm.dtkr)
-                                                          (sakuyamon "realm" realm.dtkr))))
+                                      (thread (thunk (and (sakuyamon "sphere" "--in-place" realm.dtkr)
+                                                          (sakuyamon "sphere" realm.dtkr))))
                                       (read digest-in))))))]
 
 @handbook-appendix[]
@@ -91,4 +91,4 @@ Note that @exec{realm} will do nothing for those passwords that have already bee
        (module+ main (call-as-normal-termination tamer-prove))
        (module+ story
          (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)
-         (define-tamer-suite realm "Keep Realms Safe!" |<testcsae: realm in-place>|))]
+         (define-tamer-suite sphere "Keep Realms Safe!" |<testcsae: sphere in-place>|))]

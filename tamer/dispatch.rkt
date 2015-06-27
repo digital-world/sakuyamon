@@ -180,7 +180,7 @@ since the @itech{.realm.rktd} is checked every request.
                            (if (symbol=? type 'digest)
                                (with-output-to-file .realm.rktd #:exists 'replace
                                  (thunk (parameterize ([exit-handler void])
-                                          (sakuyamon "realm" realm.rktd))))
+                                          (sakuyamon "sphere" realm.rktd))))
                                (copy-file realm.rktd .realm.rktd #true))
                            (copy-file .realm.rktd (lhtdocs .realm-path)))))
        #:after (thunk (unless root?
