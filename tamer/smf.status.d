@@ -108,6 +108,16 @@ proc::proc_exit:exit
     smf[sub_startd, pid] = 0;
 }
 
+/**
+ * Monitor Multiplexing, It seems that `pollsys` is the CPU-eater
+ **/
+
+fbt::pollsys:entry
+/ pid == sakuyamon /
+{
+    printf("%s[%d]: calling %s...\n", execname, pid, probefunc);
+}
+
 /* monitor TCP */
 tcp:::send
 / args[4]->tcp_dport == 80 /
