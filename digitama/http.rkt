@@ -3,106 +3,25 @@
 @require{digicore.rkt}
 @require{daemon.rkt}
 
+@require{typed/file/md5.rkt}
+@require{typed/web-server/http.rkt}
+@require{typed/web-server/configuration.rkt}
+@require{typed/web-server/private.rkt}
+
 (require typed/net/url)
 (require typed/net/base64)
 
 (provide (except-out (all-defined-out) response:ddd))
 (provide (all-from-out typed/net/url))
 
-(define-type Header header)
-(define-type Binding binding)
-(define-type Request request)
-(define-type Response response)
-
-(define-type Digest-Credentials (Listof (Pairof Symbol String)))
-(define-type Username*Realm->Password (-> String String String))
-(define-type Username*Realm->Digest-HA1 (-> String String Bytes))
+(provide (all-from-out "typed/file/md5.rkt" 
+                       "typed/web-server/http.rkt"
+                       "typed/web-server/configuration.rkt"
+                       "typed/web-server/private.rkt"))
 
 (require/typed racket/base
                [srcloc->string (-> srcloc (Option String))]
                [current-memory-use (->* [] [(Option Custodian)] Nonnegative-Integer)])
-
-(require/typed/provide web-server/http
-                       [#:opaque Redirection-Status redirection-status?]
-                       [TEXT/HTML-MIME-TYPE Bytes]
-                       [#:struct header {[field : Bytes]
-                                         [value : Bytes]}
-                                 #:extra-constructor-name make-header]
-                       [#:struct binding {[id : Bytes]}
-                                 #:extra-constructor-name make-binding]
-                       [#:struct {binding:form binding} {[value : Bytes]}
-                                 #:extra-constructor-name make-binding:form]
-                       [#:struct {binding:file binding} {[filename : Bytes]
-                                                         [headers : (Listof Header)]
-                                                         [content : Bytes]}
-                                 #:extra-constructor-name make-binding:file]
-                       [#:struct request {[method : Bytes]
-                                          [uri : URL]
-                                          [headers/raw : (Listof Header)]
-                                          [bindings/raw-promise : (Promise (Listof Binding))]
-                                          [post-data/raw : (Option Bytes)]
-                                          [host-ip : String]
-                                          [host-port : Natural]
-                                          [client-ip : String]}
-                                 #:extra-constructor-name make-request]
-                       [#:struct response {[code : Natural]
-                                           [message : Bytes]
-                                           [seconds : Natural]
-                                           [mime : (Option Bytes)]
-                                           [headers : (Listof Header)]
-                                           [output : (-> Output-Port Void)]}]
-                       [headers-assq* (-> Bytes (Listof Header) (Option Header))]
-                       [response/full (-> Natural Bytes Number (Option Bytes) (Listof Header) (Listof Bytes) Response)]
-                       [response/xexpr (-> Any [#:code Natural] [#:message Bytes] [#:headers (Listof Header)] Response)]
-                       [response/output (-> (-> Output-Port Void) [#:code Natural] [#:message Bytes] [#:headers (Listof Header)] Response)]
-                       [redirect-to (->* {String} {Redirection-Status #:headers (Listof Header)} Response)]
-                       [make-digest-auth-header (-> String String String Header)]
-                       [request->digest-credentials (-> Request (Option Digest-Credentials))]
-                       [make-check-digest-credentials (-> Username*Realm->Digest-HA1 (-> String Digest-Credentials Boolean))]
-                       [password->digest-HA1 (-> Username*Realm->Password Username*Realm->Digest-HA1)])
-
-(require/typed/provide web-server/http/bindings
-                       [request-headers (-> Request (Listof (Pairof Symbol String)))]
-                       [request-bindings (-> Request (Listof (Pairof Symbol (U String Bytes))))]
-                       [extract-binding/single (-> Symbol (Listof (Pairof Symbol String)) String)]
-                       [extract-bindings (-> Symbol (Listof (Pairof Symbol String)) (Listof String))]
-                       [exists-binding? (-> Symbol (Listof (Pairof Symbol String)) Boolean)])
-
-(require/typed/provide web-server/configuration/responders
-                       [file-response (-> Natural Bytes Path-String Header * Response)]
-                       [servlet-loading-responder (-> URL exn Response)]
-                       [gen-servlet-not-found (-> Path-String (-> URL Response))]
-                       [servlet-error-responder (-> URL exn Response)]
-                       [gen-servlet-responder (-> Path-String (-> URL exn Response))]
-                       [gen-servlets-refreshed (-> Path-String (-> Response))]
-                       [gen-passwords-refreshed (-> Path-String (-> Response))]
-                       [gen-authentication-responder (-> Path-String (-> URL Header Response))]
-                       [gen-protocol-responder (-> Path-String (-> URL Response))]
-                       [gen-file-not-found-responder (-> Path-String (-> Request Response))]
-                       [gen-collect-garbage-responder (-> Path-String (-> Response))])
-
-(require/typed/provide web-server/private/web-server-structs
-                       [current-server-custodian (Parameterof Custodian)]
-                       [make-servlet-custodian (-> Custodian)])
-
-(require/typed/provide web-server/private/mime-types
-                       [read-mime-types (-> Path-String (HashTable Symbol Bytes))]
-                       [make-path->mime-type (-> Path-String (-> Path (Option Bytes)))])
-
-(require/typed/provide file/md5
-                       [md5 (->* {(U String Bytes Input-Port)} {Boolean} Bytes)])
-
-(define make-md5-auth-header : (-> String String String Header)
-  (lambda [realm private-key0 opaque0]
-    (define private-key : Bytes (string->bytes/utf-8 private-key0))
-    (define timestamp : Bytes (string->bytes/utf-8 (number->string (current-seconds))))
-    (define nonce : Bytes  (md5 (bytes-append timestamp #" " (md5 (bytes-append timestamp #":" private-key)))))
-    (define opaque : Bytes (md5 (string->bytes/utf-8 opaque0)))
-    (make-header #"WWW-Authenticate"
-                 (bytes-append #"Digest realm=\"" (string->bytes/utf-8 realm) #"\""
-                               #", qop=\"auth\""
-                               #", nonce=\"" nonce #"\""
-                               #", opaque=\"" opaque #"\""))))
 
 (define response:ddd : (-> Any Bytes String (Option Path-String) (Listof Header) Response)
   (lambda [code-sexp message desc ddd.html headers]
@@ -127,11 +46,11 @@
     (match-define-values {_ id-un} (fetch_tamer_name (geteuid)))
     (match-define-values {_ id-gn} (fetch_tamer_group (getegid)))
     (response/output void #:code 200 #:message #"Metainformation"
-                     #:headers (list* (make-header #"Allow" (string->bytes/utf-8 (string-join allows ",")))
-                                      (make-header #"Fields" (string->bytes/utf-8 (format "'~s" fields)))
-                                      (make-header #"Terminus" terminus)
-                                      (make-header #"Daemon" id-un)
-                                      (make-header #"Realm" id-gn)
+                     #:headers (list* (header #"Allow" (string->bytes/utf-8 (string-join allows ",")))
+                                      (header #"Fields" (string->bytes/utf-8 (format "'~s" fields)))
+                                      (header #"Terminus" terminus)
+                                      (header #"Daemon" id-un)
+                                      (header #"Realm" id-gn)
                                       headers))))
 
 (define response:gc : (-> Header * Response)

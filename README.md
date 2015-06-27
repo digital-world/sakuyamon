@@ -22,7 +22,7 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >       + 📑Sakuyamon, Realize!
 >         - 💚 1 - realize?
 >       + 📑Keep Realms Safe!
->         - 💚 1 - realm --in-place
+>         - 💚 1 - sphere --in-place
 >     + 📖
 [dispatch.rkt](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rkt)
 >       + 📑Main Terminus
