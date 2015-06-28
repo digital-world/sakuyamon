@@ -19,7 +19,6 @@
 
 (define sakuyamon-config-ssl? #false)
 (define sakuyamon-config-port #false)
-(define sakuyamon-config-logport #false)
 (define sakuyamon-config-max-waiting 511)
 (define sakuyamon-config-connection-timeout 30)
 
@@ -28,3 +27,6 @@
 (define sakuyamon-timeout-servlet-connection 86400)
 (define sakuyamon-timeout-file/byte 1/20)
 (define sakuyamon-timeout-file 30)
+
+(define sakuyamon-foxpipe-port #false)
+(define sakuyamon-foxpipe-max-waiting 4)

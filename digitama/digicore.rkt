@@ -18,8 +18,6 @@
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-config-ssl? (const #false)) Boolean)))
 (define sakuyamon-port : (Parameterof (Option Natural))
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-config-port (const #false)) (Option Natural))))
-(define sakuyamon-foxpipe-port : (Parameterof (Option Natural))
-  (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-config-logport (const #false)) (Option Natural))))
 (define sakuyamon-max-waiting : (Parameterof Natural)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-config-max-waiting (const 511)) Natural)))
 (define sakuyamon-connection-timeout : (Parameterof Natural)
@@ -29,3 +27,8 @@
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-timeout-default-servlet (const 30)) Natural)))
 (define sakuyamon-timeout-servlet-connection : (Parameterof Natural)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-timeout-servlet-connection (const 86400)) Natural)))
+
+(define sakuyamon-foxpipe-port : (Parameterof (Option Natural))
+  (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-foxpipe-port (const #false)) (Option Natural))))
+(define sakuyamon-foxpipe-max-waiting : (Parameterof Natural)
+  (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-foxpipe-max-waiting (const 4)) Natural)))

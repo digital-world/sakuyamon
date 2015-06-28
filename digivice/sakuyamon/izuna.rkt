@@ -27,8 +27,10 @@
                    (define-values {/dev/tcpin /dev/tcpout} (tcp-connect/enable-break (sakuyamon-scepter-host) (sakuyamon-scepter-port)))
                    (let pull ()
                      (sync /dev/tcpin)
-                     (displayln (read /dev/tcpin))
-                     (pull)))))
+                     (define v (read /dev/tcpin))
+                     (displayln v)
+                     (unless (eof-object? v)
+                       (pull))))))
              '{"hostname"}
              (lambda [[-h : String]]
                (display (string-replace -h #px"  -- : .+?-h --'\\s*" ""))

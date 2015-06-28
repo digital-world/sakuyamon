@@ -97,7 +97,7 @@
                               
                               (with-handlers ([exn:fail:network? exit-with-fatal])
                                 (udp-bind! foxpipe "127.0.0.1" port)
-                                (scepter (tcp-listen port)))
+                                (scepter (tcp-listen port (sakuyamon-foxpipe-max-waiting) #true)))
                               
                               (when root?
                                 ;;; if change uid first, then gid cannot be changed again.
