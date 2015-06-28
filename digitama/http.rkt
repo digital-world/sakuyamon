@@ -7,7 +7,6 @@
 @require{typed/web-server/configuration/responders.rkt}
 
 (require typed/net/url)
-(require typed/net/base64)
 
 (provide (except-out (all-defined-out) response:ddd))
 (provide (all-from-out typed/net/url))
