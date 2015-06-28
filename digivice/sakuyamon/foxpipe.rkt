@@ -12,70 +12,67 @@
                  [exn:break:hang-up? (-> Any Boolean)]
                  [exn:break:terminate? (-> Any Boolean)])
 
-  (define max-size 65535)
-  (define log-pool (make-bytes max-size))
-  (define foxpipe (udp-open-socket))
+  (define max-size : Natural 65535)
+  (define log-pool : Bytes (make-bytes max-size))
+  (define foxpipe : UDP-Socket (udp-open-socket))
+  (define scepter : (Parameterof (Option TCP-Listener)) (make-parameter #false))
+  (define izunas : (HashTable Input-Port Output-Port) ((inst make-hash Input-Port Output-Port)))
   
-  (define syslog-perror : (-> Symbol String Any * Void)
+  (define foxlog : (-> Symbol String Any * Void)
     (lambda [severity maybe . argl]
-      (define message (apply format maybe argl))
-      (define topic 'foxpipe)
-      (with-handlers ([exn:fail? void]) ;;; maybe broken pipe or closed port
-        (case severity
-          [{notice} (and (printf "~a: ~a~n" topic message) (flush-output))]
-          [else (eprintf "~a: ~a~n" topic message)]))
-      (rsyslog (severity.c severity) topic message)))
+      (rsyslog (severity.c severity) 'foxpipe (apply format maybe argl))))
 
   (define exit-with-eperm : (-> Symbol Natural Nothing)
     (lambda [tips no]
-      (syslog-perror 'error "~a error: ~a; errno=~a" tips (strerror no) no)
+      (foxlog 'error "~a error: ~a; errno=~a" tips (strerror no) no)
       (exit 'EPERM)))
 
   (define exit-with-fatal : (-> exn Nothing)
     (lambda [e]
-      (syslog-perror 'error (exn-message e))
+      (foxlog 'error (exn-message e))
       (exit 'FATAL)))
   
   (define signal-handler : (-> exn Void)
     (lambda [signal]
       (unless (port-closed? (current-output-port)) (newline))
-      (syslog-perror 'notice "terminated by ~a."
+      (foxlog 'notice "terminated by ~a."
                      (cond [(exn:break:hang-up? signal) 'SIGHUP]
                            [(exn:break:terminate? signal) 'SIGTERM]
                            [else 'SIGINT]))
       (when (exn:break:hang-up? signal) (raise signal))))
   
-  (define serve-forever : (-> (Evtof (List Natural String Natural)) Void)
-    (lambda [/dev/udp]
+  (define serve-forever : (-> (Evtof (List Natural String Natural)) TCP-Listener Void)
+    (lambda [/dev/udp /dev/tcp]
       (with-handlers ([exn:break? signal-handler])
-        (match (sync/enable-break /dev/udp)
-          [{list size _ _} (displayln (bytes->string/utf-8 log-pool #false 0 size))])
-        #|
-                                   (with-handlers ([exn? displayln])
-                                     (define-values {/dev/login /dev/logout}
-                                       (tcp-accept/enable-break listener))
-                                     (thread (thunk (dynamic-wind void
-                                                                  (thunk (with-handlers ([exn? displayln])
-                                                                           (tcp-read /dev/login /dev/logout)))
-                                                                  (thunk (for-each tcp-abandon-port
-                                                                                   (list /dev/login /dev/logout))))))))|#
-        (serve-forever /dev/udp))))
+        (match (apply sync/timeout/enable-break 8.0 /dev/udp /dev/tcp ((inst hash-keys Input-Port Output-Port) izunas))
+          [{list size _ _} (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
+                             (define packet (bytes->string/utf-8 log-pool #false 0 size))
+                             (when (terminal-port? (current-output-port)) (displayln packet))
+                             (for ([/dev/iznout ((inst in-hash-values Input-Port Output-Port) izunas)])
+                               (displayln packet /dev/iznout)))]
+          [{? tcp-listener?} (let-values ([{/dev/tcpin /dev/tcpout} (tcp-accept /dev/tcp)])
+                               (s-exp->fasl "hello, young man!\n" /dev/tcpout)
+                               (displayln (fasl->s-exp /dev/tcpin))
+                               ((inst hash-set! Input-Port Output-Port) izunas /dev/tcpin /dev/tcpout))]
+          [#false void])
+        (serve-forever /dev/udp /dev/tcp))))
 
-  (define-type HELP (Listof (List Symbol (U String (List (Listof String) Any (Listof String))))))
-  ((cast parse-command-line (-> Path-String (Vectorof String) HELP (-> Any Void) (List) (-> String Void) Void))
+  ((cast parse-command-line (-> String (Vectorof String) Help-Table (-> Any Void) (Listof String) (-> String Void) Void))
    (format "~a ~a" (#%module) (path-replace-suffix (cast (file-name-from-path (#%file)) Path) #""))
    (current-command-line-arguments)
    `{{usage-help ,(format "~a~n" desc)}}
    (lambda [[flags : Any]]
      (parameterize ([current-custodian (make-custodian)])
-       (dynamic-wind (thunk (let ([root? (zero? (getuid))])
+       (dynamic-wind (thunk (let ([port (or (sakuyamon-foxpipe-port) 514)])
+                              (define root? (zero? (getuid)))
                               (unless (zero? (seteuid (getuid))) (exit-with-eperm 'regain-uid (saved-errno)))
                               (unless (zero? (setegid (getgid))) (exit-with-eperm 'regain-gid (saved-errno)))
                               (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
                               (when (and root? (not (zero? errno))) (exit-with-eperm 'fetch-tamer-id errno))
                               
                               (with-handlers ([exn:fail:network? exit-with-fatal])
-                                (udp-bind! foxpipe "127.0.0.1" (or (sakuyamon-foxpipe-port) 514)))
+                                (udp-bind! foxpipe "127.0.0.1" port)
+                                (scepter (tcp-listen port)))
                               
                               (when root?
                                 ;;; if change uid first, then gid cannot be changed again.
@@ -83,12 +80,13 @@
                                 (unless (zero? (seteuid uid)) (exit-with-eperm 'drop-uid (saved-errno))))
                               
                               (when (zero? (geteuid))
-                                (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!")
+                                (foxlog 'error "Misconfigured: Privilege Has Not Dropped!")
                                 (exit 'ECONFIG))
                               
                               (match-let-values ([{_ port _ _} (udp-addresses foxpipe #true)])
-                                (syslog-perror 'notice "waiting rsyslog packets on ~a." port))))
-                     (thunk (serve-forever (udp-receive!-evt foxpipe log-pool)))
+                                (foxlog 'notice "waiting rsyslog packets on ~a." port))))
+                     (thunk (serve-forever (udp-receive!-evt foxpipe log-pool)
+                                           (cast (scepter) TCP-Listener)))
                      (thunk (custodian-shutdown-all (current-custodian))))))
    null
    (lambda [[-h : String]]

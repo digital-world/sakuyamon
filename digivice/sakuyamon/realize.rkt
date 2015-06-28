@@ -2,7 +2,7 @@
 
 (provide (all-defined-out))
 
-(define desc "Launch the Web Server with Listening All Addresses")
+(define desc "Launch the web server with listening all addresses")
 
 (module+ sakuyamon
   (require racket/unit)
