@@ -1,6 +1,6 @@
 #lang scribble/text
 
-@(require "../digitama/digicore.rkt")
+@(require "../../digitama/digicore.rkt")
 
 @(require racket/port)
 @(require racket/system)

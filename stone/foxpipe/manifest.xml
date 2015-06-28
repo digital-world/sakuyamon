@@ -1,12 +1,12 @@
 #lang racket/base
 
-(require "../digitama/digicore.rkt")
+(require "../../digitama/digicore.rkt")
 
 (require setup/dirs)
 (require xml)
 
-(define name (format "network/~a" (current-digimon)))
-(define exec (format "~a/tamer.rkt" (digimon-tamer)))
+(define name "network/foxpipe")
+(define exec (format "~a/realize.sh foxpipe ~a" (digimon-stone) (digimon-digivice)))
 (define PATH (format "~a:/sbin:/usr/sbin:/bin:/usr/bin" (find-console-bin-dir)))
 
 #| ORDER IS IMPORTANT |#
@@ -14,12 +14,6 @@
                           {single_instance}
                           {dependency {[name "network"] [grouping "require_all"] [restart_on "error"] [type "service"]}
                                       {service_fmri {[value "svc:/milestone/network:default"]}}}
-                          {dependency {[name "local"] [grouping "require_all"] [restart_on "none"] [type "service"]}
-                                      {service_fmri {[value "svc:/system/filesystem/local:default"]}}}
-                          {dependency {[name "autofs"] [grouping "optional_all"] [restart_on "error"] [type "service"]}
-                                      {service_fmri {[value "svc:/system/filesystem/autofs:default"]}}}
-                          {dependency {[name "rsyslog"] [grouping "require_all"] [restart_on "none"] [type "service"]}
-                                      {service_fmri {[value "svc:/system/system-log:rsyslog"]}}}
                           {method_context {method_environment {envvar {[name "PATH"] [value ,PATH]}}}}
                           {exec_method {[type "method"] [name "start"] [exec ,exec] [timeout_seconds "60"]}}
                           {exec_method {[type "method"] [name "stop"] [exec ":kill -TERM"] [timeout_seconds "60"]}}

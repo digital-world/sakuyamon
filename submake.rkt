@@ -6,13 +6,17 @@
 (require make)
 
 (define sakuyamon.plist "/System/Library/LaunchDaemons/org.gyoudmon.sakuyamon.plist")
-(define /stone/launchd.plist (build-path (digimon-stone) "launchd.plist"))
+(define /sakuyamon/launchd.plist (build-path (digimon-stone) "sakuyamon" "launchd.plist"))
 
 (define sakuyamon.smf "/lib/svc/manifest/network/sakuyamon.xml")
-(define /stone/manifest.xml (build-path (digimon-stone) "manifest.xml"))
+(define /sakuyamon/manifest.xml (build-path (digimon-stone) "sakuyamon" "manifest.xml"))
+(define foxpipe.smf "/lib/svc/manifest/network/foxpipe.xml")
+(define /foxpipe/manifest.xml (build-path (digimon-stone) "foxpipe" "manifest.xml"))
 
 (define sakuyamon.service "/lib/systemd/system/sakuyamon.service")
-(define /stone/systemd.service (build-path (digimon-stone) "systemd.service"))
+(define /sakuyamon/systemd.service (build-path (digimon-stone) "sakuyamon" "systemd.service"))
+(define foxpipe.service "/lib/systemd/system/sakuyamon.service")
+(define /foxpipe/systemd.service (build-path (digimon-stone) "foxpipe" "systemd.service"))
 
 (define sakuyamon.asl "/etc/asl/org.gyoudmon.sakuyamon")
 (define /stone/sakuyamon.asl (build-path (digimon-stone) "asld.conf"))
@@ -28,9 +32,9 @@
 
 (define targets
   (case (digimon-system)
-    [{solaris} (list sakuyamon.smf sakuyamon.rsyslog sakuyamon.logadm)]
+    [{solaris} (list sakuyamon.smf foxpipe.smf sakuyamon.rsyslog sakuyamon.logadm)]
     [{macosx} (list sakuyamon.plist sakuyamon.asl)]
-    [{linux} (list sakuyamon.service sakuyamon.rsyslog sakuyamon.logrotate)]))
+    [{linux} (list sakuyamon.service foxpipe.service sakuyamon.rsyslog sakuyamon.logrotate)]))
 
 (module+ premake
   (when (string=? (current-tamer) "root")
@@ -48,12 +52,16 @@
            (when chown (system (format "chown ~a ~a" chown dest)))))
 
     (when (string=? (current-tamer) "root")
-      (make ([sakuyamon.plist [/stone/launchd.plist (quote-source-file)]
-                              (sudo.make sakuyamon.plist /stone/launchd.plist "root:wheel")]
-             [sakuyamon.smf [/stone/manifest.xml (quote-source-file)]
-                            (sudo.make sakuyamon.smf /stone/manifest.xml "root:sys")]
-             [sakuyamon.service [/stone/systemd.service (quote-source-file)]
-                                (sudo.make sakuyamon.service /stone/systemd.service "root:root")]
+      (make ([sakuyamon.plist [/sakuyamon/launchd.plist (quote-source-file)]
+                              (sudo.make sakuyamon.plist /sakuyamon/launchd.plist "root:wheel")]
+             [sakuyamon.smf [/sakuyamon/manifest.xml (quote-source-file)]
+                            (sudo.make sakuyamon.smf /sakuyamon/manifest.xml "root:sys")]
+             [foxpipe.smf [/foxpipe/manifest.xml (quote-source-file)]
+                          (sudo.make foxpipe.smf /foxpipe/manifest.xml "root:sys")]
+             [sakuyamon.service [/sakuyamon/systemd.service (quote-source-file)]
+                                (sudo.make sakuyamon.service /sakuyamon/systemd.service "root:root")]
+             [foxpipe.service [/foxpipe/systemd.service (quote-source-file)]
+                              (sudo.make foxpipe.service /foxpipe/systemd.service "root:root")]
              [sakuyamon.asl [/stone/sakuyamon.asl (quote-source-file)]
                             (and (sudo.make sakuyamon.asl /stone/sakuyamon.asl "root:wheel")
                                  (system "kill -s HUP `cat /var/run/syslog.pid`"))]
@@ -80,4 +88,4 @@
     (system (format "sh ~a ~a ~a"
                     (build-path (digimon-stone) "realize.sh")
                     (digimon-system)
-                    (car targets)))))
+                    (path-only (car targets))))))

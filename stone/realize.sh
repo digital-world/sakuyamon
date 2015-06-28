@@ -2,9 +2,15 @@
 
 svcadm_restart() {
     svcs sakuyamon >/dev/null 2>&1 && svcadm disable sakuyamon:default;
-    svccfg import -V $1 || exit $?;
+    svccfg import -V $1/sakuyamon.xml || exit $?;
     if test "`svcs -H -o state sakuyamon:default`" != "online"; then
         svcadm enable sakuyamon:default;
+    fi
+
+    svcs foxpipe >/dev/null 2>&1 && svcadm disable foxpipe:default;
+    svccfg import -V $1/foxpipe.xml || exit $?;
+    if test "`svcs -H -o state foxpipe:default`" != "online"; then
+        svcadm enable foxpipe:default;
     fi
 }
 
@@ -16,6 +22,13 @@ launchctl_restart() {
 systemctl_restart() {
     systemctl enable sakuyamon.service || exit $?;
     systemctl reload-or-restart sakuyamon.service;
+
+    systemctl enable foxpipe.service || exit $?;
+    systemctl reload-or-restart foxpipe.service;
+}
+
+daemonize_foxpipe() {
+    $1/sakuyamon.rkt foxpipe &
 }
 
 case "$1" in
@@ -27,6 +40,9 @@ case "$1" in
         ;;
     linux)
         systemctl_restart $2;
+        ;;
+    foxpipe)
+        daemonize_foxpipe $2;
         ;;
     *)
         false;
