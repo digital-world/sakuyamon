@@ -12,49 +12,74 @@
                  [exn:break:hang-up? (-> Any Boolean)]
                  [exn:break:terminate? (-> Any Boolean)])
 
+  (define kudagitsune : (Parameterof (Option Thread)) (make-parameter #false))
+  
   (define max-size : Natural 65535)
   (define log-pool : Bytes (make-bytes max-size))
   (define foxpipe : UDP-Socket (udp-open-socket))
   (define scepter : (Parameterof (Option TCP-Listener)) (make-parameter #false))
+  
   (define izunas : (HashTable Input-Port Output-Port) ((inst make-hash Input-Port Output-Port)))
   
   (define foxlog : (-> Symbol String Any * Void)
     (lambda [severity maybe . argl]
       (rsyslog (severity.c severity) 'foxpipe (apply format maybe argl))))
 
+  (define syslog-perror : (-> String Any * Void)
+    (lambda [maybe . argl]
+      (define errmsg : String (apply format maybe argl))
+      (with-handlers ([exn:fail? void])
+        (eprintf "~a~n" errmsg))
+      (foxlog 'error errmsg)))
+  
   (define exit-with-eperm : (-> Symbol Natural Nothing)
     (lambda [tips no]
-      (foxlog 'error "~a error: ~a; errno=~a" tips (strerror no) no)
+      (syslog-perror "~a error: ~a; errno=~a" tips (strerror no) no)
       (exit 'EPERM)))
 
   (define exit-with-fatal : (-> exn Nothing)
     (lambda [e]
-      (foxlog 'error (exn-message e))
+      (syslog-perror (exn-message e))
       (exit 'FATAL)))
   
   (define signal-handler : (-> exn Void)
     (lambda [signal]
-      (unless (port-closed? (current-output-port)) (newline))
+      (define fox : Thread (cast (kudagitsune) Thread))
       (foxlog 'notice "terminated by ~a."
-                     (cond [(exn:break:hang-up? signal) 'SIGHUP]
-                           [(exn:break:terminate? signal) 'SIGTERM]
-                           [else 'SIGINT]))
-      (when (exn:break:hang-up? signal) (raise signal))))
+              (cond [(exn:break:hang-up? signal) 'SIGHUP]
+                    [(exn:break:terminate? signal) 'SIGTERM]
+                    [else 'SIGINT]))
+      (thread-send fox signal)
+      (thread-wait fox) ; It should also handle this log before exiting.
+      (when (exn:break:hang-up? signal)
+        (raise signal))))
+
+  (define identity/timeout : (-> Input-Port Output-Port Any)
+    (lambda [/dev/tcpin /dev/tcpout]
+      (match-define-values {_ _ remote port} (tcp-addresses /dev/tcpin #true))
+      (foxlog 'notice  "~a:~a has connected." remote port)
+      ((inst hash-set! Input-Port Output-Port) izunas /dev/tcpin /dev/tcpout)))
+
+  (define push-back : (-> String Void)
+    (lambda [packet]
+      (for ([/dev/iznout ((inst in-hash-values Input-Port Output-Port) izunas)])
+        (write packet /dev/iznout)
+        (flush-output /dev/iznout))))
   
-  (define serve-forever : (-> (Evtof (List Natural String Natural)) TCP-Listener Void)
+  (define serve-forever : (-> (Evtof (List Natural String Natural)) (Evtof (List Input-Port Output-Port)) Void)
     (lambda [/dev/udp /dev/tcp]
-      (with-handlers ([exn:break? signal-handler])
-        (match (apply sync/timeout/enable-break 8.0 /dev/udp /dev/tcp ((inst hash-keys Input-Port Output-Port) izunas))
-          [{list size _ _} (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
-                             (define packet (bytes->string/utf-8 log-pool #false 0 size))
-                             (when (terminal-port? (current-output-port)) (displayln packet))
-                             (for ([/dev/iznout ((inst in-hash-values Input-Port Output-Port) izunas)])
-                               (displayln packet /dev/iznout)))]
-          [{? tcp-listener?} (let-values ([{/dev/tcpin /dev/tcpout} (tcp-accept /dev/tcp)])
-                               (s-exp->fasl "hello, young man!\n" /dev/tcpout)
-                               (displayln (fasl->s-exp /dev/tcpin))
-                               ((inst hash-set! Input-Port Output-Port) izunas /dev/tcpin /dev/tcpout))]
-          [#false void])
+      (match (apply sync/timeout 8.0 /dev/udp /dev/tcp ((inst hash-keys Input-Port Output-Port) izunas))
+        [{list /dev/tcpin /dev/tcpout} (thread (thunk (identity/timeout /dev/tcpin /dev/tcpout)))]
+        [{list size _ _} (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
+                           (define packet (bytes->string/utf-8 log-pool #false 0 size))
+                           (with-handlers ([exn:fail? void]) (displayln packet))
+                           (push-back packet))]
+        [{? tcp-port? /dev/tcpin} (let ([/dev/tcpout ((inst hash-ref Input-Port Output-Port Nothing) izunas /dev/tcpin)])
+                                    ((inst hash-remove! Input-Port Output-Port) izunas /dev/tcpin)
+                                    (match-define-values {_ _ remote port} (tcp-addresses /dev/tcpout #true))
+                                    (foxlog 'notice "~a:~a has gone!" remote port))]
+        [#false (push-back "Have a rest!")])
+      (unless (exn:break? (thread-try-receive))
         (serve-forever /dev/udp /dev/tcp))))
 
   ((cast parse-command-line (-> String (Vectorof String) Help-Table (-> Any Void) (Listof String) (-> String Void) Void))
@@ -80,14 +105,17 @@
                                 (unless (zero? (seteuid uid)) (exit-with-eperm 'drop-uid (saved-errno))))
                               
                               (when (zero? (geteuid))
-                                (foxlog 'error "Misconfigured: Privilege Has Not Dropped!")
+                                (syslog-perror "Misconfigured: Privilege Has Not Dropped!")
                                 (exit 'ECONFIG))
                               
                               (match-let-values ([{_ port _ _} (udp-addresses foxpipe #true)])
                                 (foxlog 'notice "waiting rsyslog packets on ~a." port))))
-                     (thunk (serve-forever (udp-receive!-evt foxpipe log-pool)
-                                           (cast (scepter) TCP-Listener)))
-                     (thunk (custodian-shutdown-all (current-custodian))))))
+                     (thunk (with-handlers ([exn:break? signal-handler])
+                              (kudagitsune (thread (thunk (serve-forever (udp-receive!-evt foxpipe log-pool)
+                                                                         (tcp-accept-evt (cast (scepter) TCP-Listener))))))
+                              (sync/enable-break never-evt)))
+                     (thunk (and (udp-close foxpipe) ;;; custodian dose not care about udp socket.
+                                 (custodian-shutdown-all (current-custodian)))))))
    null
    (lambda [[-h : String]]
      (display (string-replace -h #px"  -- : .+?-h --'\\s*" ""))

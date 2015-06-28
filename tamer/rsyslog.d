@@ -8,7 +8,7 @@ dtrace:::BEGIN
     printf("system-log:syslog\n");
 }
 
-/** monitor rsyslogd **/
+/** Monitor rsyslogd **/
 
 syscall::open*:entry
 / execname == "rsyslogd" && substr(copyinstr(arg0), 0, 4) == "/etc" /
@@ -16,7 +16,7 @@ syscall::open*:entry
     printf("[<< file://%s]\n", copyinstr(arg0));
 }
 
-/* monitor udp forwarding for foxpipe */
+/* Monitor UDP forwarding for foxpipe */
 udp:::send
 / execname == "rsyslogd" /
 {

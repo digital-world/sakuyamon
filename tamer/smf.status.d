@@ -118,7 +118,7 @@ fbt::pollsys:entry
     printf("%s[%d]: calling %s...\n", execname, pid, probefunc);
 }
 
-/* monitor TCP */
+/* Monitor TCP */
 tcp:::send
 / args[4]->tcp_dport == 80 /
 {
