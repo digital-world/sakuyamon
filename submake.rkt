@@ -15,7 +15,7 @@
 
 (define sakuyamon.service "/lib/systemd/system/sakuyamon.service")
 (define /sakuyamon/systemd.service (build-path (digimon-stone) "sakuyamon" "systemd.service"))
-(define foxpipe.service "/lib/systemd/system/sakuyamon.service")
+(define foxpipe.service "/lib/systemd/system/foxpipe.service")
 (define /foxpipe/systemd.service (build-path (digimon-stone) "foxpipe" "systemd.service"))
 
 (define sakuyamon.asl "/etc/asl/org.gyoudmon.sakuyamon")
