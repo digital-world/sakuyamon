@@ -7,6 +7,7 @@
 @require{typed/web-server/configuration/responders.rkt}
 
 (require typed/net/url)
+(require typed/file/md5)
 
 (provide (except-out (all-defined-out) response:ddd))
 (provide (all-from-out typed/net/url))
@@ -17,6 +18,18 @@
 (require/typed racket/base
                [srcloc->string (-> srcloc (Option String))]
                [current-memory-use (->* [] [(Option Custodian)] Nonnegative-Integer)])
+
+(define make-md5-auth-header : (-> String String String Header)
+  (lambda [realm private-key0 opaque0]
+    (define private-key : Bytes (string->bytes/utf-8 private-key0))
+    (define timestamp : Bytes (string->bytes/utf-8 (number->string (current-seconds))))
+    (define nonce : Bytes  (md5 (bytes-append timestamp #" " (md5 (bytes-append timestamp #":" private-key)))))
+    (define opaque : Bytes (md5 (string->bytes/utf-8 opaque0)))
+    (header #"WWW-Authenticate"
+            (bytes-append #"Digest realm=\"" (string->bytes/utf-8 realm) #"\""
+                          #", qop=\"auth\""
+                          #", nonce=\"" nonce #"\""
+                          #", opaque=\"" opaque #"\""))))
 
 (define response:ddd : (-> Any Bytes String (Option Path-String) (Listof Header) Response)
   (lambda [code-sexp message desc ddd.html headers]

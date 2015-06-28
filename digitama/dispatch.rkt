@@ -192,7 +192,7 @@
                                                                    (define private (symbol->string (gensym (current-digimon))))
                                                                    (define opaque (symbol->string (gensym (current-digimon))))
                                                                    (response:401 #:page (page 401) (request-uri req)
-                                                                                 (make-digest-auth-header realm private opaque))))])})])
+                                                                                 (make-md5-auth-header realm private opaque))))])})])
                       (servlet:make #:responders-servlet-loading (curryr response:exn #:page (page 500) #"Loading")
                                     #:responders-servlet (curryr response:exn #:page (page 500) #"Handling")
                                     url->servlet)
