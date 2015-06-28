@@ -21,7 +21,8 @@ that serves 3 types of @deftech[#:key "terminus"]{termini}, or @deftech{htdocs}.
                                  @itech{Sakuyamon} always trust @deftech[#:key "trustable"]@litchar{::1} and treat
                                  @litchar{127.0.0.1} as a public one.}
 
-@tamer-action[(curl "--help")]
+@tamer-action[(with-handlers ([exn:fail:user? (compose1 displayln exn-message)])
+                (curl "--help"))]
 
 @handbook-scenario{Main Terminus}
 

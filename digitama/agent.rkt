@@ -77,44 +77,38 @@
                                                             (md5 (format "~a:~a" (http-method) uri)))))))]
               [else (raise 500)])))
     
-    (let/ec exit-agent
-      ((cast parse-command-line (-> String
-                                    (Listof String)
-                                    Help-Table
-                                    (-> Any String Client-Response)
-                                    (List String)
-                                    (-> String Any)
-                                    Client-Response))
-       "sakuyamon-curl"
-       arglist
-       `([usage-help ,(format "Transfer URL: a cURL-like tool for taming only.~n")]
-         [once-each
-          [{"--anyauth"} ,(lambda [[_ : String]] (anyauth? #true))
-           {"Detect authentication method."}]
-          [{"--location" "-L"} ,(lambda [[_ : String]] (locate? #true))
-           {"Follow redirects."}]
-          [{"--get" "-G"} ,(lambda [[_ : String]] (http-method #"GET"))
-           {"Send with HTTP GET."}]
-          [{"--head" "-I"} ,(lambda [[_ : String]] (http-method #"HEAD"))
-           {"Show document info only."}]
-          [{"--user" "-u"} ,(lambda [[_ : String] [u:p : String]] (user:pwd u:p))
-           {"Server user and password." "USER:PASSWORD"}]
-          [{"--request" "-X"} ,(lambda [[_ : String] [cmd : String]] (http-method (string->bytes/utf-8 (string-upcase cmd))))
-           {"Specify request command to use." "COMMAND"}]]
-         [multi
-          [{"--header" "-H"} ,(lambda [[_ : String] [line : String]] (go-headers (cons line (go-headers))))
-           {"Custom header to pass to server." "LINE"}]])
-       (lambda [[! : Any] [uri : String]]
-         (define status (send/recv uri))
-         (match-define {list code _ headers _} status)
-         (with-handlers ([void (const status)])
-           (cond [(and (locate?) (member code '{301 302 307 308}) (member (http-method) '{#"GET" #"HEAD"}))
-                  (retry ((inst hash-ref Symbol String Nothing) headers 'location))]
-                 [(and (user:pwd) (anyauth?) (eq? code 401))
-                  (authorize uri headers)]
-                 [else status])))
-       (list "url")
-       (lambda [[-h : String]]
-         (display (string-replace -h #px"  -- : .+?-h --'\\s*" ""))
-         ((cast exit-agent (-> Any Any)) 0))))))
-
+    ((cast parse-command-line (-> String (Listof String) Help-Table (-> Any String Client-Response)
+                                  (List String) (-> String Any) Client-Response))
+     "sakuyamon-curl"
+     arglist
+     `([usage-help ,(format "Transfer URL: a cURL-like tool for taming only.~n")]
+       [once-each
+        [{"--anyauth"} ,(lambda [[_ : String]] (anyauth? #true))
+         {"Detect authentication method."}]
+        [{"--location" "-L"} ,(lambda [[_ : String]] (locate? #true))
+         {"Follow redirects."}]
+        [{"--get" "-G"} ,(lambda [[_ : String]] (http-method #"GET"))
+         {"Send with HTTP GET."}]
+        [{"--head" "-I"} ,(lambda [[_ : String]] (http-method #"HEAD"))
+         {"Show document info only."}]
+        [{"--user" "-u"} ,(lambda [[_ : String] [u:p : String]] (user:pwd u:p))
+         {"Server user and password." "USER:PASSWORD"}]
+        [{"--request" "-X"} ,(lambda [[_ : String] [cmd : String]] (http-method (string->bytes/utf-8 (string-upcase cmd))))
+         {"Specify request command to use." "COMMAND"}]]
+       [multi
+        [{"--header" "-H"} ,(lambda [[_ : String] [line : String]] (go-headers (cons line (go-headers))))
+         {"Custom header to pass to server." "LINE"}]])
+     (lambda [[! : Any] [uri : String]]
+       (define status (send/recv uri))
+       (match-define {list code _ headers _} status)
+       (with-handlers ([void (const status)])
+         (cond [(and (locate?) (member code '{301 302 307 308}) (member (http-method) '{#"GET" #"HEAD"}))
+                (retry ((inst hash-ref Symbol String Nothing) headers 'location))]
+               [(and (user:pwd) (anyauth?) (eq? code 401))
+                (authorize uri headers)]
+               [else status])))
+     (list "url")
+     (lambda [[-h : String]]
+       ;;; No one will keep calling `help` in practice,
+       ;;; So it just raises error here in order to avoiding declaring two return types.
+       (raise-user-error (string-replace -h #px"  -- : .+?-h --'\\s*" ""))))))
