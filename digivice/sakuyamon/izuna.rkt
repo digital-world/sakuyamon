@@ -28,7 +28,8 @@
                    (let pull ()
                      (sync /dev/tcpin)
                      (define v (read /dev/tcpin))
-                     (displayln v)
+                     (unless (equal? v beating-heart#)
+                       (displayln v))
                      (unless (eof-object? v)
                        (pull))))))
              '{"hostname"}

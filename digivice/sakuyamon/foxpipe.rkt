@@ -60,7 +60,7 @@
       (foxlog 'notice  "~a:~a has connected." remote port)
       ((inst hash-set! Input-Port Output-Port) izunas /dev/tcpin /dev/tcpout)))
 
-  (define push-back : (-> String Void)
+  (define push-back : (-> Any Void)
     (lambda [packet]
       (for ([/dev/iznout ((inst in-hash-values Input-Port Output-Port) izunas)])
         (write packet /dev/iznout)
@@ -78,7 +78,7 @@
                                     ((inst hash-remove! Input-Port Output-Port) izunas /dev/tcpin)
                                     (match-define-values {_ _ remote port} (tcp-addresses /dev/tcpout #true))
                                     (foxlog 'notice "~a:~a has gone!" remote port))]
-        [#false (push-back "Have a rest!")])
+        [#false (push-back beating-heart#)])
       (unless (exn:break? (thread-try-receive))
         (serve-forever /dev/udp /dev/tcp))))
 
