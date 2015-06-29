@@ -6,9 +6,14 @@
 
 (module+ sakuyamon
   (require "../../digitama/digicore.rkt")
+  (require "../../digitama/agent.rkt")
   
   (define sakuyamon-scepter-host : (Parameterof String) (make-parameter "gyoudmon.org"))
-  (define sakuyamon-scepter-port : (Parameterof Natural) (make-parameter (or (sakuyamon-foxpipe-port) 514)))
+  (define sakuyamon-scepter-port : (Parameterof Positive-Integer) (make-parameter (sakuyamon-foxpipe-port)))
+
+  (define sakuyamon-curl : (-> String * Client-Response)
+    (lambda arglist
+      (apply sakuyamon-agent "localhost" (cast (or (sakuyamon-port) 80) Positive-Integer) arglist)))
   
   (call-as-normal-termination
    (thunk (parameterize ([current-directory (find-system-path 'orig-dir)])
@@ -17,21 +22,20 @@
              (format "~a ~a" (#%module) (path-replace-suffix (cast (file-name-from-path (#%file)) Path) #""))
              (current-command-line-arguments)
              `{{usage-help ,(format "~a~n" desc)}
-               {once-each [{"-p"} ,(λ [[flag : String] [port : String]] (sakuyamon-scepter-port (cast (string->number port) Natural)))
+               {once-each [{"-p"} ,(λ [[flag : String] [port : String]] (sakuyamon-scepter-port (cast (string->number port) Positive-Integer)))
                                   {"Use an alternative <port>." "port"}]}}
              (lambda [!flag . argl]
                (parameterize ([current-custodian (make-custodian)])
                  (unless (null? argl) (sakuyamon-scepter-host (cast (car argl) String)))
                  (with-handlers ([exn:break? void]
                                  [exn? displayln])
-                   (define-values {/dev/tcpin /dev/tcpout} (tcp-connect/enable-break (sakuyamon-scepter-host) (sakuyamon-scepter-port)))
-                   (let pull ()
-                     (sync /dev/tcpin)
-                     (define v (read /dev/tcpin))
-                     (unless (equal? v beating-heart#)
-                       (displayln v))
-                     (unless (eof-object? v)
-                       (pull))))))
+                   (let reconnect ()
+                     (define-values {/dev/tcpin /dev/tcpout}
+                       (tcp-connect/enable-break (sakuyamon-scepter-host) (sakuyamon-scepter-port)))
+                     (let pull ()
+                       (define v (read /dev/tcpin))
+                       (unless (equal? v beating-heart#) (displayln v))
+                       (if (eof-object? v) (reconnect) (pull)))))))
              '{"hostname"}
              (lambda [[-h : String]]
                (display (string-replace -h #px"  -- : .+?-h --'\\s*" ""))

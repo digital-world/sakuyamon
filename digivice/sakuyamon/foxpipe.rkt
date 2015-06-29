@@ -12,13 +12,14 @@
                  [exn:break:hang-up? (-> Any Boolean)]
                  [exn:break:terminate? (-> Any Boolean)])
 
-  (define kudagitsune : (Parameterof (Option Thread)) (make-parameter #false))
+  (define root? (zero? (getuid)))
   
   (define max-size : Natural 65535)
   (define log-pool : Bytes (make-bytes max-size))
   (define foxpipe : UDP-Socket (udp-open-socket))
   (define scepter : (Parameterof (Option TCP-Listener)) (make-parameter #false))
   
+  (define kudagitsune : (Parameterof (Option Thread)) (make-parameter #false))
   (define izunas : (HashTable Input-Port Output-Port) ((inst make-hash Input-Port Output-Port)))
   
   (define foxlog : (-> Symbol String Any * Void)
@@ -68,7 +69,8 @@
   
   (define serve-forever : (-> (Evtof (List Natural String Natural)) (Evtof (List Input-Port Output-Port)) Void)
     (lambda [/dev/udp /dev/tcp]
-      (match (apply sync/timeout 8.0 /dev/udp /dev/tcp ((inst hash-keys Input-Port Output-Port) izunas))
+      (match (apply sync/timeout (sakuyamon-foxpipe-idle) /dev/udp /dev/tcp
+                    ((inst hash-keys Input-Port Output-Port) izunas))
         [{list /dev/tcpin /dev/tcpout} (thread (thunk (identity/timeout /dev/tcpin /dev/tcpout)))]
         [{list size _ _} (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
                            (define packet (bytes->string/utf-8 log-pool #false 0 size))
@@ -78,7 +80,10 @@
                                     ((inst hash-remove! Input-Port Output-Port) izunas /dev/tcpin)
                                     (match-define-values {_ _ remote port} (tcp-addresses /dev/tcpout #true))
                                     (foxlog 'notice "~a:~a has gone!" remote port))]
-        [#false (push-back beating-heart#)])
+        [#false (void (push-back beating-heart#)
+                      (when (and root? (symbol=? (digimon-system) 'solaris))
+                        (when (system (format "sh ~a/foxpipe/kill_if_cpueating.sh" (digimon-stone)))
+                          (foxlog 'notice "Sakuyamon has terminated to release the CPU core!"))))])
       (unless (exn:break? (thread-try-receive))
         (serve-forever /dev/udp /dev/tcp))))
 
@@ -88,16 +93,14 @@
    `{{usage-help ,(format "~a~n" desc)}}
    (lambda [[flags : Any]]
      (parameterize ([current-custodian (make-custodian)])
-       (dynamic-wind (thunk (let ([port (or (sakuyamon-foxpipe-port) 514)])
-                              (define root? (zero? (getuid)))
+       (dynamic-wind (thunk (let-values ([{errno uid gid} (fetch_tamer_ids #"tamer")])
                               (unless (zero? (seteuid (getuid))) (exit-with-eperm 'regain-uid (saved-errno)))
                               (unless (zero? (setegid (getgid))) (exit-with-eperm 'regain-gid (saved-errno)))
-                              (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
                               (when (and root? (not (zero? errno))) (exit-with-eperm 'fetch-tamer-id errno))
                               
                               (with-handlers ([exn:fail:network? exit-with-fatal])
-                                (udp-bind! foxpipe "127.0.0.1" port)
-                                (scepter (tcp-listen port (sakuyamon-foxpipe-max-waiting) #true)))
+                                (udp-bind! foxpipe "127.0.0.1" (sakuyamon-foxpipe-port))
+                                (scepter (tcp-listen (sakuyamon-foxpipe-port) (sakuyamon-foxpipe-max-waiting) #true)))
                               
                               (when root?
                                 ;;; if change uid first, then gid cannot be changed again.

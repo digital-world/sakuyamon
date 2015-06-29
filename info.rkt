@@ -28,5 +28,6 @@
 (define sakuyamon-timeout-file/byte 1/20)
 (define sakuyamon-timeout-file 30)
 
-(define sakuyamon-foxpipe-port #false)
+(define sakuyamon-foxpipe-port 514)
+(define sakuyamon-foxpipe-timeout-idle 8.0)
 (define sakuyamon-foxpipe-max-waiting 4)
