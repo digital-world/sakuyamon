@@ -20,11 +20,11 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >     + 📖
 [sakuyamon.rkt](http://gyoudmon.org/~wargrey:sakuyamon/sakuyamon.rkt)
 >       + 📑Sakuyamon, Realize!
->         - 💚 1 - realize?
+>         - 💚 1 - sakuyamon realize
 >       + 📑Keep Realms Safe!
->         - 💚 1 - sphere --in-place
+>         - 💚 1 - sakuyamon sphere --in-place
 >       + 📑How is everything going?
->         - 💘 1 - foxpipe?
+>         - 💘 1 - sakuyamon foxpipe
 >     + 📖
 [dispatch.rkt](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rkt)
 >       + 📑Main Terminus
