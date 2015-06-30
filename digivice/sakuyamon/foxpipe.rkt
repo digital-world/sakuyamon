@@ -21,6 +21,8 @@
   
   (define kudagitsune : (Parameterof (Option Thread)) (make-parameter #false))
   (define izunas : (HashTable Input-Port Output-Port) ((inst make-hash Input-Port Output-Port)))
+  (define sakuyamon-scepter-port : (Parameterof Positive-Integer)
+    (make-parameter (+ (sakuyamon-foxpipe-port) (if root? 0 16180))))
   
   (define foxlog : (-> Symbol String Any * Void)
     (lambda [severity maybe . argl]
@@ -74,7 +76,9 @@
         [{list /dev/tcpin /dev/tcpout} (thread (thunk (identity/timeout /dev/tcpin /dev/tcpout)))]
         [{list size _ _} (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
                            (define packet (bytes->string/utf-8 log-pool #false 0 size))
-                           (with-handlers ([exn:fail? void]) (displayln packet))
+                           (with-handlers ([exn:fail? void])
+                             (displayln packet)
+                             (flush-output (current-output-port)))
                            (push-back packet))]
         [{? tcp-port? /dev/tcpin} (let ([/dev/tcpout ((inst hash-ref Input-Port Output-Port Nothing) izunas /dev/tcpin)])
                                     ((inst hash-remove! Input-Port Output-Port) izunas /dev/tcpin)
@@ -90,7 +94,10 @@
   ((cast parse-command-line (-> String (Vectorof String) Help-Table (-> Any Void) (Listof String) (-> String Void) Void))
    (format "~a ~a" (#%module) (path-replace-suffix (cast (file-name-from-path (#%file)) Path) #""))
    (current-command-line-arguments)
-   `{{usage-help ,(format "~a~n" desc)}}
+   `([usage-help ,(format "~a~n" desc)]
+     [once-each
+      [{"-p"} ,(λ [[flag : String] [port : String]] (sakuyamon-scepter-port (cast (string->number port) Positive-Integer)))
+              {"Use an alternative <port>." "port"}]])
    (lambda [[flags : Any]]
      (parameterize ([current-custodian (make-custodian)])
        (dynamic-wind (thunk (let-values ([{errno uid gid} (fetch_tamer_ids #"tamer")])
@@ -99,8 +106,8 @@
                               (when (and root? (not (zero? errno))) (exit-with-eperm 'fetch-tamer-id errno))
                               
                               (with-handlers ([exn:fail:network? exit-with-fatal])
-                                (udp-bind! foxpipe "127.0.0.1" (sakuyamon-foxpipe-port))
-                                (scepter (tcp-listen (sakuyamon-foxpipe-port) (sakuyamon-foxpipe-max-waiting) #true)))
+                                (udp-bind! foxpipe "127.0.0.1" (sakuyamon-scepter-port))
+                                (scepter (tcp-listen (sakuyamon-scepter-port) (sakuyamon-foxpipe-max-waiting) #true)))
                               
                               (when root?
                                 ;;; if change uid first, then gid cannot be changed again.
@@ -112,7 +119,11 @@
                                 (exit 'ECONFIG))
                               
                               (match-let-values ([{_ port _ _} (udp-addresses foxpipe #true)])
-                                (foxlog 'notice "waiting rsyslog packets on ~a." port))))
+                                (foxlog 'notice "waiting rsyslog packets on ~a." port))
+
+                              (unless (terminal-port? (current-output-port))
+                                (displayln beating-heart#)
+                                (flush-output))))
                      (thunk (with-handlers ([exn:break? signal-handler])
                               (kudagitsune (thread (thunk (serve-forever (udp-receive!-evt foxpipe log-pool)
                                                                          (tcp-accept-evt (cast (scepter) TCP-Listener))))))

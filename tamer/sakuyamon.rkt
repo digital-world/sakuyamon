@@ -43,7 +43,7 @@ and listen on port @racket[80], otherwise she will realize and listen on port @r
 
 @tamer-note['realize]
 @chunk[|<testcase: realize>|
-       (test-spec "realize?" (check-not-exn (check-ready? 'realize)))]
+       (test-spec "sakuyamon realize" (check-not-exn (check-sakuyamon-ready? 'realize)))]
  
 @handbook-scenario{Keep Realms Safe!}
 
@@ -72,7 +72,7 @@ Note that @exec{sphere} will do nothing for those passwords that have already be
 @chunk[|<testcsae: sphere in-place>|
        (let-values ([{realm.dtkr} (path->string (path-replace-suffix realm.rktd ".dtkr"))]
                     [{digest-in digest-out} (make-pipe #false 'digest-in 'digest-out)])
-         (test-spec "sphere --in-place"
+         (test-spec "sakuyamon sphere --in-place"
                     #:before (thunk (copy-file realm.rktd realm.dtkr))
                     #:after (thunk (delete-file realm.dtkr))
                     (parameterize ([current-output-port digest-out]
@@ -85,10 +85,29 @@ Note that @exec{sphere} will do nothing for those passwords that have already be
                                                           (sakuyamon "sphere" realm.dtkr))))
                                       (read digest-in))))))]
 
+@handbook-scenario{How is everything going?}
+
+Logging plays an important role in the lifecycle of Web Application, but the fact is that
+most modern operating systems such as Unixes do not provide a good out of box tool
+to monitor the logs just as MacOSX @exec{Console.app} does. Therefore here exists
+@exec{foxpipe} and @exec{izuna}.
+
+@tamer-action[(parameterize ([exit-handler void])
+                (sakuyamon "foxpipe" "--help"))
+              (parameterize ([exit-handler void])
+                (sakuyamon "izuna" "--help"))]
+
+@tamer-note['foxpipe]
+@chunk[|<testcsae: foxpipe>|
+       (test-spec "sakuyamon foxpipe"
+                  #:before (thunk (unless rsyslogd? (skip "rsyslogd not found!")))
+                  (check-not-exn (check-foxpipe-ready? #:close? #true)))]
+
 @handbook-appendix[]
 
 @chunk[|<sakuyamon:*>|
        (module+ main (call-as-normal-termination tamer-prove))
        (module+ story
          (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)
-         (define-tamer-suite sphere "Keep Realms Safe!" |<testcsae: sphere in-place>|))]
+         (define-tamer-suite sphere "Keep Realms Safe!" |<testcsae: sphere in-place>|)
+         (define-tamer-suite foxpipe "How is everything going?" |<testcsae: foxpipe>|))]

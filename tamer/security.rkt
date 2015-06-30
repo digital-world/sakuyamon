@@ -37,5 +37,5 @@ then enjoy it yourself!
        {module+ main (call-as-normal-termination tamer-prove)}
        {module+ story
          (define-tamer-suite I-am-a-teapot "Bad Users"
-           #:before (check-ready? 'teapot)
+           #:before (check-sakuyamon-ready? 'teapot)
            |<testcase: I-am-a-teapot>|)}]

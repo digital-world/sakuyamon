@@ -13,6 +13,25 @@
 (define-type Headers (HashTable Symbol String))
 (define-type Client-Response (List Positive-Integer String Headers Input-Port))
 
+(define foxpipe-connect : (-> String Positive-Integer
+                              [#:retry (U Integer +inf.0)]
+                              [#:interval Nonnegative-Real]
+                              [#:interval++ (-> Number Number)]
+                              (Pairof Input-Port Output-Port))
+  (lambda [host port #:retry [retry 16] #:interval [interval 0.618] #:interval++ [i++ log]]
+    (define raise-unless-retrial : (-> exn:fail (Pairof Input-Port Output-Port))
+      (lambda [efne]
+        (unless (positive? retry) (raise efne))
+        (sync/timeout/enable-break interval)
+        (foxpipe-connect host port
+                         #:retry (cast (sub1 retry) (U Integer +inf.0))
+                         #:interval (abs (+ interval (cast (i++ interval) Real)))
+                         #:interval++ i++)))
+    (with-handlers ([exn:fail:network? raise-unless-retrial])
+      (define-values {/dev/tcpin /dev/tcpout}
+        (tcp-connect/enable-break host port))
+      (cons /dev/tcpin /dev/tcpout))))
+
 (define sakuyamon-agent : (-> String Positive-Integer String * Client-Response)
   (lambda [host port . arglist]
     (define anyauth? : (Parameterof Boolean) (make-parameter #false))

@@ -23,6 +23,8 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >         - 💚 1 - realize?
 >       + 📑Keep Realms Safe!
 >         - 💚 1 - sphere --in-place
+>       + 📑How is everything going?
+>         - 💘 1 - foxpipe?
 >     + 📖
 [dispatch.rkt](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rkt)
 >       + 📑Main Terminus
@@ -67,4 +69,4 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >       + 📑Bad Users
 >         - 💚 1 - 418: ../tamer/.realm.rktd
 >
-> 📌27 examples, 0 failures, 0 errors, 100.00% Okay.
+> 📌28 examples, 0 failures, 0 errors, 1 skip, 0 todos, 100.00% Okay.

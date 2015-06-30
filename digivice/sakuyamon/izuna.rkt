@@ -21,17 +21,19 @@
                                           (Listof String) (-> String Void) Void))
              (format "~a ~a" (#%module) (path-replace-suffix (cast (file-name-from-path (#%file)) Path) #""))
              (current-command-line-arguments)
-             `{{usage-help ,(format "~a~n" desc)}
-               {once-each [{"-p"} ,(λ [[flag : String] [port : String]] (sakuyamon-scepter-port (cast (string->number port) Positive-Integer)))
-                                  {"Use an alternative <port>." "port"}]}}
+             `([usage-help ,(format "~a~n" desc)]
+               [once-each
+                [{"-p"} ,(λ [[flag : String] [port : String]] (sakuyamon-scepter-port (cast (string->number port) Positive-Integer)))
+                        {"Use an alternative <port>." "port"}]])
              (lambda [!flag . argl]
                (parameterize ([current-custodian (make-custodian)])
                  (unless (null? argl) (sakuyamon-scepter-host (cast (car argl) String)))
                  (with-handlers ([exn:break? void]
                                  [exn? displayln])
                    (let reconnect ()
-                     (define-values {/dev/tcpin /dev/tcpout}
-                       (tcp-connect/enable-break (sakuyamon-scepter-host) (sakuyamon-scepter-port)))
+                     (match-define {cons /dev/tcpin /dev/tcpout}
+                       (foxpipe-connect (sakuyamon-scepter-host) (sakuyamon-scepter-port)))
+                     (printf "connected to ~a:~a~n." (sakuyamon-scepter-host) (sakuyamon-scepter-port))
                      (let pull ()
                        (define v (read /dev/tcpin))
                        (unless (equal? v beating-heart#) (displayln v))

@@ -6,7 +6,7 @@
 (require xml)
 
 (define name (format "network/~a" (current-digimon)))
-(define exec (format "~a/tamer.rkt" (digimon-tamer)))
+(define exec (format "~a/tamer.rkt sakuyamon" (digimon-tamer)))
 (define PATH (format "~a:/sbin:/usr/sbin:/bin:/usr/bin" (find-console-bin-dir)))
 
 #| ORDER IS IMPORTANT |#
