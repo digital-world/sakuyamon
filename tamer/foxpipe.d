@@ -14,7 +14,7 @@ dtrace:::BEGIN
 tcp:::send
 / args[4]->tcp_dport == port /
 {
-    printf("TCP[%d]: %s:%d -> %s:%d %d (", cpu,
+    printf("TCP@%d: %s:%d -> %s:%d %d (", cpu,
             args[2]->ip_saddr, args[4]->tcp_sport,
             args[2]->ip_daddr, args[4]->tcp_dport,
             args[2]->ip_plength - args[4]->tcp_offset);
@@ -33,7 +33,7 @@ tcp:::send
 tcp:::receive
 / args[4]->tcp_sport == port /
 {
-    printf("TCP[%d]: %s:%d <- %s:%d %d (", cpu,
+    printf("TCP@%d: %s:%d <- %s:%d %d (", cpu,
             args[2]->ip_daddr, args[4]->tcp_dport,
             args[2]->ip_saddr, args[4]->tcp_sport,
             args[2]->ip_plength - args[4]->tcp_offset);
@@ -52,7 +52,7 @@ tcp:::receive
 udp:::receive
 / args[4]->udp_dport == port /
 {
-    printf("UDP[%d]: %s:%d <- %s:%d %d\n", cpu,
+    printf("UDP@%d: %s:%d <- %s:%d %d\n", cpu,
             args[2]->ip_daddr, args[4]->udp_dport,
             args[2]->ip_saddr, args[4]->udp_sport,
             args[2]->ip_plength);

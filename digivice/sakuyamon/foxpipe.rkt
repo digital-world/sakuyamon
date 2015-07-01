@@ -84,10 +84,7 @@
                                     ((inst hash-remove! Input-Port Output-Port) izunas /dev/tcpin)
                                     (match-define-values {_ _ remote port} (tcp-addresses /dev/tcpout #true))
                                     (foxlog 'notice "~a:~a has gone!" remote port))]
-        [#false (void (push-back beating-heart#)
-                      (when (and root? (symbol=? (digimon-system) 'solaris))
-                        (when (system (format "sh ~a/foxpipe/kill_if_cpueating.sh" (digimon-stone)))
-                          (foxlog 'notice "Sakuyamon has terminated to release the CPU core!"))))])
+        [#false (push-back beating-heart#)])
       (unless (exn:break? (thread-try-receive))
         (serve-forever /dev/udp /dev/tcp))))
 

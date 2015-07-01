@@ -4,11 +4,10 @@
 
 int svc_startd;
 int sub_startd;
-int sakuyamon;
 
 dtrace:::BEGIN
 {
-    printf("Troubleshooting: Racket Web Server eats the entire CPU core in Solaris!\n");
+    printf("svc.start: sakuyamon and foxpipe\n");
 }
 
 dtrace:::BEGIN
@@ -91,7 +90,6 @@ proc::exec_common:exec
 / smf[sub_startd, pid] == 1 /
 {
     printf("%s[%d]: exec %s.\n", execname, pid, args[0]);
-    sakuyamon=(execname == "sakuyamon.rkt" ? pid : sakuyamon);
 }
 
 proc::psig:signal-handle
@@ -108,43 +106,14 @@ proc::proc_exit:exit
     smf[sub_startd, pid] = 0;
 }
 
-/**
- * Monitor Multiplexing, It seems that `pollsys` is the CPU-eater
- **/
-
-fbt::pollsys:entry
-/ pid == sakuyamon /
-{
-    printf("%s[%d]: calling %s...\n", execname, pid, probefunc);
-}
-
-/* Monitor TCP */
-tcp:::send
-/ args[4]->tcp_dport == 80 /
-{
-    this->length = args[2]->ip_plength - args[4]->tcp_offset;
-    printf("TCP: %d %s:%d -> %s:%d %d (",
-            cpu, args[2]->ip_saddr, args[4]->tcp_sport,
-            args[2]->ip_daddr, args[4]->tcp_dport, this->length);
-    printf("%s", args[4]->tcp_flags & TH_FIN ? "FIN|" : "");
-    printf("%s", args[4]->tcp_flags & TH_SYN ? "SYN|" : "");
-    printf("%s", args[4]->tcp_flags & TH_RST ? "RST|" : "");
-    printf("%s", args[4]->tcp_flags & TH_PUSH ? "PUSH|" : "");
-    printf("%s", args[4]->tcp_flags & TH_ACK ? "ACK|" : "");
-    printf("%s", args[4]->tcp_flags & TH_URG ? "URG|" : "");
-    printf("%s", args[4]->tcp_flags & TH_ECE ? "ECE|" : "");
-    printf("%s", args[4]->tcp_flags & TH_CWR ? "CWR|" : "");
-    printf("%s", args[4]->tcp_flags == 0 ? "null " : "");
-    printf("\b)\n");
-}
-
+/* Monitor TCP and UDP: Loop network results duplicate output. */
+tcp:::send,
 tcp:::receive
-/ args[4]->tcp_sport == 80 /
 {
-    this->length = args[2]->ip_plength - args[4]->tcp_offset;
-    printf("TCP: %d %s:%d <- %s:%d %d (",
-            cpu, args[2]->ip_daddr, args[4]->tcp_dport,
-            args[2]->ip_saddr, args[4]->tcp_sport, this->length);
+    printf("TCP@%d: %s:%d -> %s:%d %d (", cpu,
+            args[2]->ip_saddr, args[4]->tcp_sport,
+            args[2]->ip_daddr, args[4]->tcp_dport,
+            args[2]->ip_plength - args[4]->tcp_offset);
     printf("%s", args[4]->tcp_flags & TH_FIN ? "FIN|" : "");
     printf("%s", args[4]->tcp_flags & TH_SYN ? "SYN|" : "");
     printf("%s", args[4]->tcp_flags & TH_RST ? "RST|" : "");
@@ -155,5 +124,13 @@ tcp:::receive
     printf("%s", args[4]->tcp_flags & TH_CWR ? "CWR|" : "");
     printf("%s", args[4]->tcp_flags == 0 ? "null " : "");
     printf("\b)\n");
+}
+
+udp:::receive
+{
+    printf("UDP@%d: %s:%d -> %s:%d %d\n", cpu,
+            args[2]->ip_saddr, args[4]->udp_sport,
+            args[2]->ip_daddr, args[4]->udp_dport,
+            args[2]->ip_plength);
 }
 

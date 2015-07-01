@@ -33,7 +33,7 @@
                    (let reconnect ()
                      (match-define {cons /dev/tcpin /dev/tcpout}
                        (foxpipe-connect (sakuyamon-scepter-host) (sakuyamon-scepter-port)))
-                     (printf "connected to ~a:~a~n." (sakuyamon-scepter-host) (sakuyamon-scepter-port))
+                     (printf "connected to ~a:~a.~n" (sakuyamon-scepter-host) (sakuyamon-scepter-port))
                      (let pull ()
                        (define v (read /dev/tcpin))
                        (unless (equal? v beating-heart#) (displayln v))

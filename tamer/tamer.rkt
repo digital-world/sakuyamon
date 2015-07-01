@@ -2,7 +2,7 @@
 
 #|
 # also works as solaris smf and linux systemd launcher
-exec racket --require "$0" -- ${1+"$@"}
+exec racket -t "$0" -- ${1+"$@"}
 |#
 
 #lang at-exp racket/base
