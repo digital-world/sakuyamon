@@ -52,7 +52,7 @@ exec racket -t "$0" -- ${1+"$@"}
 (define tamer-sakuyamon-errmsg (make-parameter #false))
 (define tamer-sakuyamon-port (if root? (or (sakuyamon-port) 80) 16180))
 (define tamer-foxpipe-errmsg (make-parameter #false))
-(define tamer-foxpipe-port (+ (sakuyamon-foxpipe-port) (if root? 0 16180)))
+(define tamer-foxpipe-port (if root? (sakuyamon-foxpipe-port) (kuzuhamon-foxpipe-port)))
 (define curl (curry sakuyamon-agent "::1" tamer-sakuyamon-port))
 (define 127.curl (curry sakuyamon-agent "127.0.0.1" tamer-sakuyamon-port))
 

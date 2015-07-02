@@ -22,7 +22,7 @@
   (define kudagitsune : (Parameterof (Option Thread)) (make-parameter #false))
   (define izunas : (HashTable Input-Port Output-Port) ((inst make-hash Input-Port Output-Port)))
   (define sakuyamon-scepter-port : (Parameterof Positive-Integer)
-    (make-parameter (+ (sakuyamon-foxpipe-port) (if root? 0 16180))))
+    (make-parameter (if root? (sakuyamon-foxpipe-port) (kuzuhamon-foxpipe-port))))
   
   (define foxlog : (-> Symbol String Any * Void)
     (lambda [severity maybe . argl]
@@ -91,10 +91,7 @@
   ((cast parse-command-line (-> String (Vectorof String) Help-Table (-> Any Void) (Listof String) (-> String Void) Void))
    (format "~a ~a" (#%module) (path-replace-suffix (cast (file-name-from-path (#%file)) Path) #""))
    (current-command-line-arguments)
-   `([usage-help ,(format "~a~n" desc)]
-     [once-each
-      [{"-p"} ,(λ [[flag : String] [port : String]] (sakuyamon-scepter-port (cast (string->number port) Positive-Integer)))
-              {"Use an alternative <port>." "port"}]])
+   `([usage-help ,(format "~a~n" desc)])
    (lambda [[flags : Any]]
      (parameterize ([current-custodian (make-custodian)])
        (dynamic-wind (thunk (let-values ([{errno uid gid} (fetch_tamer_ids #"tamer")])
