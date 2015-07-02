@@ -84,27 +84,25 @@
         (define {~host host} (string->symbol (string-downcase (if (bytes? host) (bytes->string/utf-8 host) host))))
         (define ~method (compose1 string-upcase bytes->string/utf-8))
 
-        (define fields '{date user-agent uri client host referer authorization})
-        (syslog 'info 'request "fields: '~s" fields)
-
         (define {request-head-value req name}
           (define h (headers-assq* name (request-headers/raw req)))
           (and h (header-value h)))
         
         (define {syslog-request req}
-          (define now (current-date))
-          (syslog 'notice 'request "~s"
-                  (list (format "~a-~a-~a ~a:~a:~a"
-                                (date-year now) (~date (date-month now))
-                                (~date (date-day now)) (~date (date-hour now))
-                                (~date (date-minute now)) (~date (date-second now)))
-                        (request-head-value req #"user-agent")
-                        (~method (request-method req))
-                        (url->string (request-uri req))
-                        (request-client-ip req)
-                        (request-head-value req #"host")
-                        (request-head-value req #"referer")
-                        (request-head-value req #"authorization"))))
+          ((compose1 (curry syslog 'notice 'request "~s") make-hash)
+           (list* (let ([now (current-date)])
+                    (cons 'logging-timestamp
+                          (format "~a: ~a-~a-~a ~a:~a:~a.~a"
+                                  (date*-time-zone-name now) (date-year now)
+                                  (~date (date-month now)) (~date (date-day now))
+                                  (~date (date-hour now)) (~date (date-minute now))
+                                  (~date (date-second now)) (date*-nanosecond now))))
+                  (cons 'method (~method (request-method req)))
+                  (cons 'uri (url->string (request-uri req)))
+                  (cons 'client (request-client-ip req))
+                  (for/list ([head (in-list (request-headers/raw req))])
+                    (cons (string->symbol (string-downcase (bytes->string/utf-8 (header-field head))))
+                          (header-value head))))))
 
         (define dispatch
           (lambda [conn req]
@@ -144,7 +142,7 @@
           (define-values {<pwd-would-update-automatically> authorize} (pwd:password-file->authorized? realm.rktd))
           (chain:make (lift:make {λ [req] (let ([method (~method (request-method req))]
                                                 [allows '{"GET" "HEAD"}])
-                                            (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Digimon" fields)]
+                                            (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Digimon")]
                                                   [(member method allows) (next-dispatcher)]
                                                   [else (response:501)]))})
                       (filter:make #px"\\.rkt$" (lift:make {λ [req] (let-values ([{src _} (~path "/" (request-uri req) 1 #false)])
@@ -174,7 +172,7 @@
           (define-values {lookup-realm lookup-HA1} (realm.rktd->lookups realm.rktd))
           (chain:make (lift:make {λ [req] (let ([method (~method (request-method req))]
                                                 [allows '{"GET" "HEAD" "POST"}])
-                                            (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Tamer" fields)]
+                                            (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Per-Tamer")]
                                                   [(member method allows) (next-dispatcher)]
                                                   [else (response:501 #:page (page 501))]))})
                       (filter:make #px"^/~[^:/]*/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403 #:page (page 403))})]
@@ -206,7 +204,7 @@
           (define-values {refresh-servlet! url->servlet} (path->servlet (curry url->path "default.rkt") null))
           (chain:make (lift:make {λ [req] (let ([method (~method (request-method req))]
                                                 [allows '{"GET" "HEAD" "POST"}])
-                                            (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Main" fields)]
+                                            (cond [(equal? method "OPTIONS") (response:options (request-uri req) allows #"Main")]
                                                   [(member method allows) (next-dispatcher)]
                                                   [else (response:501)]))})
                       (filter:make #px"^/d-arc/" (cond [(false? ::1?) (lift:make {λ _ (response:403)})]

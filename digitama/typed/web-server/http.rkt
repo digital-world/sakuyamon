@@ -51,7 +51,9 @@
                        [bindings-assq-all
                         (-> Bytes
                             (Listof Binding)
-                            (Listof Binding))])
+                            (Listof Binding))]
+                       [request-bindings/raw
+                        (-> Request (Listof Binding))])
 
 (require/typed/provide web-server/http/response-structs
                        [#:struct response

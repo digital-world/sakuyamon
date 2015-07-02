@@ -49,13 +49,12 @@
                                                      (pre "» " ,(number->string status-code)
                                                           " - " ,desc))))))])))
 
-(define response:options : (-> URL (Listof String) Bytes (Listof Symbol) Header * Response)
-  (lambda [uri allows terminus fields . headers]
+(define response:options : (-> URL (Listof String) Bytes Header * Response)
+  (lambda [uri allows terminus . headers]
     (match-define-values {_ id-un} (fetch_tamer_name (geteuid)))
     (match-define-values {_ id-gn} (fetch_tamer_group (getegid)))
     (response/output void #:code 200 #:message #"Metainformation"
                      #:headers (list* (header #"Allow" (string->bytes/utf-8 (string-join allows ",")))
-                                      (header #"Fields" (string->bytes/utf-8 (format "'~s" fields)))
                                       (header #"Terminus" terminus)
                                       (header #"Daemon" id-un)
                                       (header #"Realm" id-gn)
