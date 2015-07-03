@@ -16,7 +16,8 @@ svcadm_restart() {
 
 launchctl_restart() {
     pkill -HUP -u `id -u tamer`;
-    test $? -eq 0 || launchctl load $1;
+    launchctl list | grep sakuyamon || launchctl load /System/Library/LaunchDaemons/org.gyoudmon.sakuyamon.plist;
+    launchctl list | grep foxpipe || launchctl load /System/Library/LaunchDaemons/org.gyoudmon.foxpipe.plist;
 }
 
 systemctl_restart() {
@@ -31,13 +32,13 @@ systemctl_restart() {
 
 case "$1" in
     solaris)
-        svcadm_restart $2;
+        svcadm_restart;
         ;;
     macosx)
-        launchctl_restart $2;
+        launchctl_restart; 
         ;;
     linux)
-        systemctl_restart $2;
+        systemctl_restart;
         ;;
     *)
         false;

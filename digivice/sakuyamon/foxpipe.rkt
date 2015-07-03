@@ -74,7 +74,7 @@
                     ((inst hash-keys Input-Port Output-Port) izunas))
         [{list /dev/tcpin /dev/tcpout} (thread (thunk (identity/timeout /dev/tcpin /dev/tcpout)))]
         [{list size _ _} (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
-                           (define packet (bytes->string/utf-8 log-pool #false 0 size))
+                           (define packet (string-trim (bytes->string/utf-8 log-pool #false 0 size)))
                            (with-handlers ([exn:fail? void])
                              (displayln packet)
                              (flush-output (current-output-port)))

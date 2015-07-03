@@ -7,6 +7,8 @@
 
 (define sakuyamon.plist "/System/Library/LaunchDaemons/org.gyoudmon.sakuyamon.plist")
 (define /sakuyamon/launchd.plist (build-path (digimon-stone) "sakuyamon" "launchd.plist"))
+(define foxpipe.plist "/System/Library/LaunchDaemons/org.gyoudmon.foxpipe.plist")
+(define /foxpipe/launchd.plist (build-path (digimon-stone) "foxpipe" "launchd.plist"))
 
 (define sakuyamon.smf "/lib/svc/manifest/network/sakuyamon.xml")
 (define /sakuyamon/manifest.xml (build-path (digimon-stone) "sakuyamon" "manifest.xml"))
@@ -33,7 +35,7 @@
 (define targets
   (case (digimon-system)
     [{solaris} (list sakuyamon.smf foxpipe.smf sakuyamon.rsyslog sakuyamon.logadm)]
-    [{macosx} (list sakuyamon.plist sakuyamon.asl)]
+    [{macosx} (list sakuyamon.plist foxpipe.plist sakuyamon.asl)]
     [{linux} (list sakuyamon.service foxpipe.service sakuyamon.rsyslog sakuyamon.logrotate)]))
 
 (module+ premake
@@ -54,6 +56,8 @@
     (when (string=? (current-tamer) "root")
       (make ([sakuyamon.plist [/sakuyamon/launchd.plist (quote-source-file)]
                               (sudo.make sakuyamon.plist /sakuyamon/launchd.plist "root:wheel")]
+             [foxpipe.plist [/foxpipe/launchd.plist (quote-source-file)]
+                            (sudo.make foxpipe.plist /foxpipe/launchd.plist "root:wheel")]
              [sakuyamon.smf [/sakuyamon/manifest.xml (quote-source-file)]
                             (sudo.make sakuyamon.smf /sakuyamon/manifest.xml "root:sys")]
              [foxpipe.smf [/foxpipe/manifest.xml (quote-source-file)]
