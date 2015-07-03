@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require "../digitama/digicore.rkt")
+(require "../../digitama/digicore.rkt")
 
 (require racket/string)
 
