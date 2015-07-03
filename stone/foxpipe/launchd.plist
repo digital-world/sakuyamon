@@ -1,0 +1,21 @@
+#lang racket/base
+
+(require "../../digitama/digicore.rkt")
+
+(require racket/string)
+
+(require setup/dirs)
+
+(require xml/plist)
+(require xml)
+
+(define PATH (format "~a:/sbin:/usr/sbin:/bin:/usr/bin" (find-console-bin-dir)))
+(define name (string-downcase "foxpipe"))
+
+(parameterize ([empty-tag-shorthand '{true false}])
+  (write-plist `{dict [assoc-pair "Label" ,(format "org.gyoudmon.~a" name)]
+                      [assoc-pair "ProgramArguments" {array ,(format "~a/~a.rkt" (digimon-digivice) (current-digimon)) "foxpipe"}]
+                      [assoc-pair "ProcessType" "Background"]
+                      [assoc-pair "KeepAlive" {true}]
+                      [assoc-pair "EnvironmentVariables" {dict [assoc-pair "PATH" ,PATH]}]}
+               (current-output-port)))

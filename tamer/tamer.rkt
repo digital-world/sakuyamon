@@ -30,8 +30,6 @@ exec racket -t "$0" -- ${1+"$@"}
 
 (define root? (string=? (current-tamer) "root"))
 (define smf-or-systemd? (getenv "SMF_METHOD"))
-(define rsyslogd? (or (find-executable-path "rsyslogd")
-                      (file-exists? "/usr/lib/rsyslog/rsyslogd")))
 (define-values {daemonize-sakuyamon? daemonize-foxpipe?}
   (match (current-command-line-arguments)
     [{vector "sakuyamon"} (values #true #false)]
@@ -116,7 +114,7 @@ exec racket -t "$0" -- ${1+"$@"}
     (when (or (and smf-or-systemd? daemonize-sakuyamon?) (not root?))
       (with-handlers ([exn:fail:network:errno? try-fork-sakuyamon])
         ((check-sakuyamon-ready? (file-name-from-path (quote-source-file))))))
-    (when (and rsyslogd? smf-or-systemd? daemonize-foxpipe?)
+    (when (and smf-or-systemd? daemonize-foxpipe?)
       (with-handlers ([exn:fail:network:errno? try-fork-foxpipe])
         ((check-foxpipe-ready? #:close? #true)))))
   (void))

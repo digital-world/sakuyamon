@@ -99,9 +99,7 @@ to monitor the logs just as MacOSX @exec{Console.app} does. Therefore here exist
 
 @tamer-note['foxpipe]
 @chunk[|<testcsae: foxpipe>|
-       (test-spec "sakuyamon foxpipe"
-                  #:before (thunk (unless rsyslogd? (skip "rsyslogd not found!")))
-                  (check-not-exn (check-foxpipe-ready? #:close? #true)))]
+       (test-spec "sakuyamon foxpipe" (check-not-exn (check-foxpipe-ready? #:close? #true)))]
 
 @handbook-appendix[]
 

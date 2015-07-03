@@ -20,53 +20,23 @@ _**Have tested with MacOSX, OpenIndiana and Ubuntu.**_
 >     + 📖
 [sakuyamon.rkt](http://gyoudmon.org/~wargrey:sakuyamon/sakuyamon.rkt)
 >       + 📑Sakuyamon, Realize!
->         - 💚  1 - sakuyamon realize
 >       + 📑Keep Realms Safe!
->         - 💚  1 - sakuyamon sphere --in-place
 >       + 📑How is everything going?
->         - 💚  1 - sakuyamon foxpipe
 >     + 📖
 [dispatch.rkt](http://gyoudmon.org/~wargrey:sakuyamon/dispatch.rkt)
 >       + 📑Main Terminus
->         - 💚  1 - HTTP OPTIONS
 >         + 📑Function URLs
->           - 💚  1 - 200: /d-arc/collect-garbage@::1
->           - 💚  2 - 403: /d-arc/collect-garbage@127
->           - 💚  3 - 200: /d-arc/refresh-servlet@::1
->           - 💚  4 - 403: /d-arc/refresh-servlet@127
 >       + 📑Per-Tamer Terminus
->         - 💚  1 - HTTP OPTIONS
 >         + 📑Function URLs
->           - 💚  1 - 200: /~wargrey/d-arc/refresh-servlet@::1
->           - 💚  2 - 403: /~wargrey/d-arc/refresh-servlet@127
 >         + 📑Digest Authentication
->           - 💚  1 - 200|503: guest@::1:digest
->           - 💚  2 - 401|503: guest@127:digest
->           - 💚  3 - 200|503: wargrey@127:digest
 >       + 📑Per-Digimon Terminus
->         - 💚  1 - HTTP OPTIONS
 >         + 📑Basic Authentication
->           - 💚  1 - 200|503: guest@::1:basic
->           - 💚  2 - 401|503: guest@127:basic
->           - 💚  3 - 200|503: wargrey@127:basic
 >     + 📖
 [seo.rkt](http://gyoudmon.org/~wargrey:sakuyamon/seo.rkt)
 >       + 📑/robots.txt
->         - 💚  1 - 200|503: /robots.txt
->         - 💚  2 - 200|503: /~wargrey/robots.txt
->         - 💚  3 - 200|503: /~wargrey:sakuyamon/robots.txt
->         - 💚  4 - disallow: /~:/
 >       + 📑Server Side Redirections
 >         + 📑dir -> dir/
->           - 💚  1 - 302: .
->           - 💚  2 - 302: ~:
->           - 💚  3 - 302: stone
 >         + 📑rkt -> html
->           - 💚  1 - 302: seo.rkt
->           - 💚  2 - 302: dir/dot.lp.rkt
 >     + 📖
 [security.rkt](http://gyoudmon.org/~wargrey:sakuyamon/security.rkt)
 >       + 📑Bad Users
->         - 💚  1 - 418: ../tamer/.realm.rktd
->
-> 📌28 examples, 0 failures, 0 errors, 0 skips, 0 TODOs, 100.00% Okay.

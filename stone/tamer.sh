@@ -14,6 +14,11 @@ syslots() {
 dstamer() {
     case "$1" in
         create)
+            grep '@127.0.0.1:514' /etc/syslog.conf;
+            if test $? -ne 0; then
+                echo '*.* @127.0.0.1:514' >> /etc/syslog.conf;
+            fi
+            
             dscl . read /Groups/$2;
             if test $? -ne 0; then
                 sysid=`dscl . list Groups PrimaryGroupID | awk '$2 > 0 {print $2}' | sort -n | syslots | head -n 1`;
@@ -43,13 +48,13 @@ dstamer() {
 roletamer() {
     case "$1" in
         create)
-            getent group $2 || groupadd $2;
-            getent passwd $2 || roleadd -d / -g $2 -s `which false` -c "Digimon Tamer Daemon" $2;
-
             grep '/etc/rsyslog\.d/' /etc/rsyslog.conf;
             if test $? -ne 0; then
                 echo '$IncludeConfig /etc/rsyslog.d/*.conf' >> /etc/rsyslog.conf;
             fi
+
+            getent group $2 || groupadd $2;
+            getent passwd $2 || roleadd -d / -g $2 -s `which false` -c "Digimon Tamer Daemon" $2;
             ;;
         delete)
             getent passwd $2 && roledel $2;
