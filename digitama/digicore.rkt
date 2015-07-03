@@ -35,9 +35,3 @@
 (define sakuyamon-foxpipe-max-waiting : (Parameterof Positive-Integer)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-foxpipe-max-waiting (const 4)) Positive-Integer)))
 
-(define kuzuhamon-foxpipe-port : (Parameterof Nothing Positive-Integer)
-  ;;; designed for testing foxpipe as normal user
-  (make-derived-parameter sakuyamon-foxpipe-port
-                          (immutable-guard 'kuzuhamon-foxpipe-port)
-                          (lambda [[p : Positive-Integer]] (min 65535 (+ 16180 p)))))
-

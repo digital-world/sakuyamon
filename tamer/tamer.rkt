@@ -52,7 +52,7 @@ exec racket -t "$0" -- ${1+"$@"}
 (define tamer-sakuyamon-errmsg (make-parameter #false))
 (define tamer-sakuyamon-port (if root? (or (sakuyamon-port) 80) 16180))
 (define tamer-foxpipe-errmsg (make-parameter #false))
-(define tamer-foxpipe-port (if root? (sakuyamon-foxpipe-port) (kuzuhamon-foxpipe-port)))
+(define tamer-foxpipe-port (sakuyamon-foxpipe-port))
 (define curl (curry sakuyamon-agent "::1" tamer-sakuyamon-port))
 (define 127.curl (curry sakuyamon-agent "127.0.0.1" tamer-sakuyamon-port))
 
@@ -116,7 +116,7 @@ exec racket -t "$0" -- ${1+"$@"}
     (when (or (and smf-or-systemd? daemonize-sakuyamon?) (not root?))
       (with-handlers ([exn:fail:network:errno? try-fork-sakuyamon])
         ((check-sakuyamon-ready? (file-name-from-path (quote-source-file))))))
-    (when (and rsyslogd? (or (and smf-or-systemd? daemonize-foxpipe?) (not root?)))
+    (when (and rsyslogd? smf-or-systemd? daemonize-foxpipe?)
       (with-handlers ([exn:fail:network:errno? try-fork-foxpipe])
         ((check-foxpipe-ready? #:close? #true)))))
   (void))

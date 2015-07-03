@@ -21,8 +21,7 @@
   
   (define kudagitsune : (Parameterof (Option Thread)) (make-parameter #false))
   (define izunas : (HashTable Input-Port Output-Port) ((inst make-hash Input-Port Output-Port)))
-  (define sakuyamon-scepter-port : (Parameterof Positive-Integer)
-    (make-parameter (if root? (sakuyamon-foxpipe-port) (kuzuhamon-foxpipe-port))))
+  (define sakuyamon-scepter-port : (Parameterof Positive-Integer) (make-parameter (sakuyamon-foxpipe-port)))
   
   (define foxlog : (-> Symbol String Any * Void)
     (lambda [severity maybe . argl]
