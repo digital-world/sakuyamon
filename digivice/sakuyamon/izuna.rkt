@@ -35,9 +35,17 @@
                        (foxpipe-connect (sakuyamon-scepter-host) (sakuyamon-scepter-port)))
                      (printf "connected to ~a:~a.~n" (sakuyamon-scepter-host) (sakuyamon-scepter-port))
                      (let pull ()
-                       (define v (read /dev/tcpin))
-                       (unless (equal? v beating-heart#) (displayln v))
-                       (if (eof-object? v) (reconnect) (pull)))))))
+                       (match (sync/timeout/enable-break (* (sakuyamon-foxpipe-idle) 1.618) /dev/tcpin)
+                         [#false (and (eprintf "connection has disconnected. retry later...~n")
+                                      (tcp-abandon-port /dev/tcpin)
+                                      (tcp-abandon-port /dev/tcpout)
+                                      (reconnect))]
+                         [else (let ([v (read /dev/tcpin)])
+                                 (unless (equal? v beating-heart#)
+                                   (displayln v))
+                                 (if (eof-object? v)
+                                     (reconnect)
+                                     (pull)))]))))))
              '{"hostname"}
              (lambda [[-h : String]]
                (display (string-replace -h #px"  -- : .+?-h --'\\s*" ""))
