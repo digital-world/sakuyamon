@@ -9,17 +9,6 @@
 (require ffi/unsafe)
 (require ffi/unsafe/define)
 
-(require (for-syntax racket/syntax))
-
-(define-syntax {define-enum stx}
-  (syntax-case stx []
-    [{_ id _value} (with-syntax ([_id (format-id #'id "_~a" (syntax-e #'id))]
-                                 [id.c (format-id #'id "~a.c" (syntax-e #'id))]
-                                 [id.rkt (format-id #'id "~a.rkt" (syntax-e #'id))])
-                     #'{begin (define _id _value)
-                              (define id.c (ctype-scheme->c _id))
-                              (define id.rkt (ctype-c->scheme _id))})]))
-
 (define-ffi-definer define-posix (ffi-lib #false))
 (define-ffi-definer define-digitama (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
                                                          "native" (system-library-subpath #false) "posix")))
