@@ -1,6 +1,8 @@
 #lang at-exp racket
 
-(provide (all-defined-out) saved-errno)
+(provide (all-defined-out))
+(provide (all-from-out ffi/unsafe))
+(provide (all-from-out ffi/unsafe/define))
 
 @require{digicore.rkt}
 
@@ -23,13 +25,13 @@
 (define-ffi-definer define-digitama (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
                                                          "native" (system-library-subpath #false) "posix")))
 
-(define-posix strerror_r (_fun _int _pointer _size -> _int))
-
-(define strerror
-  {lambda [erno]
-    (define errbuf (malloc 'atomic 32))
-    (strerror_r erno errbuf 32)
-    (bytes->string/utf-8 (car (regexp-match #px"^[^\u0]*" (make-sized-byte-string errbuf 32))))})
+(define-posix strerror
+  (_fun [errno : _int]
+        [buffer : _pointer = (malloc 'atomic 32)]
+        [size : _size = 32]
+        -> _int
+        -> (bytes->string/utf-8 (car (regexp-match #px"^[^\u0]*" (make-sized-byte-string buffer size)))))
+  #:c-id strerror_r)
 
 ;;; Users and Groups
 
@@ -44,30 +46,45 @@
 (define-posix seteuid (_fun #:save-errno 'posix _uint32 -> _int))
 (define-posix setegid (_fun #:save-errno 'posix _uint32 -> _int))
 
-(define-digitama fetch_tamer_ids (_fun #:save-errno 'posix
-                                       _bytes {u : (_ptr o _uint32)} {g : (_ptr o _uint32)}
-                                       -> {e : _int} -> (values e u g)))
+(define-digitama fetch_tamer_ids
+  (_fun #:save-errno 'posix
+        [username : _bytes]
+        [uid : (_ptr o _uint32)]
+        [gid : (_ptr o _uint32)]
+        -> [errno : _int]
+        -> (values errno uid gid)))
 
-(define-digitama fetch_tamer_name (_fun #:save-errno 'posix
-                                         _uint32 {un : (_ptr o _bytes)}
-                                         -> {e : _int} -> (values e un)))
+(define-digitama fetch_tamer_name
+  (_fun #:save-errno 'posix
+        [uid : _uint32]
+        [username : (_ptr o _bytes)]
+        -> [errno : _int]
+        -> (values errno username)))
 
-(define-digitama fetch_tamer_group (_fun #:save-errno 'posix
-                                         _uint32 {gn : (_ptr o _bytes)}
-                                         -> {e : _int} -> (values e gn)))
+(define-digitama fetch_tamer_group
+  (_fun #:save-errno 'posix
+        [gid : _uint32]
+        [groupname : (_ptr o _bytes)]
+        -> [errno : _int]
+        -> (values errno groupname)))
 
 ;;; syslog.
-(define-enum severity (_enum (list 'emerg    #| system is unusable |#
-                                   'alert    #| action must be taken immediately |#
-                                   'fatal    #| critical conditions |#
-                                   'error    #| error conditions |#
-                                   'warning  #| warning conditions |#
-                                   'notice   #| normal but significant condition |#
-                                   'info     #| informational |#
-                                   'debug    #| debug-level messages |#)))
+(define _severity
+  (_enum (list 'emerg    #| system is unusable |#
+               'alert    #| action must be taken immediately |#
+               'fatal    #| critical conditions |#
+               'error    #| error conditions |#
+               'warning  #| warning conditions |#
+               'notice   #| normal but significant condition |#
+               'info     #| informational |#
+               'debug    #| debug-level messages |#)))
 
-(define-digitama rsyslog (_fun _int _symbol _string -> _void))
+(define-digitama rsyslog
+  (_fun _severity
+        [topic : _symbol]
+        [message : _string]
+        -> _void))
 
 (define syslog
-  {lambda [severity topic maybe . argl]
-    (rsyslog (severity.c severity) topic (apply format maybe argl))})
+  (lambda [severity topic maybe . argl]
+    (rsyslog severity topic (apply format maybe argl))))

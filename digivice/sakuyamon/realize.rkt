@@ -34,7 +34,7 @@
         [{notice} (and (printf "~a: ~a~n" topic message)
                        (flush-output))]
         [else (eprintf "~a: ~a~n" topic message)]))
-    (rsyslog (severity.c severity) topic message))
+    (rsyslog severity topic message))
 
   (define {exit-with-eperm tips no}
     (syslog-perror 'error "~a error: ~a; errno=~a" tips (strerror no) no)
