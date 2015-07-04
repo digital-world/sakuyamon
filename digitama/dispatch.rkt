@@ -89,7 +89,7 @@
           (and h (header-value h)))
         
         (define {syslog-request req}
-          ((compose1 (curry syslog 'notice 'request "~s") make-hash)
+          ((compose1 (curry rsyslog 'notice 'request) ~s make-hash)
            (list* (let ([now (current-date)])
                     (cons 'logging-timestamp
                           (format "~a: ~a-~a-~a ~a:~a:~a.~a"

@@ -12,5 +12,4 @@
                        [fetch_tamer_ids (-> Bytes (Values Natural Natural Natural))]
                        [fetch_tamer_name (-> Natural (Values Natural Bytes))]
                        [fetch_tamer_group (-> Natural (Values Natural Bytes))]
-                       [rsyslog (-> Symbol Symbol String Void)]
-                       [syslog (-> Symbol Symbol String Any * Void)])
+                       [rsyslog (-> Symbol Symbol String Void)])

@@ -8,7 +8,6 @@
 
 (require ffi/unsafe)
 (require ffi/unsafe/define)
-(require (only-in '#%foreign ctype-scheme->c ctype-c->scheme))
 
 (require (for-syntax racket/syntax))
 
@@ -27,10 +26,10 @@
 
 (define-posix strerror
   (_fun [errno : _int]
-        [buffer : _pointer = (malloc 'atomic 32)]
+        [buffer : (_bytes o 32)]
         [size : _size = 32]
         -> _int
-        -> (bytes->string/utf-8 (car (regexp-match #px"^[^\u0]*" (make-sized-byte-string buffer size)))))
+        -> (bytes->string/utf-8 (car (regexp-match #px"^[^\u0]*" buffer))))
   #:c-id strerror_r)
 
 ;;; Users and Groups
@@ -84,7 +83,3 @@
         [topic : _symbol]
         [message : _string]
         -> _void))
-
-(define syslog
-  (lambda [severity topic maybe . argl]
-    (rsyslog severity topic (apply format maybe argl))))

@@ -25,7 +25,7 @@
   
   (define foxlog : (-> Symbol String Any * Void)
     (lambda [severity maybe . argl]
-      (rsyslog (severity.c severity) 'foxpipe (apply format maybe argl))))
+      (rsyslog severity 'foxpipe (apply format maybe argl))))
 
   (define syslog-perror : (-> String Any * Void)
     (lambda [maybe . argl]

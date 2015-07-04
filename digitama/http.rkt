@@ -66,7 +66,7 @@
     (define bb : Nonnegative-Integer (current-memory-use))
     (define ab : Nonnegative-Integer (let ([_ (collect-garbage)]) (current-memory-use)))
     (define message : String (format "[~aMB = ~aMB - ~aMB]" (~mb (- bb ab)) (~mb bb) (~mb ab)))
-    (syslog 'notice 'realize "collect garbage: ~a" message)
+    (rsyslog 'notice 'realize (~a "collect garbage: " message))
     (response/xexpr #:code 200 #:message (string->bytes/utf-8 message) #:headers headers
                     `(html (head (title "Collect Garbage")
                                  (link ([rel "stylesheet"] [href "/stone/error.css"])))
@@ -78,7 +78,7 @@
 (define response:rs : (-> (-> Void) Header * Response)
   (lambda [refresh-servlet! . headers]
     (refresh-servlet!)
-    (syslog 'notice 'realize "refresh servlet")
+    (rsyslog 'notice 'realize "refresh servlet")
     (response/xexpr #:code 200 #:message #"Servlet Refreshed" #:headers headers
                     `(html (head (title "Refresh Servlet")
                                  (link ([rel "stylesheet"] [href "/stone/error.css"])))
@@ -89,7 +89,7 @@
 
 (define response:401 : (-> URL [#:page (Option Path-String)] Header * Response)
   (lambda [url #:page [401.html #false] . headers]
-    (syslog 'notice 'unauthorized "~a" (url->string url))
+    (rsyslog 'notice 'unauthorized (url->string url))
     (response:ddd '(+(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*))(+(*)(*)(*)(*)))(*))
                   #"Unauthorized" "Authentication Failed!" 401.html headers)))
 
@@ -111,15 +111,19 @@
 (define response:exn : (-> (Option URL) exn Bytes [#:page (Option Path-String)] Header * Response)
   (lambda [url x stage #:page [500.html #false] . headers]
     (define messages : (Listof Bytes) ((inst call-with-input-string (Listof Bytes)) (exn-message x) port->bytes-lines))
-    (syslog 'fatal 'outage "~a: ~a~n~a~n~a" stage (and url (url->string url))
-            (string-join (map {λ [[msg : Bytes]] (format "» ~a" msg)} messages) (string #\newline))
-            (string-join (filter-map {λ [[stack : (Pairof (Option Symbol) Any)]]
-                                       (and (cdr stack)
-                                            (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
-                                              (and srcinfo (regexp-match? #px"^[^/]" srcinfo)
-                                                   (format "»» ~a: ~a~n" srcinfo (or (car stack) 'λ)))))}
-                                     (continuation-mark-set->context (exn-continuation-marks x)))
-                         (string #\newline)))
+    (rsyslog 'fatal 'outage
+             (~a stage ": "
+                 (and url (url->string url))
+                 #\newline
+                 (string-join (map {λ [[msg : Bytes]] (format "» ~a" msg)} messages) (string #\newline))
+                 #\newline
+                 (string-join (filter-map (lambda [[stack : (Pairof (Option Symbol) Any)]]
+                                            (and (cdr stack)
+                                                 (let ([srcinfo (srcloc->string (cast (cdr stack) srcloc))])
+                                                   (and srcinfo (regexp-match? #px"^[^/]" srcinfo)
+                                                        (format "»» ~a: ~a~n" srcinfo (or (car stack) 'λ))))))
+                                          (continuation-mark-set->context (exn-continuation-marks x)))
+                              (string #\newline))))
     (cond [(exn:fail:user? x) (response:418)]
           [else (response:ddd '(*(*(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)(*))(+(*)(*)(*)(*)))(+(*)(*)(*)(*)(*)))
                               (bytes-append stage #": " (bytes-join messages (string->bytes/utf-8 (string cat#))))
