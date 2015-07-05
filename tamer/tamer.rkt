@@ -58,19 +58,21 @@ exec racket -t "$0" -- ${1+"$@"}
   (define errno (car (exn:fail:network:errno-errno efne)))
   (unless (eq? errno ECONNREFUSED) (raise efne)))
 
-(define {wrap-raise errmsg efne}
+(define {wrap-raise fraise tamer-errmsg efne}
+  (define errmsg (tamer-errmsg))
   (define errno (car (exn:fail:network:errno-errno efne)))
-  (raise (cond [(not (and (eq? errno ECONNREFUSED) errmsg)) efne]
-               [else (struct-copy exn:fail:network:errno efne
-                                  [message #:parent exn errmsg])])))
+  (cond [(equal? fraise error) (raise (cond [(or (false? errmsg) (not (eq? errno ECONNREFUSED))) efne]
+                                            [else (struct-copy exn:fail:network:errno efne
+                                                               [message #:parent exn errmsg])]))]
+        [else #| skip or todo|# (fraise (or errmsg (exn-message efne)))]))
 
-(define {check-sakuyamon-ready? tips}
-  (thunk (with-handlers ([exn:fail:network:errno? (curry wrap-raise (tamer-sakuyamon-errmsg))])
+(define {check-sakuyamon-ready? tips #:type fraise}
+  (thunk (with-handlers ([exn:fail:network:errno? (curry wrap-raise fraise tamer-sakuyamon-errmsg)])
            (curl "-X" "Options" (~a "/" tips)))))
 
-(define {check-foxpipe-ready? #:close? [close? #true]}
-  (thunk (with-handlers ([exn:fail:network:errno? (curry wrap-raise (tamer-foxpipe-errmsg))])
-           (define ports (foxpipe-connect "localhost" tamer-foxpipe-port #:retry 0))
+(define {check-foxpipe-ready? #:type fraise #:close? [close? #true]}
+  (thunk (with-handlers ([exn:fail:network:errno? (curry wrap-raise fraise tamer-foxpipe-errmsg)])
+           (define ports (tcp-connect-retry "localhost" tamer-foxpipe-port #:retry 0))
            (when close?
              (tcp-abandon-port (car ports))
              (tcp-abandon-port (cdr ports)))
@@ -113,8 +115,8 @@ exec racket -t "$0" -- ${1+"$@"}
   (unless (regexp-match? #px#"[Dd]r[Rr]acket$" (find-system-path 'run-file))
     (when (or (and smf-or-systemd? daemonize-sakuyamon?) (not root?))
       (with-handlers ([exn:fail:network:errno? try-fork-sakuyamon])
-        ((check-sakuyamon-ready? (file-name-from-path (quote-source-file))))))
+        ((check-sakuyamon-ready? #:type error (file-name-from-path (quote-source-file))))))
     (when (and smf-or-systemd? daemonize-foxpipe?)
       (with-handlers ([exn:fail:network:errno? try-fork-foxpipe])
-        ((check-foxpipe-ready? #:close? #true)))))
+        ((check-foxpipe-ready? #:type error #:close? #true)))))
   (void))

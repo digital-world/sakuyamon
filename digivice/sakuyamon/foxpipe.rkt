@@ -34,9 +34,9 @@
         (eprintf "~a~n" errmsg))
       (foxlog 'error errmsg)))
   
-  (define exit-with-eperm : (-> Symbol Natural Nothing)
-    (lambda [tips no]
-      (syslog-perror "~a error: ~a; errno=~a" tips (strerror no) no)
+  (define exit-with-eperm : (-> exn:foreign Nothing)
+    (lambda [efe]
+      (syslog-perror "~a" (exn-message efe))
       (exit 'EPERM)))
 
   (define exit-with-fatal : (-> exn Nothing)
@@ -93,19 +93,19 @@
    `([usage-help ,(format "~a~n" desc)])
    (lambda [[flags : Any]]
      (parameterize ([current-custodian (make-custodian)])
-       (dynamic-wind (thunk (let-values ([{errno uid gid} (fetch_tamer_ids #"tamer")])
-                              (unless (zero? (seteuid (getuid))) (exit-with-eperm 'regain-uid (saved-errno)))
-                              (unless (zero? (setegid (getgid))) (exit-with-eperm 'regain-gid (saved-errno)))
-                              (when (and root? (not (zero? errno))) (exit-with-eperm 'fetch-tamer-id errno))
+       (dynamic-wind (thunk (with-handlers ([exn:foreign? exit-with-eperm])
+                              (seteuid (getuid))
+                              (setegid (getgid))
                               
                               (with-handlers ([exn:fail:network? exit-with-fatal])
                                 (udp-bind! foxpipe "127.0.0.1" (sakuyamon-scepter-port))
                                 (scepter (tcp-listen (sakuyamon-scepter-port) (sakuyamon-foxpipe-max-waiting) #true)))
                               
                               (when root?
+                                (define-values {uid gid} (fetch_tamer_ids #"tamer"))
                                 ;;; if change uid first, then gid cannot be changed again.
-                                (unless (zero? (setegid gid)) (exit-with-eperm 'drop-gid (saved-errno)))
-                                (unless (zero? (seteuid uid)) (exit-with-eperm 'drop-uid (saved-errno))))
+                                (setegid gid)
+                                (seteuid uid))
                               
                               (when (zero? (geteuid))
                                 (syslog-perror "Misconfigured: Privilege Has Not Dropped!")

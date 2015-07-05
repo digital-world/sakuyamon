@@ -11,8 +11,6 @@
   (require racket/cmdline)
   (require racket/promise)
   (require racket/function)
-  (require racket/match)
-  (require racket/place)
   (require racket/async-channel)
 
   (require syntax/location)
@@ -31,13 +29,12 @@
     (define topic 'realize)
     (with-handlers ([exn:fail? void]) ;;; maybe broken pipe or closed port
       (case severity
-        [{notice} (and (printf "~a: ~a~n" topic message)
-                       (flush-output))]
+        [{notice} (and (printf "~a: ~a~n" topic message) (flush-output))]
         [else (eprintf "~a: ~a~n" topic message)]))
     (rsyslog severity topic message))
 
-  (define {exit-with-eperm tips no}
-    (syslog-perror 'error "~a error: ~a; errno=~a" tips (strerror no) no)
+  (define {exit-with-eperm efe}
+    (syslog-perror 'error "~a" (exn-message efe))
     (exit 'EPERM))
 
   (define {signal-handler signal}
@@ -58,10 +55,9 @@
     (define-values/invoke-unit/infer sakuyamon@)
 
     (define root? (zero? (getuid)))
-    (unless (zero? (seteuid (getuid))) (exit-with-eperm 'regain-uid (saved-errno)))
-    (unless (zero? (setegid (getgid))) (exit-with-eperm 'regain-gid (saved-errno)))
-    (define-values {errno uid gid} (fetch_tamer_ids #"tamer"))
-    (when (and root? (not (zero? errno))) (exit-with-eperm 'fetch-tamer-id errno))
+    (with-handlers ([exn:foreign? exit-with-eperm])
+      (seteuid (getuid))
+      (setegid (getgid)))
 
     (define sakuyamon-pipe (make-async-channel #false))
     (define shutdown (parameterize ([error-display-handler void]) (serve #:confirmation-channel sakuyamon-pipe)))
@@ -74,9 +70,11 @@
     ((λ [fv] (dynamic-wind void fv shutdown))
      (thunk (with-handlers ([exn:break? signal-handler])
               (when root?
-                ;;; if change uid first, then gid cannot be changed again.
-                (unless (zero? (setegid gid)) (exit-with-eperm 'drop-gid (saved-errno)))
-                (unless (zero? (seteuid uid)) (exit-with-eperm 'drop-uid (saved-errno))))
+                (with-handlers ([exn:foreign? exit-with-eperm])
+                  (define-values {uid gid} (fetch_tamer_ids #"tamer"))
+                  ;;; if change uid first, then gid cannot be changed again.
+                  (setegid gid)
+                  (seteuid uid)))
               (when (zero? (geteuid))
                 (syslog-perror 'error "Misconfigured: Privilege Has Not Dropped!")
                 (exit 'ECONFIG))

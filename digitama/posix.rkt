@@ -1,6 +1,6 @@
 #lang at-exp racket
 
-(provide (all-defined-out))
+(provide (all-defined-out) ctype-c->scheme ctype-scheme->c)
 (provide (all-from-out ffi/unsafe))
 (provide (all-from-out ffi/unsafe/define))
 
@@ -8,6 +8,15 @@
 
 (require ffi/unsafe)
 (require ffi/unsafe/define)
+(require (only-in '#%foreign ctype-c->scheme ctype-scheme->c))
+
+(struct exn:foreign exn (errno))
+
+(define raise-foreign-error
+  (lambda [src errno #:strerror [strerror strerror]]
+    (raise (exn:foreign (format "~a error: ~a; errno = ~a" src (strerror errno) errno)
+                        (current-continuation-marks)
+                        errno))))
 
 (define-ffi-definer define-posix (ffi-lib #false))
 (define-ffi-definer define-digitama (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
@@ -29,10 +38,34 @@
 (define-posix getegid (_fun -> _uint32))
 (define-posix getppid (_fun -> _int32))
 (define-posix getpid (_fun -> _int32))
-(define-posix setuid (_fun #:save-errno 'posix _uint32 -> _int))
-(define-posix setgid (_fun #:save-errno 'posix _uint32 -> _int))
-(define-posix seteuid (_fun #:save-errno 'posix _uint32 -> _int))
-(define-posix setegid (_fun #:save-errno 'posix _uint32 -> _int))
+
+(define-posix setuid
+  (_fun #:save-errno 'posix
+        _uint32
+        -> [status : _int]
+        -> (unless (zero? status)
+             (raise-foreign-error 'setuid (saved-errno)))))
+
+(define-posix setgid
+  (_fun #:save-errno 'posix
+        _uint32
+        -> [status : _int]
+        -> (unless (zero? status)
+             (raise-foreign-error 'setgid (saved-errno)))))
+
+(define-posix seteuid
+  (_fun #:save-errno 'posix
+        _uint32
+        -> [status : _int]
+        -> (unless (zero? status)
+             (raise-foreign-error 'seteuid (saved-errno)))))
+
+(define-posix setegid
+  (_fun #:save-errno 'posix
+        _uint32
+        -> [status : _int]
+        -> (unless (zero? status)
+             (raise-foreign-error 'setegid (saved-errno)))))
 
 (define-digitama fetch_tamer_ids
   (_fun #:save-errno 'posix
@@ -40,21 +73,24 @@
         [uid : (_ptr o _uint32)]
         [gid : (_ptr o _uint32)]
         -> [errno : _int]
-        -> (values errno uid gid)))
+        -> (cond [(zero? errno) (values uid gid)]
+                 [else (raise-foreign-error 'fetch_tamer_ids errno)])))
 
 (define-digitama fetch_tamer_name
   (_fun #:save-errno 'posix
         [uid : _uint32]
         [username : (_ptr o _bytes)]
         -> [errno : _int]
-        -> (values errno username)))
+        -> (cond [(zero? errno) username]
+                 [else (raise-foreign-error 'fetch_tamer_name errno)])))
 
 (define-digitama fetch_tamer_group
   (_fun #:save-errno 'posix
         [gid : _uint32]
         [groupname : (_ptr o _bytes)]
         -> [errno : _int]
-        -> (values errno groupname)))
+        -> (cond [(zero? errno) groupname]
+                 [else (raise-foreign-error 'fetch_group_name errno)])))
 
 ;;; syslog.
 (define _severity

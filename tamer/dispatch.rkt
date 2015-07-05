@@ -157,18 +157,18 @@ since the @itech{.realm.rktd} is checked every request.
                              (dynamic-require (build-path (digimon-digivice) "sakuyamon.rkt") 'main)))
          
          (define-tamer-suite dispatch-main "Main Terminus"
-           #:before (check-sakuyamon-ready? 'dispath-main)
+           #:before (check-sakuyamon-ready? #:type todo 'dispath-main)
            |<testcase: dispatch main>|
            (test-suite "Function URLs" |<testcase: dispatch funtion URLs>|))
 
          (define-tamer-suite dispatch-tamer "Per-Tamer Terminus"
-           #:before (check-sakuyamon-ready? 'dispath-tamer)
+           #:before (check-sakuyamon-ready? #:type todo 'dispath-tamer)
            |<testcase: dispatch tamer>|
            (list (test-suite "Function URLs" |<testcase: dispatch-tamer-funtion-URLs>|)
                  |<testsuite: digest access authentication>|))
 
          (define-tamer-suite dispatch-digimon "Per-Digimon Terminus"
-           #:before (check-sakuyamon-ready? 'dispath-digimon)
+           #:before (check-sakuyamon-ready? #:type todo 'dispath-digimon)
            |<testcase: dispatch digimon>|
            |<testsuite: basic access authentication>|)}]
 

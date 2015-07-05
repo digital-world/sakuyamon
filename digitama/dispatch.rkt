@@ -51,10 +51,6 @@
         (define max-waiting (sakuyamon-max-waiting))
         (define initial-connection-timeout (sakuyamon-connection-timeout))
         (define read-request http:read-request)
-
-        ;;; These happen before (setuid)
-        (define id-ur (getuid))
-        (define id-urn (let-values ([{errno id-urn} (fetch_tamer_name id-ur)]) id-urn))
         
         (define host-cache (make-hash)) ; hash has its own semaphor as well as catch-table for ref set! and remove!
         (define path->mime (make-path->mime-type (collection-file-path "mime.types" "web-server" "default-web-root")))
