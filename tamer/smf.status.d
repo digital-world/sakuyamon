@@ -77,7 +77,7 @@ proc::cfork:create
 proc::cfork:create
 / smf[sub_startd, pid] == 1 /
 {
-    printf("%s[%d]: fork %s[%d:%d]: %s.\n",
+    printf("%s[%d]: fork %s[%d@%d]: %s.\n",
             execname, pid, args[0]->pr_fname,
             args[0]->pr_pid, args[0]->pr_pgid,
             args[0]->pr_psargs);
@@ -106,9 +106,10 @@ proc::proc_exit:exit
     smf[sub_startd, pid] = 0;
 }
 
-/* Monitor TCP and UDP: Loop network results duplicate output. */
+/* Monitor TCP and UDP */
 tcp:::send,
 tcp:::receive
+/ args[1]->cs_pid != -1 /
 {
     printf("TCP@%d: %s:%d -> %s:%d %d (", cpu,
             args[2]->ip_saddr, args[4]->tcp_sport,
