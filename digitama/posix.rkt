@@ -1,6 +1,7 @@
 #lang at-exp racket
 
 (provide (all-defined-out) ctype-c->scheme ctype-scheme->c)
+(provide (all-from-out "digicore.rkt"))
 (provide (all-from-out ffi/unsafe))
 (provide (all-from-out ffi/unsafe/define))
 
@@ -10,11 +11,11 @@
 (require ffi/unsafe/define)
 (require (only-in '#%foreign ctype-c->scheme ctype-scheme->c))
 
-(struct exn:foreign exn (errno))
+(struct exn:foreign exn:fail (errno))
 
 (define raise-foreign-error
   (lambda [src errno #:strerror [strerror strerror]]
-    (raise (exn:foreign (format "~a error: ~a; errno = ~a" src (strerror errno) errno)
+    (raise (exn:foreign (format "~a: ~a; errno = ~a." src (strerror errno) errno)
                         (current-continuation-marks)
                         errno))))
 

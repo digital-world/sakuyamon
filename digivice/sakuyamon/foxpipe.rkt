@@ -21,7 +21,7 @@
   
   (define kudagitsune : (Parameterof (Option Thread)) (make-parameter #false))
   (define izunas : (HashTable Input-Port Output-Port) ((inst make-hash Input-Port Output-Port)))
-  (define sakuyamon-scepter-port : (Parameterof Positive-Integer) (make-parameter (sakuyamon-foxpipe-port)))
+  (define sakuyamon-scepter-port : (Parameterof Index) (make-parameter (sakuyamon-foxpipe-port)))
   
   (define foxlog : (-> Symbol String Any * Void)
     (lambda [severity maybe . argl]
@@ -59,6 +59,7 @@
   (define identity/timeout : (-> Input-Port Output-Port Any)
     (lambda [/dev/tcpin /dev/tcpout]
       (match-define-values {_ _ remote port} (tcp-addresses /dev/tcpin #true))
+      (eprintf "~a:~a has connected." remote port)
       (foxlog 'notice  "~a:~a has connected." remote port)
       ((inst hash-set! Input-Port Output-Port) izunas /dev/tcpin /dev/tcpout)))
 
@@ -72,15 +73,15 @@
     (lambda [/dev/udp /dev/tcp]
       (match (apply sync/timeout (sakuyamon-foxpipe-idle) /dev/udp /dev/tcp
                     ((inst hash-keys Input-Port Output-Port) izunas))
-        [{list /dev/tcpin /dev/tcpout} (thread (thunk (identity/timeout /dev/tcpin /dev/tcpout)))]
+        [{list /dev/tcpin /dev/tcpout} (thunk (identity/timeout /dev/tcpin /dev/tcpout))]
         [{list size _ _} (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
                            (define packet (string-trim (bytes->string/utf-8 log-pool #false 0 size)))
                            (with-handlers ([exn:fail? void])
                              (displayln packet)
                              (flush-output (current-output-port)))
                            (push-back packet))]
-        [{? tcp-port? /dev/tcpin} (let ([/dev/tcpout ((inst hash-ref Input-Port Output-Port Nothing) izunas /dev/tcpin)])
-                                    ((inst hash-remove! Input-Port Output-Port) izunas /dev/tcpin)
+        [{? tcp-port? /dev/tcpin} (let ([/dev/tcpout ((inst hash-ref Input-Port Output-Port Nothing) izunas (cast /dev/tcpin Input-Port))])
+                                    ((inst hash-remove! Input-Port Output-Port) izunas (cast /dev/tcpin Input-Port))
                                     (match-define-values {_ _ remote port} (tcp-addresses /dev/tcpout #true))
                                     (foxlog 'notice "~a:~a has gone!" remote port))]
         [#false (push-back beating-heart#)])
@@ -98,8 +99,8 @@
                               (setegid (getgid))
                               
                               (with-handlers ([exn:fail:network? exit-with-fatal])
-                                (udp-bind! foxpipe "127.0.0.1" (sakuyamon-scepter-port))
-                                (scepter (tcp-listen (sakuyamon-scepter-port) (sakuyamon-foxpipe-max-waiting) #true)))
+                                (udp-bind! foxpipe "localhost" (sakuyamon-scepter-port)) ;;; localhost binds both IPv4 and IPv6
+                                (scepter (tcp-listen (sakuyamon-scepter-port) (sakuyamon-foxpipe-max-waiting) #true "localhost")))
                               
                               (when root?
                                 (define-values {uid gid} (fetch_tamer_ids #"tamer"))

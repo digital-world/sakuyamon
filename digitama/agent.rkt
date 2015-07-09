@@ -1,32 +1,35 @@
 #lang at-exp typed/racket
 
+(provide (all-defined-out))
+
 (require typed/net/http-client)
 (require typed/net/head)
 (require typed/net/base64)
 (require typed/file/md5)
 
 @require{digicore.rkt}
+@require{daemon.rkt}
 @require{typed/web-server/http.rkt}
-
-(provide (all-defined-out))
 
 (define-type Headers (HashTable Symbol String))
 (define-type Client-Response (List Positive-Integer String Headers Input-Port))
 
-(define foxpipe-connect : (-> String Positive-Integer
-                              [#:retry (U Integer +inf.0)]
-                              [#:interval Nonnegative-Real]
-                              [#:interval++ (-> Number Number)]
-                              (Pairof Input-Port Output-Port))
+(define-type TCP-Ports (Pairof Input-Port Output-Port))
+
+(define tcp-connect-retry : (-> String Index
+                                [#:retry (U Integer +inf.0)]
+                                [#:interval Nonnegative-Real]
+                                [#:interval++ (-> Number Number)]
+                                TCP-Ports)
   (lambda [host port #:retry [retry 16] #:interval [interval 0.618] #:interval++ [i++ log]]
-    (define raise-unless-retrial : (-> exn:fail (Pairof Input-Port Output-Port))
+    (define raise-unless-retrial : (-> exn:fail TCP-Ports)
       (lambda [efne]
         (unless (positive? retry) (raise efne))
         (sync/timeout/enable-break interval)
-        (foxpipe-connect host port
-                         #:retry (cast (sub1 retry) (U Integer +inf.0))
-                         #:interval (abs (+ interval (cast (i++ interval) Real)))
-                         #:interval++ i++)))
+        (tcp-connect-retry host port
+                           #:retry (cast (sub1 retry) (U Integer +inf.0))
+                           #:interval (abs (+ interval (cast (i++ interval) Real)))
+                           #:interval++ i++)))
     (with-handlers ([exn:fail:network? raise-unless-retrial])
       (define-values {/dev/tcpin /dev/tcpout}
         (tcp-connect/enable-break host port))

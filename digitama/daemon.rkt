@@ -1,5 +1,10 @@
 #lang typed/racket
 
+(provide (all-defined-out))
+
+(require/typed/provide racket
+                       [#:opaque TCP-Port tcp-port?])
+
 (require/typed/provide "posix.rkt"
                        [#:struct (exn:foreign exn) ([errno : Integer])]
                        [strerror (-> Natural String)]
@@ -13,3 +18,15 @@
                        [fetch_tamer_name (-> Natural Bytes)]
                        [fetch_tamer_group (-> Natural Bytes)]
                        [rsyslog (-> Symbol Symbol String Void)])
+
+(require/typed/provide "tunnel.rkt"
+                       [sakuyamon-foxpipe  (-> Thread
+                                               String
+                                               Index
+                                               TCP-Port
+                                               [#:username String]
+                                               [#:password (Option String)]
+                                               [#:id_rsa.pub Path-String]
+                                               [#:id_rsa Path-String]
+                                               [#:passphrase String]
+                                               Any)])

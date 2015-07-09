@@ -16,8 +16,8 @@
 
 (define sakuyamon-ssl? : (Parameterof Boolean)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-config-ssl? (const #false)) Boolean)))
-(define sakuyamon-port : (Parameterof (Option Positive-Integer))
-  (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-config-port (const #false)) (Option Positive-Integer))))
+(define sakuyamon-port : (Parameterof (Option Index))
+  (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-config-port (const #false)) (Option Index))))
 (define sakuyamon-max-waiting : (Parameterof Positive-Integer)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-config-max-waiting (const 511)) Positive-Integer)))
 (define sakuyamon-connection-timeout : (Parameterof Positive-Integer)
@@ -28,10 +28,9 @@
 (define sakuyamon-timeout-servlet-connection : (Parameterof Positive-Integer)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-timeout-servlet-connection (const 86400)) Positive-Integer)))
 
-(define sakuyamon-foxpipe-port : (Parameterof Positive-Integer)
-  (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-foxpipe-port (const 514)) Positive-Integer)))
+(define sakuyamon-foxpipe-port : (Parameterof Index)
+  (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-foxpipe-port (const 514)) Index)))
 (define sakuyamon-foxpipe-idle : (Parameterof Positive-Real)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-foxpipe-timeout-idle (const 8.0)) Positive-Real)))
 (define sakuyamon-foxpipe-max-waiting : (Parameterof Positive-Integer)
   (make-parameter (cast ((cast info-ref Info-Ref) 'sakuyamon-foxpipe-max-waiting (const 4)) Positive-Integer)))
-

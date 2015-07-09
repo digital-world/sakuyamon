@@ -3,6 +3,7 @@
 #pragma D option quiet
 
 int port;
+int foxpipe;
 
 dtrace:::BEGIN
 {
@@ -99,8 +100,9 @@ proc::proc_exit:exit
 /* Monitor TCP */
 tcp:::state-change
 {
-    printf("TCP@%4d: %s: %s >> %s\n",
-            args[1]->cs_pid, probename,
+    printf("TCP@%4d: [%s:%d]: %s >> %s\n",
+            args[1]->cs_pid,
+            args[3]->tcps_laddr, args[3]->tcps_lport,
             tcp_state_string[args[5]->tcps_state],
             tcp_state_string[args[3]->tcps_state]);
 }
@@ -172,5 +174,6 @@ udp:::receive
             args[2]->ip_daddr, args[4]->udp_dport,
             args[2]->ip_saddr, args[4]->udp_sport);
     sshd[args[1]->cs_pid];
+    foxpipe = args[1]->cs_pid;
 }
 
