@@ -30,7 +30,7 @@
                    [#false (let ([t (cast (sshc) Thread)]) (unless (thread-dead? t) (break-thread t)))]
                    ['collapsed (eprintf "tunnel has collapsed: ~a~n" (thread-receive))]
                    [(cons figureprint authlist) (printf "~a~n~a~n" figureprint authlist)]
-                   [(? box? msgbox) (printf "~a~n" msgbox)]
+                   [(? box? msgbox) (printf "~a~n" (unbox msgbox))]
                    [(? exn? exception) (displayln exception)]
                    [event (printf "Uncaught Event: ~a~n" event)])
                  (unless (thread-dead? (cast (sshc) Thread)) (poll)))))))

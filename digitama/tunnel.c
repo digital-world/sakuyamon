@@ -30,6 +30,7 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
     char *offed_buffer;
     
     /**
+     * TODO:
      * Reads bytes into buffer, starting from offset, up to size bytes.
      * switch nonblock
      *     case 0: it can block indefinitely, and return when at least one byte of data is available.
@@ -65,6 +66,7 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
     saved_blockbit = libssh2_session_get_blocking(session);
     offed_buffer = buffer + offset; /* As deep in RVM here, the boundary is already checked. */
     total = size;
+    status = 0;
     read = 0;
 
     if (scheme_unless_ready(unless)) {
@@ -73,52 +75,22 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
     }
 
     if (libssh2_channel_eof(channel) == 1) {
-        char *signal, *errmsg;
-        size_t sigsize, msgsize;
-        int status, errno;
-
-        status = libssh2_channel_get_exit_status(channel);
-        errno = libssh2_channel_get_exit_signal(channel, &signal, &sigsize, &errmsg, &msgsize, NULL, NULL);
-        printf("Remote Exit with status %d[%d]: %s; Signal: %s.\n", status, errno, errmsg, signal);
-
         return EOF;
     }
 
-try_read:
-    do {
-        size -= status;
-        if (size > 0) {
-            offed_buffer += status;
-            status = libssh2_channel_read(channel, offed_buffer, size);
-            read += ((status > 0) ? status : 0);
-        }
-    } while((nonblock <= 0) && (status < size) && (status >= 0));
+    libssh2_session_set_blocking(session, 0);
+    read = libssh2_channel_read(channel, offed_buffer, size);
+    libssh2_session_set_blocking(session, saved_blockbit);
 
-    if (status == LIBSSH2_ERROR_EAGAIN) {
-        if (nonblock >= 1) {
-            goto job_done;
-        } else {
-            if (nonblock == 0) {
-                /* also disable the breaking */
-                libssh2_session_set_blocking(session, 1);
-            }
-
-            status = 0;
-            goto try_read;
-        }
-    }
 job_done:
-
-    libssh2_channel_set_blocking(session, saved_blockbit);
-
     return ((read == total) || (read > 0)) ? read : status;
 }
 
 static int channel_read_ready(Scheme_Input_Port *p) {
     LIBSSH2_CHANNEL *channel;
     LIBSSH2_SESSION *session;
-    char this_can_be_null;
     int saved_blockbit, read;
+    char beating_heart[4]; /* emoji takes 4 bytes */
 
     /**
      * Returns 1 when a non-blocking (read-bytes) will return bytes or an EOF.
@@ -134,7 +106,7 @@ static int channel_read_ready(Scheme_Input_Port *p) {
     saved_blockbit = libssh2_session_get_blocking(session);
 
     libssh2_session_set_blocking(session, 0);
-    read = libssh2_channel_read(channel, &this_can_be_null, 0);
+    read = libssh2_channel_read(channel, beating_heart, 4);
     libssh2_session_set_blocking(session, saved_blockbit);
 
     return (read == LIBSSH2_ERROR_EAGAIN) ? 0 : 1;
@@ -160,6 +132,7 @@ static intptr_t channel_write_bytes(Scheme_Output_Port *out, char *buffer, intpt
     int status, sent, total;
 
     /**
+     * TODO:
      * Write bytes from buffer, starting from offset, up to size bytes.
      * switch rarely_block
      *   case 0: it can buffer output, and block indefinitely.
@@ -181,41 +154,16 @@ static intptr_t channel_write_bytes(Scheme_Output_Port *out, char *buffer, intpt
     sent = 0;
     status = 0;
 
+    
+    /**
+     * libssh2 channel does not have write buffer (channel.c _libssh2_channel_write).
+     * libssh2 channel only deals with the first 32k bytes (RFC4253 6.1).
+     */
     libssh2_session_set_blocking(session, 0);
-try_send:
-    do { /**
-          * libssh2 channel does not have write buffer (channel.c _libssh2_channel_write).
-          * libssh2 channel only deals with the first 32k bytes (RFC4253 6.1).
-          */
-        size -= status;
-        if (size > 0) {
-            offed_buffer += status;
-            status = libssh2_channel_write(channel, offed_buffer, size);
-            sent += ((status > 0) ? status : 0);
-        }
-    } while((rarely_block == 0) && (size > 32700) && (status == 32700));
-
-    if ((sent == total) || (rarely_block * sent > 0)) {
-        /* sent == total == 0 also goes here */
-        goto job_done;
-    }
-
-    if (status == LIBSSH2_ERROR_EAGAIN) {
-        if (rarely_block == 2) {
-            goto job_done;
-        } else {
-            if (enable_break == 0) {
-                libssh2_session_set_blocking(session, 1);
-            }
-
-            status = 0;
-            goto try_send;
-        }
-    }
-
-job_done:
+    sent = libssh2_channel_write(channel, offed_buffer, size);
     libssh2_session_set_blocking(session, saved_blockbit);
 
+job_done:
     return ((sent == total) || (sent > 0)) ? sent : status;
 }
 
@@ -254,7 +202,7 @@ int open_input_output_direct_channel(LIBSSH2_SESSION* session, const char *gyoud
 
     saved_blockbit = libssh2_session_get_blocking(session);
     libssh2_session_set_blocking(session, 1); /* also disable the breaking */
-    channel = libssh2_channel_direct_tcpip_ex(session, gyoudmon, service, "localhost", 22);
+    channel = libssh2_channel_direct_tcpip_ex(session, gyoudmon, service, "127.0.0.1", 22);
     libssh2_session_set_blocking(session, saved_blockbit);
 
     if (channel != NULL) {
