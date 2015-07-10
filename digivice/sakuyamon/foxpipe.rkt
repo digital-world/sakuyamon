@@ -56,24 +56,20 @@
       (when (exn:break:hang-up? signal)
         (raise signal))))
 
-  (define identity/timeout : (-> Input-Port Output-Port Any)
-    (lambda [/dev/tcpin /dev/tcpout]
-      (match-define-values {_ _ remote port} (tcp-addresses /dev/tcpin #true))
-      (eprintf "~a:~a has connected." remote port)
-      (foxlog 'notice  "~a:~a has connected." remote port)
-      ((inst hash-set! Input-Port Output-Port) izunas /dev/tcpin /dev/tcpout)))
-
   (define push-back : (-> Any Void)
     (lambda [packet]
       (for ([/dev/iznout ((inst in-hash-values Input-Port Output-Port) izunas)])
-        (write packet /dev/iznout)
+        (display beating-heart# /dev/iznout) ;;; for checking POLLIN mannally.
+        (displayln packet /dev/iznout)
         (flush-output /dev/iznout))))
   
   (define serve-forever : (-> (Evtof (List Natural String Natural)) (Evtof (List Input-Port Output-Port)) Void)
     (lambda [/dev/udp /dev/tcp]
       (match (apply sync/timeout (sakuyamon-foxpipe-idle) /dev/udp /dev/tcp
                     ((inst hash-keys Input-Port Output-Port) izunas))
-        [{list /dev/tcpin /dev/tcpout} (thunk (identity/timeout /dev/tcpin /dev/tcpout))]
+        [{list /dev/tcpin /dev/tcpout} (let-values ([{local lport remote port} (tcp-addresses /dev/tcpin #true)])
+                                         (foxlog 'notice  "~a:~a has connected." remote port)
+                                         ((inst hash-set! Input-Port Output-Port) izunas /dev/tcpin /dev/tcpout))]
         [{list size _ _} (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
                            (define packet (string-trim (bytes->string/utf-8 log-pool #false 0 size)))
                            (with-handlers ([exn:fail? void])
@@ -100,7 +96,7 @@
                               
                               (with-handlers ([exn:fail:network? exit-with-fatal])
                                 (udp-bind! foxpipe "localhost" (sakuyamon-scepter-port)) ;;; localhost binds both IPv4 and IPv6
-                                (scepter (tcp-listen (sakuyamon-scepter-port) (sakuyamon-foxpipe-max-waiting) #true "localhost")))
+                                (scepter (tcp-listen (sakuyamon-scepter-port) (sakuyamon-foxpipe-max-waiting) #true)))
                               
                               (when root?
                                 (define-values {uid gid} (fetch_tamer_ids #"tamer"))

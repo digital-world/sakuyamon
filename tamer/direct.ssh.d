@@ -9,6 +9,7 @@ dtrace:::BEGIN
 {
     printf("sakuyamon Kudagitsune (via ssh direct channel)\n");
     port = 514;
+    sshd[-1] = 1;
 }
 
 dtrace:::BEGIN
@@ -111,7 +112,7 @@ tcp:::connect-request,
 tcp:::connect-established,
 tcp:::connect-refused
 {
-    printf("TCP@%4d: %s: %s:%d ~> %s:%d\n",
+    printf("TCP@%d: %s: %s:%d ~> %s:%d\n",
             args[1]->cs_pid, probename,
             args[2]->ip_saddr, args[4]->tcp_sport,
             args[2]->ip_daddr, args[4]->tcp_dport);
@@ -120,7 +121,7 @@ tcp:::connect-refused
 tcp:::accept-established,
 tcp:::accept-refused
 {
-    printf("TCP@%4d: %s: %s:%d <~ %s:%d\n",
+    printf("TCP@%d: %s: %s:%d <~ %s:%d\n",
             args[1]->cs_pid, probename,
             args[2]->ip_saddr, args[4]->tcp_sport,
             args[2]->ip_daddr, args[4]->tcp_dport);
