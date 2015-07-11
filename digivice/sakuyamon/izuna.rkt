@@ -7,10 +7,25 @@
 (module+ sakuyamon
   (require/typed racket/gui/dynamic
                  [gui-dynamic-require (-> Symbol Any)])
+
+  (require/typed racket
+                 [#:opaque TCP-Port tcp-port?])
+
   
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/agent.rkt")
-  (require "../../digitama/daemon.rkt")
+
+  (require/typed "../../digitama/tunnel.rkt"
+                 [sakuyamon-foxpipe  (-> Thread
+                                         String
+                                         Index
+                                         TCP-Port
+                                         [#:username String]
+                                         [#:password (Option String)]
+                                         [#:id_rsa.pub Path-String]
+                                         [#:id_rsa Path-String]
+                                         [#:passphrase String]
+                                         Any)])
   
   (define sakuyamon-scepter-host : (Parameterof String) (make-parameter "gyoudmon.org"))
   (define sakuyamon-scepter-port : (Parameterof Index) (make-parameter (sakuyamon-foxpipe-port)))
