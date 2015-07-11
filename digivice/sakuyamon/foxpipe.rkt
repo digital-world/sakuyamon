@@ -96,7 +96,7 @@
                               
                               (with-handlers ([exn:fail:network? exit-with-fatal])
                                 (udp-bind! foxpipe "localhost" (sakuyamon-scepter-port)) ;;; localhost binds both IPv4 and IPv6
-                                (scepter (tcp-listen (sakuyamon-scepter-port) (sakuyamon-foxpipe-max-waiting) #true)))
+                                (scepter (tcp-listen (sakuyamon-scepter-port) (sakuyamon-foxpipe-max-waiting) #true "localhost")))
                               
                               (when root?
                                 (define-values {uid gid} (fetch_tamer_ids #"tamer"))
