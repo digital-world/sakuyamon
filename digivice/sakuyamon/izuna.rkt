@@ -22,7 +22,7 @@
              (with-handlers ([exn:break? (lambda [[signal : exn]] (let ([t (sshc)]) (when (thread? t) (break-thread t))))])
                (define /dev/sshio : TCP-Ports (tcp-connect-retry (cast (sakuyamon-scepter-host) String) 22))
                (printf "connected to ~a:~a.~n" (sakuyamon-scepter-host) 22)
-               (sshc (thread (thunk (sakuyamon-foxpipe izunac (sakuyamon-scepter-host) (sakuyamon-scepter-port) (cast (cdr /dev/sshio) TCP-Port)))))
+               (sshc (thread (thunk (sakuyamon-foxpipe izunac "localhost" (sakuyamon-scepter-port) (cast (cdr /dev/sshio) TCP-Port)))))
                (let poll ()
                  (match (sync/timeout/enable-break (* (sakuyamon-foxpipe-idle) 1.618)
                                                    (wrap-evt (thread-dead-evt (cast (sshc) Thread)) (const 'collapsed))

@@ -144,10 +144,10 @@
 
 (define-ssh libssh2_channel_direct_tcpip
   (_fun [session : _libssh2_session*]
-        [remote-host : _string]
-        [remote-port : _uint]
-        [host-seen-by-remote : _string = "localhost"]
-        [port-seen-by-remote : _uint = 22]
+        [host-seen-by-sshd : _string]
+        [port-seen-by-sshd : _uint]
+        [sshd_host_as_localhost : _string = host-seen-by-sshd]
+        [sshd_port_as_localport : _uint = 22]
         -> [channel : _libssh2_channel*]
         -> (or channel (raise-ssh-error 'libssh2_channel_direct_tcpip -6)))
   #:c-id libssh2_channel_direct_tcpip_ex)
@@ -210,8 +210,8 @@
 
 (define-tunnel open_input_output_direct_channel
   (_fun [session : _libssh2_session*]
-        [remote-host : _string]
-        [remote-port : _uint]
+        [host-seen-by-sshd : _string]
+        [service-seen-by-sshd : _uint]
         [inport : (_ptr o _racket)]
         [outport : (_ptr o _racket)]
         -> [status : _int]
@@ -224,7 +224,7 @@
 ;;; So leave the typed C to FFI itself.
 
 (define sakuyamon-foxpipe
-  (lambda [izunac gyoudmon service /dev/stdssh
+  (lambda [izunac host-seen-by-sshd service-seen-by-sshd /dev/stdssh
            #:username [username (current-tamer)] #:password [password #false]
            #:id_rsa.pub [rsa.pub (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")]
            #:id_rsa [id_rsa (build-path (find-system-path 'home-dir) ".ssh" "id_rsa")]
@@ -255,12 +255,15 @@
         (sleep 0)
         (libssh2_userauth_publickey_fromfile session username rsa.pub id_rsa passphrase)
         (libssh2_session_set_blocking session #false)
-        (let-values ([{/dev/sshdin /dev/sshdout} (open_input_output_direct_channel session gyoudmon service)])
-          (let wait-forever ()
-            (sync/enable-break /dev/sshdin)
-            (define r (read-line /dev/sshdin))
-            (thread-send izunac (box r))
-            (sleep 0)
-            (unless (eof-object? r)
-              (wait-forever)))))
+        (let-values ([{/dev/sshdin /dev/sshdout} (open_input_output_direct_channel session host-seen-by-sshd service-seen-by-sshd)])
+          (let poll-manually ()
+            ;;; libssh2 hides the socket descriptor since all channels in a session are sharing the same.
+            ;;; So there is no way to wake up Racket, we have to check it on an ugly way. 
+            (match (sync/timeout/enable-break 0.26149 #|Number Thoery: Meissel-Mertens Constant|# /dev/sshdin)
+              [#false (poll-manually)]
+              [else (let ([r (read-line /dev/sshdin)])
+                      (thread-send izunac (box r))
+                      (sleep 0)
+                      (unless (eof-object? r)
+                        (poll-manually)))]))))
       (terminate/sendback-if-failed "Remote server disconnected!"))))

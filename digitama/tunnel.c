@@ -98,8 +98,11 @@ static int channel_read_ready(Scheme_Input_Port *p) {
 
     /**
      * TODO: this implementation is ugly.
-     * I do not know how to extract the socket descriptor from channel.
-     * They hide it.
+     * libssh2 keeps hiding the socket descriptor
+     * since all channels in a session are sharing the descriptor.
+     * 
+     * The most important effect here is that no event will wakeup Racket.
+     * The client side must control (sync/timeout) on its own.
      */
     session = ((struct port_object *)(p->port_data))->session;
     channel = ((struct port_object *)(p->port_data))->channel;
@@ -175,6 +178,11 @@ static int channel_write_ready(Scheme_Output_Port *p) {
      * or flush at least one byte from the port’s internal buffer.
      */
 
+    /**
+     * Unlike (channel_read_ready), this implementation is reasonably correct
+     * according their own source code. Again, all channels in a session are
+     * sharing the sockect descriptor.
+     */
     channel = ((struct port_object *)(p->port_data))->channel;
     return (libssh2_channel_window_write(channel) > 0) ? 1 : 0;
 }
@@ -195,14 +203,14 @@ static void channel_out_close(Scheme_Output_Port *p) {
     channel_close_within_custodian(channel);
 }
 
-int open_input_output_direct_channel(LIBSSH2_SESSION* session, const char *gyoudmon, int service, Scheme_Object **read, Scheme_Object **write) {
+int open_input_output_direct_channel(LIBSSH2_SESSION* session, const char* host_seen_by_sshd, int service, Scheme_Object **read, Scheme_Object **write) {
     LIBSSH2_CHANNEL *channel;
     struct port_object *object;
     int saved_blockbit;
 
     saved_blockbit = libssh2_session_get_blocking(session);
     libssh2_session_set_blocking(session, 1); /* also disable the breaking */
-    channel = libssh2_channel_direct_tcpip_ex(session, gyoudmon, service, "127.0.0.1", 22);
+    channel = libssh2_channel_direct_tcpip_ex(session, host_seen_by_sshd, service, host_seen_by_sshd, 22);
     libssh2_session_set_blocking(session, saved_blockbit);
 
     if (channel != NULL) {
