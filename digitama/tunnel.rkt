@@ -14,7 +14,7 @@
         -> [status : _bool]
         -> (if status fd 0)))
 
-(define-ffi-definer define-ssh (ffi-lib "libssh2"))
+(define-ffi-definer define-ssh (ffi-lib "libssh2" #:global? #true))
 
 (define _libssh2_session* (_cpointer/null 'LIBSSH2_SESSION))
 (define _libssh2_channel* (_cpointer/null 'LIBSSH2_CHANNEL))
