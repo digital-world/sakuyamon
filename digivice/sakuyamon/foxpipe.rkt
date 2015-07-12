@@ -56,34 +56,43 @@
       (when (exn:break:hang-up? signal)
         (raise signal))))
 
+  (define remove-port : (-> Input-Port Symbol Void)
+    (lambda [/dev/tcpin reason]
+      (define /dev/tcpout ((inst hash-ref Input-Port Output-Port Nothing) izunas (cast /dev/tcpin Input-Port)))
+      (match-define-values [_ _ remote port] (tcp-addresses /dev/tcpout #true))
+      ((inst hash-remove! Input-Port Output-Port) izunas (cast /dev/tcpin Input-Port))
+      (tcp-abandon-port /dev/tcpin)
+      (tcp-abandon-port /dev/tcpout)
+      (foxlog 'notice "~a:~a has ~a!" remote port (case reason
+                                                    [(eof) 'gone]
+                                                    [(exn) 'broken]))))
+  
   (define push-back : (-> Any Void)
     (lambda [packet]
-      (for ([/dev/iznout ((inst in-hash-values Input-Port Output-Port) izunas)])
-        (display beating-heart# /dev/iznout) ;;; for checking POLLIN manually.
-        (displayln packet /dev/iznout)
-        (flush-output /dev/iznout))))
+      (for ([{/dev/iznin /dev/iznout} ((inst in-hash Input-Port Output-Port) izunas)])
+        (with-handlers ([exn? (lambda [e] (remove-port /dev/iznin 'exn))])
+          (display beating-heart# /dev/iznout) ;;; for checking POLLIN manually.
+          (displayln packet /dev/iznout)
+          (flush-output /dev/iznout)))))
   
   (define serve-forever : (-> (Evtof (List Natural String Natural)) (Evtof (List Input-Port Output-Port)) Void)
     (lambda [/dev/udp /dev/tcp]
-      (match (apply sync/timeout/enable-break (sakuyamon-foxpipe-idle) (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))
-                    /dev/udp /dev/tcp ((inst hash-keys Input-Port Output-Port) izunas))
-        [{list /dev/tcpin /dev/tcpout}
+      (match (apply sync/timeout/enable-break (sakuyamon-foxpipe-idle) /dev/udp /dev/tcp
+                    (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))
+                    ((inst hash-keys Input-Port Output-Port) izunas))
+        [(list /dev/tcpin /dev/tcpout)
          (let-values ([{local lport remote port} (tcp-addresses (cast /dev/tcpin Port) #true)])
-           (foxlog 'notice  "~a:~a has connected." remote port)
+           (foxlog 'notice  "~a:~a has connected via SSH Channel." remote port)
            ((inst hash-set! Input-Port Output-Port) izunas (cast /dev/tcpin Input-Port) (cast /dev/tcpout Output-Port)))]
-        [{list size _ _}
+        [(list size _ _)
          (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
            (define packet : String (string-trim (bytes->string/utf-8 log-pool #false 0 (cast size Natural))))
            (with-handlers ([exn:fail? void])
              (displayln packet)
              (flush-output (current-output-port)))
            (push-back packet))]
-        [{? tcp-port? /dev/tcpin}
-         (let ([/dev/tcpout ((inst hash-ref Input-Port Output-Port Nothing) izunas (cast /dev/tcpin Input-Port))])
-           ((inst hash-remove! Input-Port Output-Port) izunas (cast /dev/tcpin Input-Port))
-           (match-define-values {_ _ remote port} (tcp-addresses /dev/tcpout #true))
-           (foxlog 'notice "~a:~a has gone!" remote port))]
-        [{? exn:break? signal} (raise signal)]
+        [(? tcp-port? /dev/tcpin) (remove-port (cast /dev/tcpin Input-Port) 'eof)]
+        [(? exn:break? signal) (raise signal)]
         [#false (push-back beating-heart#)])
       (serve-forever /dev/udp /dev/tcp)))
 

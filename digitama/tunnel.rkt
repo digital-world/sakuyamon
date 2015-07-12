@@ -224,7 +224,7 @@
 ;;; So leave the typed C to FFI itself.
 
 (define sakuyamon-foxpipe
-  (lambda [izunac host-seen-by-sshd service-seen-by-sshd /dev/stdssh
+  (lambda [izunac /dev/stdssh host-seen-by-sshd service-seen-by-sshd
            #:username [username (current-tamer)] #:passphrase [passphrase ""]
            #:id_rsa.pub [rsa.pub (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")]
            #:id_rsa [id_rsa (build-path (find-system-path 'home-dir) ".ssh" "id_rsa")]]
@@ -247,8 +247,7 @@
         (define ssh-socket (scheme_get_port_socket /dev/stdssh))
         (libssh2_session_handshake session ssh-socket)
         (define figureprint (libssh2_hostkey_hash session 'LIBSSH2_HOSTKEY_HASH_SHA1))
-        (define authors (libssh2_userauth_list session username))
-        (thread-send izunac (cons (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint))) authors))
+        (thread-send izunac (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint))))
         (sleep 0)
         (libssh2_userauth_publickey_fromfile session username rsa.pub id_rsa passphrase)
         (libssh2_session_set_blocking session #false)
@@ -256,11 +255,14 @@
           (let poll-manually ()
             ;;; libssh2 hides the socket descriptor since all channels in a session are sharing the same.
             ;;; So there is no way to wake up Racket, we have to check it on an ugly way. 
-            (match (sync/timeout/enable-break 0.26149 #|Number Thoery: Meissel-Mertens Constant|# /dev/sshdin)
+            (match (sync/timeout 0.26149 #|Number Thoery: Meissel-Mertens Constant|# /dev/sshdin
+                                 (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive))))
               [#false (poll-manually)]
-              [else (let ([r (read-line /dev/sshdin)])
-                      (thread-send izunac (box r))
-                      (sleep 0)
-                      (unless (eof-object? r)
-                        (poll-manually)))]))))
-      (terminate/sendback-if-failed "Remote server disconnected!"))))
+              ['collapsed (error 'ssh-channel "Foxpipe is lost!")]
+              [(? exn? signal) (error 'ssh-channel (exn-message signal))]
+              [(? input-port?) (let ([r (read-line /dev/sshdin)])
+                                 (thread-send izunac (box r))
+                                 (sleep 0)
+                                 (cond [(eof-object? r) (error 'ssh-channel "Remote server disconnected!")]
+                                       [else (poll-manually)]))]
+              [event (error 'ssh-channel "Uncaught Event: ~a~n" event)])))))))
