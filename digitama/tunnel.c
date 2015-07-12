@@ -203,7 +203,7 @@ static void channel_out_close(Scheme_Output_Port *p) {
     channel_close_within_custodian(channel);
 }
 
-int open_input_output_direct_channel(LIBSSH2_SESSION* session, const char* host_seen_by_sshd, int service, Scheme_Object **read, Scheme_Object **write) {
+int open_direct_channel(LIBSSH2_SESSION* session, const char* host_seen_by_sshd, int service, Scheme_Object **read, Scheme_Object **write) {
     LIBSSH2_CHANNEL *channel;
     struct port_object *object;
     int saved_blockbit;

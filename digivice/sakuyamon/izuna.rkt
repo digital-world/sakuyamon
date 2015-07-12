@@ -20,7 +20,6 @@
                                          String
                                          Index
                                          TCP-Port
-                                         [#:username String]
                                          [#:password (Option String)]
                                          [#:id_rsa.pub Path-String]
                                          [#:id_rsa Path-String]
@@ -35,9 +34,9 @@
              (define izunac : Thread (current-thread))
              (define sshc : (Parameterof (Option Thread)) (make-parameter #false))
              (with-handlers ([exn:break? (lambda [[signal : exn]] (let ([t (sshc)]) (when (thread? t) (break-thread t))))])
-               (define /dev/sshio : TCP-Ports (tcp-connect-retry (cast (sakuyamon-scepter-host) String) 22))
+               (define-values [/dev/sshin /dev/sshout] (tcp-connect (cast (sakuyamon-scepter-host) String) 22))
                (printf "connected to ~a:~a.~n" (sakuyamon-scepter-host) 22)
-               (sshc (thread (thunk (sakuyamon-foxpipe izunac "localhost" (sakuyamon-scepter-port) (cast (cdr /dev/sshio) TCP-Port)))))
+               (sshc (thread (thunk (sakuyamon-foxpipe izunac "localhost" (sakuyamon-scepter-port) (cast /dev/sshout TCP-Port)))))
                (let poll ()
                  (match (sync/timeout/enable-break (* (sakuyamon-foxpipe-idle) 1.618)
                                                    (wrap-evt (thread-dead-evt (cast (sshc) Thread)) (const 'collapsed))

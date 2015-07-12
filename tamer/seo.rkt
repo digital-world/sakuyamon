@@ -71,11 +71,11 @@ The rendered @litchar{*.html}s will be placed within directories that up to 2 de
        (module+ main (call-as-normal-termination tamer-prove))
        (module+ story
          (define-tamer-suite robots.txt "/robots.txt"
-           #:before (check-sakuyamon-ready? #:type todo 'robots.txt)
+           #:before (check-port-ready? tamer-sakuyamon-port #:type todo)
            |<testcase: robots.txt>|
            |<testcase: disallow: /~:/>|)
          
          (define-tamer-suite redirections "Server Side Redirections"
-           #:before (check-sakuyamon-ready? #:type todo 'redirections)
+           #:before (check-port-ready? tamer-sakuyamon-port #:type todo)
            (test-suite "dir -> dir/" |<testcase: dir to dir/>|)
            (test-suite "rkt -> html" |<testcase: rkt to html>|)))]

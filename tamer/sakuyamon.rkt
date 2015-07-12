@@ -43,7 +43,8 @@ and listen on port @racket[80], otherwise she will realize and listen on port @r
 
 @tamer-note['realize]
 @chunk[|<testcase: realize>|
-       (test-spec "sakuyamon realize" (check-not-exn (check-sakuyamon-ready? #:type error 'realize)))]
+       (test-spec "sakuyamon realize"
+                  (check-not-exn (check-port-ready? tamer-sakuyamon-port #:type error)))]
  
 @handbook-scenario{Keep Realms Safe!}
 
@@ -99,7 +100,8 @@ to monitor the logs just as MacOSX @exec{Console.app} does. Therefore here exist
 
 @tamer-note['foxpipe]
 @chunk[|<testcsae: foxpipe>|
-       (test-spec "sakuyamon foxpipe" (check-not-exn (check-foxpipe-ready? #:type skip #:close? #true)))]
+       (test-spec "sakuyamon foxpipe"
+                  (check-not-exn (check-port-ready? tamer-foxpipe-port #:type skip)))]
 
 @handbook-appendix[]
 

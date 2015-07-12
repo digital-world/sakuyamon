@@ -11,8 +11,8 @@ dtrace:::BEGIN
 
 dtrace:::BEGIN
 {
-    strsig[1] = "SIGHUP";
-    strsig[2] = "SIGINT";
+    strsig[1] = "HUP";
+    strsig[2] = "INT";
     strsig[3] = "QUIT";
     strsig[4] = "ILL";
     strsig[5] = "TRAP";

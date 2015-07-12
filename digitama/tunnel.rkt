@@ -208,14 +208,14 @@
 (define-ffi-definer define-tunnel (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
                                                          "native" (system-library-subpath #false) "tunnel")))
 
-(define-tunnel open_input_output_direct_channel
+(define-tunnel open_direct_channel
   (_fun [session : _libssh2_session*]
         [host-seen-by-sshd : _string]
         [service-seen-by-sshd : _uint]
         [inport : (_ptr o _racket)]
         [outport : (_ptr o _racket)]
         -> [status : _int]
-        -> (cond [(negative? status) (raise-ssh-error 'open_input_output_direct_channel status)]
+        -> (cond [(negative? status) (raise-ssh-error 'open_direct_channel status)]
                  [else (values inport outport)])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -225,10 +225,9 @@
 
 (define sakuyamon-foxpipe
   (lambda [izunac host-seen-by-sshd service-seen-by-sshd /dev/stdssh
-           #:username [username (current-tamer)] #:password [password #false]
+           #:username [username (current-tamer)] #:passphrase [passphrase ""]
            #:id_rsa.pub [rsa.pub (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")]
-           #:id_rsa [id_rsa (build-path (find-system-path 'home-dir) ".ssh" "id_rsa")]
-           #:passphrase [passphrase ""]]
+           #:id_rsa [id_rsa (build-path (find-system-path 'home-dir) ".ssh" "id_rsa")]]
     (parameterize ([current-custodian (make-custodian)])
       (define ssh-session (make-parameter #false))
       (define terminate/sendback-if-failed
@@ -236,10 +235,9 @@
           (when (exn:fail? maybe-exn) (thread-send izunac maybe-exn))
           (custodian-shutdown-all (current-custodian)) ;;; channel is managed by custodian
           (with-handlers ([exn? (const 'unsafe-but-nonsense)])
-            (when (ssh-session)
+            (when (ssh-session) ;;; libssh2 treats long reason as an error
               (define reason (if (exn? maybe-exn) (exn-message maybe-exn) (~a maybe-exn)))
-              (libssh2_session_disconnect (ssh-session) ;;; libssh2 treats long reason as an error
-                                          (substring reason 0 (min (string-length reason) 256)))
+              (libssh2_session_disconnect (ssh-session) (substring reason 0 (min (string-length reason) 256)))
               (libssh2_session_free (ssh-session)))
             (libssh2_exit)
             (collect-garbage))))
@@ -250,12 +248,11 @@
         (libssh2_session_handshake session ssh-socket)
         (define figureprint (libssh2_hostkey_hash session 'LIBSSH2_HOSTKEY_HASH_SHA1))
         (define authors (libssh2_userauth_list session username))
-        (thread-send izunac (cons (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint)))
-                                  authors))
+        (thread-send izunac (cons (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint))) authors))
         (sleep 0)
         (libssh2_userauth_publickey_fromfile session username rsa.pub id_rsa passphrase)
         (libssh2_session_set_blocking session #false)
-        (let-values ([{/dev/sshdin /dev/sshdout} (open_input_output_direct_channel session host-seen-by-sshd service-seen-by-sshd)])
+        (let-values ([{/dev/sshdin /dev/sshdout} (open_direct_channel session host-seen-by-sshd service-seen-by-sshd)])
           (let poll-manually ()
             ;;; libssh2 hides the socket descriptor since all channels in a session are sharing the same.
             ;;; So there is no way to wake up Racket, we have to check it on an ugly way. 
