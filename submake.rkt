@@ -54,29 +54,29 @@
            (when chown (system (format "chown ~a ~a" chown dest)))))
 
     (when (string=? (current-tamer) "root")
-      (make ([sakuyamon.plist [/sakuyamon/launchd.plist (quote-source-file)]
+      (make ([sakuyamon.plist [/sakuyamon/launchd.plist (quote-source-file) (find-executable-path "racket")]
                               (sudo.make sakuyamon.plist /sakuyamon/launchd.plist "root:wheel")]
-             [foxpipe.plist [/foxpipe/launchd.plist (quote-source-file)]
+             [foxpipe.plist [/foxpipe/launchd.plist (quote-source-file) (find-executable-path "racket")]
                             (sudo.make foxpipe.plist /foxpipe/launchd.plist "root:wheel")]
-             [sakuyamon.smf [/sakuyamon/manifest.xml (quote-source-file)]
+             [sakuyamon.smf [/sakuyamon/manifest.xml (quote-source-file) (find-executable-path "racket")]
                             (sudo.make sakuyamon.smf /sakuyamon/manifest.xml "root:sys")]
-             [foxpipe.smf [/foxpipe/manifest.xml (quote-source-file)]
+             [foxpipe.smf [/foxpipe/manifest.xml (quote-source-file) (find-executable-path "racket")]
                           (sudo.make foxpipe.smf /foxpipe/manifest.xml "root:sys")]
-             [sakuyamon.service [/sakuyamon/systemd.service (quote-source-file)]
+             [sakuyamon.service [/sakuyamon/systemd.service (quote-source-file) (find-executable-path "racket")]
                                 (sudo.make sakuyamon.service /sakuyamon/systemd.service "root:root")]
-             [foxpipe.service [/foxpipe/systemd.service (quote-source-file)]
+             [foxpipe.service [/foxpipe/systemd.service (quote-source-file) (find-executable-path "racket")]
                               (sudo.make foxpipe.service /foxpipe/systemd.service "root:root")]
-             [sakuyamon.asl [/stone/sakuyamon.asl (quote-source-file)]
+             [sakuyamon.asl [/stone/sakuyamon.asl (quote-source-file) (find-executable-path "racket")]
                             (and (sudo.make sakuyamon.asl /stone/sakuyamon.asl "root:wheel")
                                  (system "kill -s HUP `cat /var/run/syslog.pid`"))]
-             [sakuyamon.rsyslog [/stone/sakuyamon.rsyslog (quote-source-file)]
+             [sakuyamon.rsyslog [/stone/sakuyamon.rsyslog (quote-source-file) (find-executable-path "racket")]
                                 (and (sudo.make sakuyamon.rsyslog /stone/sakuyamon.rsyslog "root:root")
                                      (case (digimon-system)
                                        [{solaris} (system "svcadm restart system-log:rsyslog")]
                                        [{linux} (system "systemctl restart rsyslog")]))]
-             [sakuyamon.logadm [/stone/sakuyamon.logadm (quote-source-file)]
+             [sakuyamon.logadm [/stone/sakuyamon.logadm (quote-source-file) (find-executable-path "racket")]
                                (sudo.make sakuyamon.logadm /stone/sakuyamon.logadm "root:sys")]
-             [sakuyamon.logrotate [/stone/sakuyamon.logrotate (quote-source-file)]
+             [sakuyamon.logrotate [/stone/sakuyamon.logrotate (quote-source-file) (find-executable-path "racket")]
                                   (sudo.make sakuyamon.logrotate /stone/sakuyamon.logrotate "root:root")])
             targets)))
 
