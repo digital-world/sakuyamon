@@ -14,6 +14,7 @@
                  [#:opaque TCP-Port tcp-port?])
   
   (require "../../digitama/digicore.rkt")
+  (require "../../digitama/geolocation.rkt")
 
   (require/typed "../../digitama/tunnel.rkt"
                  [sakuyamon-foxpipe  (-> Thread
@@ -29,6 +30,13 @@
   (define izuna-no-gui? : (Parameterof Boolean) (make-parameter (not (gui-available?))))
   (define sakuyamon-scepter-port : (Parameterof Index) (make-parameter (sakuyamon-foxpipe-port)))
   (define sakuyamon-scepter-host : (Parameterof String) (make-parameter "gyoudmon.org"))
+
+  (define ~geolocation : (-> String String)
+    (lambda [ip]
+      (define geo : Maybe-Geolocation (what-is-my-address ip))
+      (cond [(false? geo) ip]
+            [(false? (geolocation-city geo)) (format "~a[~a/~a]" ip (geolocation-continent geo) (geolocation-country geo))]
+            [else (format "~a[~a ~a]" ip (geolocation-country geo) (geolocation-city geo))])))
   
   (define cli-main : (-> Any)
     (thunk (let ([izunac (thread (thunk (let ([izunac : Thread (current-thread)])
@@ -52,14 +60,20 @@
                                                 [(? box? msgbox) (match (string-split (cast (unbox msgbox) String) #px"\\s+request:\\s+")
                                                                    [(list msg)
                                                                     (unless (string=? msg (string beating-heart#))
-                                                                      (echof #:fgcolor msgcolor "~a~n" msg))]
+                                                                      (define ips : (Option (Listof String)) (regexp-match* #px"\\d+(\\.\\d+){3}" msg))
+                                                                      (cond [(false? ips) (echof #:fgcolor msgcolor "~a~n" msg)]
+                                                                            [else (echof #:fgcolor msgcolor "~a~n"
+                                                                                         (regexp-replaces msg (for/list ([ip (in-list ips)])
+                                                                                                                (list ip (~geolocation ip)))))]))]
                                                                    [(list msghead reqinfo)
                                                                     (let ([info (cast (with-input-from-string reqinfo read) HashTableTop)])
-                                                                      (echof #:fgcolor msgcolor "~a ~a //~a~a [~a ~a] " msghead
+                                                                      (echof #:fgcolor msgcolor "~a ~a@~a //~a~a #\"~a\" " msghead
                                                                              (hash-ref info 'method)
+                                                                             (~geolocation (cast ((inst hash-ref Symbol String String)
+                                                                                                  info 'client)
+                                                                                                 String))
                                                                              (hash-ref info 'host)
                                                                              (hash-ref info 'uri)
-                                                                             (hash-ref info 'client)
                                                                              (hash-ref info 'user-agent #false))
                                                                       (echof #:fgcolor 245 "~s~n"
                                                                              ((inst foldl Symbol HashTableTop Any Any)
