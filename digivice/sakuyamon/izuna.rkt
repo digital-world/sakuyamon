@@ -45,7 +45,7 @@
           (match (string-split (cast (unbox msgbox) String) #px"\\s+request:\\s+")
             [(list msg)
              (cond [(string=? (string beating-heart#) msg)
-                    (void (printf "\033[s\033[K\033[2C~a\033[u" heart)
+                    (void (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" msgcolor heart)
                           (flush-output (current-output-port)))]
                    [(regexp-match* #px"\\d+(\\.\\d+){3}" msg)
                     => (lambda [[ips : (Listof String)]]
@@ -64,7 +64,7 @@
                        '(method host uri user-agent client))))])))
       (define izunac
         (thread (thunk (let ([izunac : Thread (current-thread)])
-                         (define colors : (Listof Term-Color) (list 31 159 63 191 95 223 127 255))
+                         (define colors : (Listof Term-Color) (list 159 191 223 255))
                          (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
                          (let tcp-ssh-channel-connect ()
                            (define-values [/dev/sshin /dev/sshout] (tcp-connect (cast (sakuyamon-scepter-host) String) 22))
