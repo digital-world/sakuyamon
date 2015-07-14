@@ -39,52 +39,55 @@
             [else (format "~a[~a ~a]" ip (geolocation-country geo) (geolocation-city geo))])))
   
   (define cli-main : (-> Any)
-    (thunk (let ([izunac (thread (thunk (let ([izunac : Thread (current-thread)])
-                                          (define colors : (Listof Term-Color) (list 159 191 223 255))
-                                          (let tcp-ssh-channel-connect ()
-                                            (define-values [/dev/sshin /dev/sshout] (tcp-connect (cast (sakuyamon-scepter-host) String) 22))
-                                            (echof #:fgcolor 'blue "Connected to ~a:~a.~n" (sakuyamon-scepter-host) 22)
-                                            (define sshc : Thread (thread (thunk (sakuyamon-foxpipe izunac (cast /dev/sshout TCP-Port)
-                                                                                                    "localhost" (sakuyamon-scepter-port)))))
-                                            (let poll-channel ([index : Index 0])
-                                              (define which (sync/timeout/enable-break (* (sakuyamon-foxpipe-idle) 1.618)
-                                                                                       (wrap-evt (thread-dead-evt sshc) (lambda [e] 'collapsed))
-                                                                                       (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))))
-                                              (define msgcolor : Term-Color (list-ref colors index))
-                                              (match which
-                                                [#false (thread-send sshc 'collapsed) #| tell sshc to terminate |#]
-                                                ['collapsed (eechof #:fgcolor 'red "izuna: SSH Tunnel has collapsed!~n")]
-                                                [(? list? figureprint) (echof #:fgcolor 'cyan "RSA: ~a~n" figureprint)]
-                                                [(? exn:break? signal) (and (thread-send sshc signal) (thread-wait sshc))]
-                                                [(? exn? exception) (echof #:fgcolor 'red "~a~n" (exn-message exception))]
-                                                [(? box? msgbox) (match (string-split (cast (unbox msgbox) String) #px"\\s+request:\\s+")
-                                                                   [(list msg)
-                                                                    (unless (string=? msg (string beating-heart#))
-                                                                      (define ips : (Option (Listof String)) (regexp-match* #px"\\d+(\\.\\d+){3}" msg))
-                                                                      (cond [(false? ips) (echof #:fgcolor msgcolor "~a~n" msg)]
-                                                                            [else (echof #:fgcolor msgcolor "~a~n"
-                                                                                         (regexp-replaces msg (for/list ([ip (in-list ips)])
-                                                                                                                (list ip (~geolocation ip)))))]))]
-                                                                   [(list msghead reqinfo)
-                                                                    (let ([info (cast (with-input-from-string reqinfo read) HashTableTop)])
-                                                                      (echof #:fgcolor msgcolor "~a ~a@~a //~a~a #\"~a\" " msghead
-                                                                             (hash-ref info 'method)
-                                                                             (~geolocation (cast ((inst hash-ref Symbol String String)
-                                                                                                  info 'client)
-                                                                                                 String))
-                                                                             (hash-ref info 'host)
-                                                                             (hash-ref info 'uri)
-                                                                             (hash-ref info 'user-agent #false))
-                                                                      (echof #:fgcolor 245 "~s~n"
-                                                                             ((inst foldl Symbol HashTableTop Any Any)
-                                                                              (lambda [key [info : HashTableTop]] (hash-remove info key)) info
-                                                                              '(method host uri user-agent client))))])]
-                                                [event (echof #:fgcolor 'yellow "Uncaught Event: ~a~n" event)])
-                                              (cond [(exn:break? which) (for-each tcp-abandon-port (list /dev/sshin /dev/sshout))]
-                                                    [(thread-dead? sshc) (tcp-ssh-channel-connect)]
-                                                    [else (poll-channel (remainder (add1 index) (length colors)))]))))))])
-             (with-handlers ([exn:break? (lambda [[signal : exn]] (thread-send izunac signal))])
-               (sync/enable-break (thread-dead-evt izunac))))))
+    (lambda []
+      (define open-box : (-> BoxTop Term-Color Char Void)
+        (lambda [msgbox msgcolor heart]
+          (match (string-split (cast (unbox msgbox) String) #px"\\s+request:\\s+")
+            [(list msg)
+             (cond [(string=? (string beating-heart#) msg)
+                    (void (printf "\033[s\033[K\033[2C~a\033[u" heart)
+                          (flush-output (current-output-port)))]
+                   [(regexp-match* #px"\\d+(\\.\\d+){3}" msg)
+                    => (lambda [[ips : (Listof String)]]
+                         (echof #:fgcolor msgcolor "~a~n"
+                                (regexp-replaces msg (map (lambda [[ip : String]] (list ip (~geolocation ip))) ips))))]
+                   [else (echof #:fgcolor msgcolor "~a~n" msg)])]
+            [(list msghead reqinfo)
+             (let ([info (cast (with-input-from-string reqinfo read) HashTableTop)])
+               (echof #:fgcolor msgcolor "~a ~a@~a //~a~a #\"~a\" " msghead
+                      (hash-ref info 'method) (~geolocation (cast (hash-ref info 'client) String))
+                      (hash-ref info 'host) (hash-ref info 'uri)
+                      (hash-ref info 'user-agent #false))
+               (echof #:fgcolor 245 "~s~n"
+                      ((inst foldl Symbol HashTableTop Any Any)
+                       (lambda [key [info : HashTableTop]] (hash-remove info key)) info
+                       '(method host uri user-agent client))))])))
+      (define izunac
+        (thread (thunk (let ([izunac : Thread (current-thread)])
+                         (define colors : (Listof Term-Color) (list 31 159 63 191 95 223 127 255))
+                         (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
+                         (let tcp-ssh-channel-connect ()
+                           (define-values [/dev/sshin /dev/sshout] (tcp-connect (cast (sakuyamon-scepter-host) String) 22))
+                           (echof #:fgcolor 'blue "Connected to ~a:~a.~n" (sakuyamon-scepter-host) 22)
+                           (define sshc : Thread (thread (thunk (sakuyamon-foxpipe izunac (cast /dev/sshout TCP-Port)
+                                                                                   "localhost" (sakuyamon-scepter-port)))))
+                           (let poll-channel ([index : Index 0])
+                             (define which (sync/timeout/enable-break (* (sakuyamon-foxpipe-idle) 1.618)
+                                                                      (wrap-evt (thread-dead-evt sshc) (lambda [e] 'collapsed))
+                                                                      (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))))
+                             (match which
+                               [#false (thread-send sshc 'collapsed) #| tell sshc to terminate |#]
+                               ['collapsed (eechof #:fgcolor 'red "izuna: SSH Tunnel has collapsed!~n")]
+                               [(? list? figureprint) (echof #:fgcolor 'cyan "RSA: ~a~n" figureprint)]
+                               [(? exn:break? signal) (and (thread-send sshc signal) (thread-wait sshc))]
+                               [(? exn? exception) (echof #:fgcolor 'red "~a~n" (exn-message exception))]
+                               [(? box? msgbox) (open-box msgbox (list-ref colors index) (list-ref hearts (remainder index (length hearts))))]
+                               [event (echof #:fgcolor 'yellow "Uncaught Event: ~a~n" event)])
+                             (cond [(exn:break? which) (for-each tcp-abandon-port (list /dev/sshin /dev/sshout))]
+                                   [(thread-dead? sshc) (tcp-ssh-channel-connect)]
+                                   [else (poll-channel (remainder (add1 index) (length colors)))])))))))
+      (with-handlers ([exn:break? (lambda [[signal : exn]] (thread-send izunac signal))])
+        (sync/enable-break (thread-dead-evt izunac)))))
 
   (define gui-main : (-> Any)
     (thunk ((lambda [[digivice% : Frame%]] (send* (make-object digivice% "Loading ..." #false) (show #true) (center 'both)))
