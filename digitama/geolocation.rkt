@@ -31,9 +31,11 @@
                                      #px"(:?\\s*<[^>]+>\\s*)+")
                   [(list "Continent" continent "Country" country "State/Region" state "City" city "Latitude" latitude "Longitude" longitude whocares ...)
                    (geolocation continent country state city latitude longitude)]
+                  [(list "Continent" continent "Country" country "City" city "Latitude" latitude "Longitude" longitude whocare ...)
+                   (geolocation continent country #false city latitude longitude)]
                   [(list "Continent" continent "Country" country "Latitude" latitude "Longitude" longitude whocare ...)
                    (geolocation continent country #false #false latitude longitude)]
-                  [what-is-wrong (and (displayln what-is-wrong) #false)]))))
+                  [what-is-wrong (and (eprintf ">> ~a: ~a" ip what-is-wrong) #false)]))))
         ((inst hash-ref String Maybe-Geolocation False) geodb ip (const #false))))))
 
 (module+ test
@@ -46,4 +48,5 @@
   (what-is-my-address ipv6)
 
   (what-is-my-address "93.195.192.224")
-  (what-is-my-address "42.156.250.114"))
+  (what-is-my-address "42.156.250.114")
+  (what-is-my-address "180.87.43.2"))
