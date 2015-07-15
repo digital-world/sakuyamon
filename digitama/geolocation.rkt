@@ -26,14 +26,14 @@
            geodb ip
            (and (list? table)
                 (match (string-split (cast (regexp-replaces (bytes->string/utf-8 (car table))
-                                                            '([#px"(&nbsp;)+" " "] [#px"&deg;" "°"]
-                                                              [#px"&prime;" "′"] [#px"&Prime;" "′′"])) String)
+                                                            '([#px"(&nbsp;)+" " "] [#px"&deg;\\s*" "°"]
+                                                              [#px"&prime;\\s*" "′"] [#px"&Prime;\\s*" "′′"])) String)
                                      #px"(:?\\s*<[^>]+>\\s*)+")
                   [(list "Continent" continent "Country" country "State/Region" state "City" city "Latitude" latitude "Longitude" longitude whocares ...)
                    (geolocation continent country state city latitude longitude)]
                   [(list "Continent" continent "Country" country "Latitude" latitude "Longitude" longitude whocare ...)
                    (geolocation continent country #false #false latitude longitude)]
-                  [what-is-wrong #false]))))
+                  [what-is-wrong (and (displayln what-is-wrong) #false)]))))
         ((inst hash-ref String Maybe-Geolocation False) geodb ip (const #false))))))
 
 (module+ test
@@ -45,4 +45,5 @@
   (what-is-my-address ipv4)
   (what-is-my-address ipv6)
 
-  (what-is-my-address "93.195.192.224"))
+  (what-is-my-address "93.195.192.224")
+  (what-is-my-address "42.156.250.114"))

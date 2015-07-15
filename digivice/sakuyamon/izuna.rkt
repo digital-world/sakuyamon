@@ -47,7 +47,7 @@
              (cond [(string=? (string beating-heart#) msg)
                     (void (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" msgcolor heart)
                           (flush-output (current-output-port)))]
-                   [(regexp-match* #px"\\d+(\\.\\d+){3}" msg)
+                   [(regexp-match* #px"\\d+(\\.\\d+){3}(?!\\.\\S)" msg)
                     => (lambda [[ips : (Listof String)]]
                          (echof #:fgcolor msgcolor "~a~n"
                                 (regexp-replaces msg (map (lambda [[ip : String]] (list ip (~geolocation ip))) ips))))]
@@ -56,7 +56,7 @@
              (let ([info (cast (with-input-from-string reqinfo read) HashTableTop)])
                (echof #:fgcolor msgcolor "~a ~a@~a //~a~a #\"~a\" " msghead
                       (hash-ref info 'method) (~geolocation (cast (hash-ref info 'client) String))
-                      (hash-ref info 'host) (hash-ref info 'uri)
+                      (hash-ref info 'host #false) (hash-ref info 'uri)
                       (hash-ref info 'user-agent #false))
                (echof #:fgcolor 245 "~s~n"
                       ((inst foldl Symbol HashTableTop Any Any)
