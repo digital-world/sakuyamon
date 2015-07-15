@@ -224,7 +224,7 @@
 ;;; So leave the typed C to FFI itself.
 
 (define sakuyamon-foxpipe
-  (lambda [izunac sshd-host host-seen-by-sshd service-seen-by-sshd
+  (lambda [izunac timeout sshd-host host-seen-by-sshd service-seen-by-sshd
            #:username [username (current-tamer)] #:passphrase [passphrase ""]
            #:id_rsa.pub [rsa.pub (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")]
            #:id_rsa [id_rsa (build-path (find-system-path 'home-dir) ".ssh" "id_rsa")]]
@@ -233,7 +233,7 @@
       (define ssh-session (make-parameter #false))
       (define terminate/sendback-if-failed
         (lambda [maybe-exn]
-          (when (exn:fail? maybe-exn) (thread-send izunac maybe-exn))
+          (when (exn:fail? maybe-exn) (thread-send izunac (cons sshd-host maybe-exn)))
           (custodian-shutdown-all (current-custodian)) ;;; channel is also managed by custodian
           (with-handlers ([exn? (const 'unsafe-but-nonsense)])
             (when (ssh-session) ;;; libssh2 treats long reason as an error
@@ -250,22 +250,26 @@
         (define ssh-socket (scheme_get_port_socket /dev/sshout)) ; /dev/sshin also works
         (libssh2_session_handshake session ssh-socket)
         (define figureprint (libssh2_hostkey_hash session 'LIBSSH2_HOSTKEY_HASH_SHA1))
-        (thread-send izunac (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint))))
-        (sleep 0)
+        (thread-send izunac (cons sshd-host (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint)))))
+        (thread-resume izunac)
         (libssh2_userauth_publickey_fromfile session username rsa.pub id_rsa passphrase)
         (libssh2_session_set_blocking session #false)
-        (let-values ([{/dev/sshdin /dev/sshdout} (open_direct_channel session host-seen-by-sshd service-seen-by-sshd)])
-          (let poll-manually ()
+        (let-values ([[/dev/sshdin /dev/sshdout] (open_direct_channel session host-seen-by-sshd service-seen-by-sshd)]
+                     [[on-signal] (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))]
+                     [[interval] 0.26149 #|Number Thoery: Meissel-Mertens Constant|#])
+          (let poll-manually ([idle 0])
+            (when (>= idle timeout)
+              (thread-send izunac (cons sshd-host idle))
+              (thread-resume izunac))
+            
             ;;; libssh2 hides the socket descriptor since all channels in a session are sharing the same.
-            ;;; So there is no way to wake up Racket, we have to check it on an ugly way. 
-            (match (sync/timeout 0.26149 #|Number Thoery: Meissel-Mertens Constant|# /dev/sshdin
-                                 (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive))))
-              [#false (poll-manually)]
-              ['collapsed (error 'ssh-channel "Foxpipe is lost!")]
+            ;;; So there is no way to wake up Racket, we have to check it on an ugly way.
+            (match (sync/timeout interval /dev/sshdin on-signal)
+              [#false (poll-manually (+ idle interval))]
+              [(cons 'collapse reason) (error 'ssh-channel "Foxpipe@~a has to collapse: ~a!" sshd-host reason)]
               [(? exn? signal) (error 'ssh-channel (exn-message signal))]
               [(? input-port?) (let ([r (read-line /dev/sshdin)])
-                                 (thread-send izunac (box r))
-                                 (sleep 0)
+                                 (thread-send izunac (cons sshd-host (box r)))
+                                 (thread-resume izunac)
                                  (cond [(eof-object? r) (error 'ssh-channel "Remote server disconnected!")]
-                                       [else (poll-manually)]))]
-              [event (error 'ssh-channel "Uncaught Event: ~a~n" event)])))))))
+                                       [else (poll-manually 0)]))])))))))

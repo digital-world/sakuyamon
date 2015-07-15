@@ -15,6 +15,7 @@
 
   (require/typed "../../digitama/tunnel.rkt"
                  [sakuyamon-foxpipe  (-> Thread
+                                         Nonnegative-Flonum
                                          String
                                          String
                                          Index
@@ -28,17 +29,31 @@
   (define sakuyamon-scepter-port : (Parameterof Index) (make-parameter (sakuyamon-foxpipe-port)))
   (define sakuyamon-scepter-hosts : (Parameterof (Listof String)) (make-parameter null))
 
+  (define-type Tunnel-Dead-Evt (Evtof (Pairof String Symbol)))
+  
+  (define sshcs : (HashTable String Thread) (make-hash))
+  (define on-sshcs : (HashTable String Tunnel-Dead-Evt) (make-hash))
+
   (define ~geolocation : (-> String String)
     (lambda [ip]
       (define geo : Maybe-Geolocation (what-is-my-address ip))
       (cond [(false? geo) ip]
             [(false? (geolocation-city geo)) (format "~a[~a/~a]" ip (geolocation-continent geo) (geolocation-country geo))]
             [else (format "~a[~a ~a]" ip (geolocation-country geo) (geolocation-city geo))])))
-  
+
+  (define build-tunnel : (-> Thread Thread-Group (-> String Any) String Void)
+    (lambda [izunac sshc-group echo-connection scepter-host]
+      (echo-connection scepter-host)
+      (parameterize ([current-thread-group sshc-group])
+        (define sshc : Thread (thread (thunk (sakuyamon-foxpipe izunac (* (sakuyamon-foxpipe-idle) 1.618)
+                                                                scepter-host "localhost" (sakuyamon-scepter-port)))))
+        (hash-set! sshcs scepter-host sshc)
+        (hash-set! on-sshcs scepter-host (wrap-evt (thread-dead-evt sshc) (const (cons scepter-host 'collapsed)))))))
+
   (define cli-main : (-> Any)
     (lambda []
-      (define open-box : (-> BoxTop Term-Color Char Void)
-        (lambda [msgbox msgcolor heart]
+      (define open-box : (-> String BoxTop Term-Color Char Void)
+        (lambda [scepter-host msgbox msgcolor heart]
           (match (string-split (cast (unbox msgbox) String) #px"\\s+request:\\s+")
             [(list msg)
              (cond [(string=? (string beating-heart#) msg)
@@ -59,40 +74,30 @@
                       ((inst foldl Symbol HashTableTop Any Any)
                        (lambda [key [info : HashTableTop]] (hash-remove info key)) info
                        '(method host uri user-agent client))))])))
-      (define izunacs : (Listof Thread)
-        (build-list (length (sakuyamon-scepter-hosts))
-                    (lambda [[i : Index]]
-                      (define scepter-host : String (list-ref (sakuyamon-scepter-hosts) i))
-                      (thread (thunk (let ([izunac : Thread (current-thread)])
-                                       (define colors : (Listof Term-Color) (list 159 191 223 255))
-                                       (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
-                                       (let tcp-ssh-channel-connect ()
-                                         (define sshc : Thread
-                                           (thread (thunk (void (echof #:fgcolor 'blue "Connecting to ~a:~a.~n" scepter-host 22)
-                                                                (sakuyamon-foxpipe izunac scepter-host "localhost" (sakuyamon-scepter-port))))))
-                                         (let poll-channel ()
-                                           (define which (sync/timeout/enable-break (* (sakuyamon-foxpipe-idle) 1.618)
-                                                                                    (wrap-evt (thread-dead-evt sshc) (lambda [e] 'collapsed))
-                                                                                    (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))))
-                                           (define ci : Index (cast (random (length colors)) Index))
-                                           (define hi : Index (cast (random (length hearts)) Index))
-                                           (match which
-                                             [#false (thread-send sshc 'collapsed) #| tell sshc to terminate |#]
-                                             ['collapsed (eechof #:fgcolor 'red "izuna: Tunnel@~a has collapsed!~n" scepter-host)]
-                                             [(? list? figureprint) (echof #:fgcolor 'cyan "RSA[~a]: ~a~n" scepter-host figureprint)]
-                                             [(? exn:break? signal) (thread-send sshc signal)]
-                                             [(? exn? exception) (echof #:fgcolor 'yellow "~a: ~a~n" scepter-host (exn-message exception))]
-                                             [(? box? msgbox) (open-box msgbox (list-ref colors ci) (list-ref hearts hi))])
-                                           (cond [(exn:break? which) (thread-wait sshc)]
-                                                 [(thread-dead? sshc) (tcp-ssh-channel-connect)]
-                                                 [else (poll-channel)])))))))))
-      (with-handlers ([exn:break? (lambda [[signal : exn]] (for-each (lambda [[t : Thread]] (thread-send t signal)) izunacs))])
-        (let exit-if-failed-all ()
-          (define living-izunacs : (Listof Thread) (filter-not thread-dead? izunacs))
-          (unless (null? living-izunacs)
-            (apply sync/enable-break (map thread-dead-evt living-izunacs))
-            (exit-if-failed-all))))
-      (for-each thread-wait izunacs)))
+      (define izunac : Thread
+        (thread (thunk (let ([izunac : Thread (current-thread)]
+                             [sshc-group : Thread-Group (make-thread-group)])
+                         (define colors : (Listof Term-Color) (list 123 155 187 219 159 191 223 255))
+                         (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
+                         (define on-syslog : (Evtof Any) (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive))))
+                         (define echo-connection : (-> String Any) (lambda [host] (echof #:fgcolor 'blue "Connecting to ~a:~a.~n" host 22)))
+                         (for-each (lambda [[host : String]] (build-tunnel izunac sshc-group echo-connection host)) (sakuyamon-scepter-hosts))
+                         (let poll-channel ()
+                           (define which (apply sync on-syslog (hash-values on-sshcs)))
+                           (define ci : Index (cast (random (length colors)) Index))
+                           (define hi : Index (cast (random (length hearts)) Index))
+                           (match which
+                             [(cons host (? box? msgbox)) (open-box (cast host String) msgbox (list-ref colors ci) (list-ref hearts hi))]
+                             [(cons host (? exn? exception)) (echof #:fgcolor 'red "~a: ~a~n" host (exn-message exception))]
+                             [(cons host 'collapsed) (build-tunnel izunac sshc-group echo-connection (cast host String))]
+                             [(? exn:break? signal) (hash-map sshcs (lambda [[who : String] [sshc : Thread]] (thread-send sshc signal)))]
+                             [(cons host (? flonum? s)) (thread-send (cast (hash-ref sshcs host) Thread) (cons 'collapse (format "idled ~as" s)))]
+                             [(list host figureprint ...) (echof #:fgcolor 'cyan "RSA[~a]: ~a~n" host figureprint)]
+                             [reason (hash-map sshcs (lambda [[who : String] [sshc : Thread]] (thread-send sshc (cons 'collapse reason))))])
+                           (cond [(exn:break? which) (hash-map sshcs (lambda [[who : String] [sshc : Thread]] (thread-wait sshc)))]
+                                 [else (poll-channel)]))))))
+      (with-handlers ([exn:break? (lambda [[signal : exn]] (thread-send izunac signal))])
+        (sync/enable-break (thread-dead-evt izunac)))))
 
   (define gui-main : (-> Any)
     (thunk ((lambda [[digivice% : Frame%]] (send* (make-object digivice% "Loading ..." #false) (show #true) (center 'both)))
