@@ -41,14 +41,13 @@
             [(false? (geolocation-city geo)) (format "~a[~a/~a]" ip (geolocation-continent geo) (geolocation-country geo))]
             [else (format "~a[~a ~a]" ip (geolocation-country geo) (geolocation-city geo))])))
 
-  (define build-tunnel : (-> Thread Thread-Group (-> String Any) String Void)
-    (lambda [izunac sshc-group echo-connection scepter-host]
-      (echo-connection scepter-host)
-      (parameterize ([current-thread-group sshc-group])
-        (define sshc : Thread (thread (thunk (sakuyamon-foxpipe izunac (* (sakuyamon-foxpipe-idle) 1.618)
-                                                                scepter-host "localhost" (sakuyamon-scepter-port)))))
-        (hash-set! sshcs scepter-host sshc)
-        (hash-set! on-sshcs scepter-host (wrap-evt (thread-dead-evt sshc) (const (cons scepter-host 'collapsed)))))))
+  (define build-tunnel : (-> Thread (-> String Any) String Void)
+    (lambda [izunac notify scepter-host]
+      (notify scepter-host)
+      (define sshc : Thread (thread (thunk (sakuyamon-foxpipe izunac (* (sakuyamon-foxpipe-idle) 1.618)
+                                                              scepter-host "localhost" (sakuyamon-scepter-port)))))
+      (hash-set! sshcs scepter-host sshc)
+      (hash-set! on-sshcs scepter-host (wrap-evt (thread-dead-evt sshc) (const (cons scepter-host 'collapsed))))))
 
   (define cli-main : (-> Any)
     (lambda []
@@ -81,24 +80,23 @@
                                    '(method host uri user-agent client))))])])
           (flush-output (current-output-port))))
       (define izunac : Thread
-        (thread (thunk (let ([izunac : Thread (current-thread)]
-                             [sshc-group : Thread-Group (make-thread-group)])
+        (thread (thunk (let ([izunac : Thread (current-thread)])
                          (define on-syslog : (Evtof Any) (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive))))
-                         (define echo-connection : (-> String Any) (lambda [host] (echof #:fgcolor 'blue "Connecting to ~a:~a.~n" host 22)))
-                         (for-each (lambda [[host : String]] (build-tunnel izunac sshc-group echo-connection host)) (sakuyamon-scepter-hosts))
+                         (define notify : (-> String Any) (lambda [host] (echof #:fgcolor 'blue "Connecting to ~a:~a.~n" host 22)))
+                         (for-each (lambda [[host : String]] (build-tunnel izunac notify host)) (sakuyamon-scepter-hosts))
                          (let poll-channel ()
-                           (define next (apply sync on-syslog (hash-values on-sshcs)))
-                           (match next
-                             [(cons host (? box? msgbox)) (print-message (cast host String) (unbox msgbox))]
-                             [(cons host (? exn? exception)) (echof #:fgcolor 'red "~a: ~a~n" host (exn-message exception))]
-                             [(cons host 'collapsed) (build-tunnel izunac sshc-group echo-connection (cast host String))]
-                             [(? exn:break? signal) (hash-map sshcs (lambda [[who : String] [sshc : Thread]] (thread-send sshc signal)))]
-                             [(cons host (? flonum? s)) (thread-send (cast (hash-ref sshcs host) Thread) (cons 'collapse (format "idled ~as" s)))]
+                           (match (apply sync/timeout 0.35323 #| Number Theory: Hafner Sarnak McCurley Constant |# on-syslog (hash-values on-sshcs))
+                             [#false (thread-suspend izunac)]
+                             [(cons host (box message)) (print-message (cast host String) message)]
                              [(list host figureprint ...) (echof #:fgcolor 'cyan "RSA[~a]: ~a~n" host figureprint)]
-                             [reason (hash-map sshcs (lambda [[who : String] [sshc : Thread]] (thread-send sshc (cons 'collapse reason))))])
-                           (cond [(exn:break? next) (hash-map sshcs (lambda [[who : String] [sshc : Thread]] (thread-wait sshc)))]
-                                 [else (poll-channel)]))))))
-      (with-handlers ([exn:break? (lambda [[signal : exn]] (thread-send izunac signal))])
+                             [(? exn:break? signal) (for-each (lambda [[sshc : Thread]] (thread-send sshc signal)) (hash-values sshcs))]
+                             [(cons host (? flonum? s)) (thread-send (cast (hash-ref sshcs host) Thread) (cons 'collapse (format "idled ~as" s)))]
+                             [(cons host (? exn:break?)) (hash-remove! sshcs host)]
+                             [(cons host (? exn? exception)) (echof #:fgcolor 'red "~a: ~a~n" host (exn-message exception))]
+                             [(cons host 'collapsed) (when (hash-has-key? sshcs host) (build-tunnel izunac notify (cast host String)))])
+                           (unless (zero? (hash-count sshcs))
+                             (poll-channel)))))))
+      (with-handlers ([exn:break? (lambda [[signal : exn]] (and (thread-send izunac signal) (thread-resume izunac)))])
         (sync/enable-break (thread-dead-evt izunac)))))
 
   (define gui-main : (-> Any)

@@ -233,7 +233,7 @@
       (define ssh-session (make-parameter #false))
       (define terminate/sendback-if-failed
         (lambda [maybe-exn]
-          (when (exn:fail? maybe-exn) (thread-send izunac (cons sshd-host maybe-exn)))
+          (when (exn? maybe-exn) (thread-send izunac (cons sshd-host maybe-exn)))
           (custodian-shutdown-all (current-custodian)) ;;; channel is also managed by custodian
           (with-handlers ([exn? (const 'unsafe-but-nonsense)])
             (when (ssh-session) ;;; libssh2 treats long reason as an error
@@ -243,7 +243,8 @@
             (libssh2_exit)
             (tcp-abandon-port /dev/sshin)
             (tcp-abandon-port /dev/sshout)
-            (collect-garbage))))
+            (collect-garbage)
+            (thread-resume izunac))))
       (with-handlers ([exn? terminate/sendback-if-failed])
         (define session (libssh2_session_init))
         (ssh-session session)
