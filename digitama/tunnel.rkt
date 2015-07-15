@@ -224,27 +224,30 @@
 ;;; So leave the typed C to FFI itself.
 
 (define sakuyamon-foxpipe
-  (lambda [izunac /dev/stdssh host-seen-by-sshd service-seen-by-sshd
+  (lambda [izunac sshd-host host-seen-by-sshd service-seen-by-sshd
            #:username [username (current-tamer)] #:passphrase [passphrase ""]
            #:id_rsa.pub [rsa.pub (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")]
            #:id_rsa [id_rsa (build-path (find-system-path 'home-dir) ".ssh" "id_rsa")]]
+    (define-values [/dev/sshin /dev/sshout] (tcp-connect sshd-host 22))
     (parameterize ([current-custodian (make-custodian)])
       (define ssh-session (make-parameter #false))
       (define terminate/sendback-if-failed
         (lambda [maybe-exn]
           (when (exn:fail? maybe-exn) (thread-send izunac maybe-exn))
-          (custodian-shutdown-all (current-custodian)) ;;; channel is managed by custodian
+          (custodian-shutdown-all (current-custodian)) ;;; channel is also managed by custodian
           (with-handlers ([exn? (const 'unsafe-but-nonsense)])
             (when (ssh-session) ;;; libssh2 treats long reason as an error
               (define reason (if (exn? maybe-exn) (exn-message maybe-exn) (~a maybe-exn)))
               (libssh2_session_disconnect (ssh-session) (substring reason 0 (min (string-length reason) 256)))
               (libssh2_session_free (ssh-session)))
             (libssh2_exit)
+            (tcp-abandon-port /dev/sshin)
+            (tcp-abandon-port /dev/sshout)
             (collect-garbage))))
       (with-handlers ([exn? terminate/sendback-if-failed])
         (define session (libssh2_session_init))
         (ssh-session session)
-        (define ssh-socket (scheme_get_port_socket /dev/stdssh))
+        (define ssh-socket (scheme_get_port_socket /dev/sshout)) ; /dev/sshin also works
         (libssh2_session_handshake session ssh-socket)
         (define figureprint (libssh2_hostkey_hash session 'LIBSSH2_HOSTKEY_HASH_SHA1))
         (thread-send izunac (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint))))

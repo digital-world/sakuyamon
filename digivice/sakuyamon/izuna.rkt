@@ -9,16 +9,13 @@
   
   (require/typed racket/gui/dynamic
                  [gui-available? (-> Boolean)])
-
-  (require/typed racket
-                 [#:opaque TCP-Port tcp-port?])
   
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/geolocation.rkt")
 
   (require/typed "../../digitama/tunnel.rkt"
                  [sakuyamon-foxpipe  (-> Thread
-                                         TCP-Port
+                                         String
                                          String
                                          Index
                                          [#:username String]
@@ -29,7 +26,7 @@
   
   (define izuna-no-gui? : (Parameterof Boolean) (make-parameter (not (gui-available?))))
   (define sakuyamon-scepter-port : (Parameterof Index) (make-parameter (sakuyamon-foxpipe-port)))
-  (define sakuyamon-scepter-host : (Parameterof String) (make-parameter "gyoudmon.org"))
+  (define sakuyamon-scepter-hosts : (Parameterof (Listof String)) (make-parameter null))
 
   (define ~geolocation : (-> String String)
     (lambda [ip]
@@ -62,32 +59,40 @@
                       ((inst foldl Symbol HashTableTop Any Any)
                        (lambda [key [info : HashTableTop]] (hash-remove info key)) info
                        '(method host uri user-agent client))))])))
-      (define izunac
-        (thread (thunk (let ([izunac : Thread (current-thread)])
-                         (define colors : (Listof Term-Color) (list 159 191 223 255))
-                         (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
-                         (let tcp-ssh-channel-connect ()
-                           (define-values [/dev/sshin /dev/sshout] (tcp-connect (cast (sakuyamon-scepter-host) String) 22))
-                           (echof #:fgcolor 'blue "Connected to ~a:~a.~n" (sakuyamon-scepter-host) 22)
-                           (define sshc : Thread (thread (thunk (sakuyamon-foxpipe izunac (cast /dev/sshout TCP-Port)
-                                                                                   "localhost" (sakuyamon-scepter-port)))))
-                           (let poll-channel ([index : Index 0])
-                             (define which (sync/timeout/enable-break (* (sakuyamon-foxpipe-idle) 1.618)
-                                                                      (wrap-evt (thread-dead-evt sshc) (lambda [e] 'collapsed))
-                                                                      (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))))
-                             (match which
-                               [#false (thread-send sshc 'collapsed) #| tell sshc to terminate |#]
-                               ['collapsed (eechof #:fgcolor 'red "izuna: SSH Tunnel has collapsed!~n")]
-                               [(? list? figureprint) (echof #:fgcolor 'cyan "RSA: ~a~n" figureprint)]
-                               [(? exn:break? signal) (and (thread-send sshc signal) (thread-wait sshc))]
-                               [(? exn? exception) (echof #:fgcolor 'red "~a~n" (exn-message exception))]
-                               [(? box? msgbox) (open-box msgbox (list-ref colors index) (list-ref hearts (remainder index (length hearts))))]
-                               [event (echof #:fgcolor 'yellow "Uncaught Event: ~a~n" event)])
-                             (cond [(exn:break? which) (for-each tcp-abandon-port (list /dev/sshin /dev/sshout))]
-                                   [(thread-dead? sshc) (tcp-ssh-channel-connect)]
-                                   [else (poll-channel (remainder (add1 index) (length colors)))])))))))
-      (with-handlers ([exn:break? (lambda [[signal : exn]] (thread-send izunac signal))])
-        (sync/enable-break (thread-dead-evt izunac)))))
+      (define izunacs : (Listof Thread)
+        (build-list (length (sakuyamon-scepter-hosts))
+                    (lambda [[i : Index]]
+                      (define scepter-host : String (list-ref (sakuyamon-scepter-hosts) i))
+                      (thread (thunk (let ([izunac : Thread (current-thread)])
+                                       (define colors : (Listof Term-Color) (list 159 191 223 255))
+                                       (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
+                                       (let tcp-ssh-channel-connect ()
+                                         (define sshc : Thread
+                                           (thread (thunk (void (echof #:fgcolor 'blue "Connecting to ~a:~a.~n" scepter-host 22)
+                                                                (sakuyamon-foxpipe izunac scepter-host "localhost" (sakuyamon-scepter-port))))))
+                                         (let poll-channel ()
+                                           (define which (sync/timeout/enable-break (* (sakuyamon-foxpipe-idle) 1.618)
+                                                                                    (wrap-evt (thread-dead-evt sshc) (lambda [e] 'collapsed))
+                                                                                    (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))))
+                                           (define ci : Index (cast (random (length colors)) Index))
+                                           (define hi : Index (cast (random (length hearts)) Index))
+                                           (match which
+                                             [#false (thread-send sshc 'collapsed) #| tell sshc to terminate |#]
+                                             ['collapsed (eechof #:fgcolor 'red "izuna: Tunnel@~a has collapsed!~n" scepter-host)]
+                                             [(? list? figureprint) (echof #:fgcolor 'cyan "RSA[~a]: ~a~n" scepter-host figureprint)]
+                                             [(? exn:break? signal) (thread-send sshc signal)]
+                                             [(? exn? exception) (echof #:fgcolor 'yellow "~a: ~a~n" scepter-host (exn-message exception))]
+                                             [(? box? msgbox) (open-box msgbox (list-ref colors ci) (list-ref hearts hi))])
+                                           (cond [(exn:break? which) (thread-wait sshc)]
+                                                 [(thread-dead? sshc) (tcp-ssh-channel-connect)]
+                                                 [else (poll-channel)])))))))))
+      (with-handlers ([exn:break? (lambda [[signal : exn]] (for-each (lambda [[t : Thread]] (thread-send t signal)) izunacs))])
+        (let exit-if-failed-all ()
+          (define living-izunacs : (Listof Thread) (filter-not thread-dead? izunacs))
+          (unless (null? living-izunacs)
+            (apply sync/enable-break (map thread-dead-evt living-izunacs))
+            (exit-if-failed-all))))
+      (for-each thread-wait izunacs)))
 
   (define gui-main : (-> Any)
     (thunk ((lambda [[digivice% : Frame%]] (send* (make-object digivice% "Loading ..." #false) (show #true) (center 'both)))
@@ -101,7 +106,7 @@
 
   (call-as-normal-termination
    (thunk (parameterize ([current-directory (find-system-path 'orig-dir)])
-            ((cast parse-command-line (-> String (Vectorof String) Help-Table (-> Any String Any)
+            ((cast parse-command-line (-> String (Vectorof String) Help-Table (-> Any String * Any)
                                           (Listof String) (-> String Void) Void))
              (format "~a ~a" (#%module) (path-replace-suffix (cast (file-name-from-path (#%file)) Path) #""))
              (current-command-line-arguments)
@@ -110,8 +115,8 @@
                 [{"--no-gui"} ,(λ [[flag : String]] (izuna-no-gui? #true))
                               {"Do not launch GUI even if available."}]
                 [{"-p"} ,(λ [[flag : String] [port : String]] (sakuyamon-scepter-port (cast (string->number port) Index)))
-                        {"Use an alternative <port>." "port"}]])
-             (lambda [!flag hostname] (void (sakuyamon-scepter-host hostname) (if (izuna-no-gui?) (cli-main) (gui-main))))
+                        {"Use an alternative service <port>." "port"}]])
+             (lambda [!flag . hostnames] (void (sakuyamon-scepter-hosts hostnames) (if (izuna-no-gui?) (cli-main) (gui-main))))
              '{"hostname"}
              (lambda [[-h : String]]
                (display (string-replace -h #px"  -- : .+?-h --'\\s*" ""))
