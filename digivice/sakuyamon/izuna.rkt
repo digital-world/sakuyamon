@@ -52,49 +52,51 @@
 
   (define cli-main : (-> Any)
     (lambda []
-      (define open-box : (-> String BoxTop Term-Color Char Void)
-        (lambda [scepter-host msgbox msgcolor heart]
-          (match (string-split (cast (unbox msgbox) String) #px"\\s+request:\\s+")
-            [(list msg)
-             (cond [(string=? (string beating-heart#) msg)
-                    (void (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" msgcolor heart)
-                          (flush-output (current-output-port)))]
-                   [(regexp-match* #px"\\d+(\\.\\d+){3}(?!\\.\\S)" msg)
-                    => (lambda [[ips : (Listof String)]]
-                         (echof #:fgcolor msgcolor "~a~n"
-                                (regexp-replaces msg (map (lambda [[ip : String]] (list ip (~geolocation ip))) ips))))]
-                   [else (echof #:fgcolor msgcolor "~a~n" msg)])]
-            [(list msghead reqinfo)
-             (let ([info (cast (with-input-from-string reqinfo read) HashTableTop)])
-               (echof #:fgcolor msgcolor "~a ~a@~a //~a~a #\"~a\" " msghead
-                      (hash-ref info 'method) (~geolocation (cast (hash-ref info 'client) String))
-                      (hash-ref info 'host #false) (hash-ref info 'uri)
-                      (hash-ref info 'user-agent #false))
-               (echof #:fgcolor 245 "~s~n"
-                      ((inst foldl Symbol HashTableTop Any Any)
-                       (lambda [key [info : HashTableTop]] (hash-remove info key)) info
-                       '(method host uri user-agent client))))])))
+      (define colors : (Listof Term-Color) (list 123 155 187 219 159 191 223 255))
+      (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
+      (define print-message : (-> String Any Void)
+        (lambda [scepter-host message]
+          (define msgcolor : Term-Color (list-ref colors (cast (random (length colors)) Index)))
+          (define heart : Char (list-ref hearts (cast (random (length hearts)) Index)))
+          (cond [(equal? message beating-heart#) (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" msgcolor heart)]
+                [(list? message) (for-each (curry print-message scepter-host) message)] ;;; single-line message is also (list)ed.
+                [else (match (string-split (cast message String) #px"\\s+request:\\s+")
+                        [(list msg)
+                         (cond [(regexp-match #px"\\S+\\[\\d+\\]:\\s*$" msg)
+                                (void 'skip) #| empty-messaged log such as Safari[xxx]: |#]
+                               [(regexp-match* #px"\\d+(\\.\\d+){3}(?!\\.\\S)" msg)
+                                => (lambda [[ips : (Listof String)]]
+                                     (echof #:fgcolor msgcolor "~a~n"
+                                            (regexp-replaces msg (map (lambda [[ip : String]] (list ip (~geolocation ip))) ips))))]
+                               [else (echof #:fgcolor msgcolor "~a~n" msg)])]
+                        [(list msghead reqinfo)
+                         (let ([info (cast (with-input-from-string reqinfo read) HashTableTop)])
+                           (echof #:fgcolor msgcolor "~a ~a@~a //~a~a #\"~a\" " msghead
+                                  (hash-ref info 'method) (~geolocation (cast (hash-ref info 'client) String))
+                                  (hash-ref info 'host #false) (hash-ref info 'uri)
+                                  (hash-ref info 'user-agent #false))
+                           (echof #:fgcolor 245 "~s~n"
+                                  ((inst foldl Symbol HashTableTop Any Any)
+                                   (lambda [key [info : HashTableTop]] (hash-remove info key)) info
+                                   '(method host uri user-agent client))))])])
+          (flush-output (current-output-port))))
       (define izunac : Thread
         (thread (thunk (let ([izunac : Thread (current-thread)]
                              [sshc-group : Thread-Group (make-thread-group)])
-                         (define colors : (Listof Term-Color) (list 123 155 187 219 159 191 223 255))
-                         (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
                          (define on-syslog : (Evtof Any) (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive))))
                          (define echo-connection : (-> String Any) (lambda [host] (echof #:fgcolor 'blue "Connecting to ~a:~a.~n" host 22)))
                          (for-each (lambda [[host : String]] (build-tunnel izunac sshc-group echo-connection host)) (sakuyamon-scepter-hosts))
                          (let poll-channel ()
-                           (define which (apply sync on-syslog (hash-values on-sshcs)))
-                           (define ci : Index (cast (random (length colors)) Index))
-                           (define hi : Index (cast (random (length hearts)) Index))
-                           (match which
-                             [(cons host (? box? msgbox)) (open-box (cast host String) msgbox (list-ref colors ci) (list-ref hearts hi))]
+                           (define next (apply sync on-syslog (hash-values on-sshcs)))
+                           (match next
+                             [(cons host (? box? msgbox)) (print-message (cast host String) (unbox msgbox))]
                              [(cons host (? exn? exception)) (echof #:fgcolor 'red "~a: ~a~n" host (exn-message exception))]
                              [(cons host 'collapsed) (build-tunnel izunac sshc-group echo-connection (cast host String))]
                              [(? exn:break? signal) (hash-map sshcs (lambda [[who : String] [sshc : Thread]] (thread-send sshc signal)))]
                              [(cons host (? flonum? s)) (thread-send (cast (hash-ref sshcs host) Thread) (cons 'collapse (format "idled ~as" s)))]
                              [(list host figureprint ...) (echof #:fgcolor 'cyan "RSA[~a]: ~a~n" host figureprint)]
                              [reason (hash-map sshcs (lambda [[who : String] [sshc : Thread]] (thread-send sshc (cons 'collapse reason))))])
-                           (cond [(exn:break? which) (hash-map sshcs (lambda [[who : String] [sshc : Thread]] (thread-wait sshc)))]
+                           (cond [(exn:break? next) (hash-map sshcs (lambda [[who : String] [sshc : Thread]] (thread-wait sshc)))]
                                  [else (poll-channel)]))))))
       (with-handlers ([exn:break? (lambda [[signal : exn]] (thread-send izunac signal))])
         (sync/enable-break (thread-dead-evt izunac)))))

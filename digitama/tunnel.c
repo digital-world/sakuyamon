@@ -9,6 +9,7 @@
 typedef struct port_object {
     LIBSSH2_SESSION *session;
     LIBSSH2_CHANNEL *channel;
+    char read_ready[1];
 } Port_Object;
 
 static void channel_close_within_custodian(LIBSSH2_CHANNEL *channel) {
@@ -25,9 +26,9 @@ static void channel_close_within_custodian(LIBSSH2_CHANNEL *channel) {
 static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t offset, intptr_t size, int nonblock, Scheme_Object *unless) {
     LIBSSH2_SESSION *session;
     LIBSSH2_CHANNEL *channel;
-    intptr_t total, read, status;
+    intptr_t read, status;
     intptr_t saved_blockbit;
-    char *offed_buffer;
+    char *onebuffer, *offed_buffer;
     
     /**
      * TODO:
@@ -63,10 +64,9 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
 
     session = ((struct port_object *)(in->port_data))->session;
     channel = ((struct port_object *)(in->port_data))->channel;
+    onebuffer = ((struct port_object *)(in->port_data))->read_ready;
     saved_blockbit = libssh2_session_get_blocking(session);
     offed_buffer = buffer + offset; /* As deep in RVM here, the boundary is already checked. */
-    total = size;
-    status = 0;
     read = 0;
 
     if (scheme_unless_ready(unless)) {
@@ -74,23 +74,45 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
         return SCHEME_UNLESS_READY;
     }
 
-    if (libssh2_channel_eof(channel) == 1) {
-        return EOF;
+    if (size > 0) {
+        if (libssh2_channel_eof(channel) == 1) {
+            if ((*onebuffer) != '\0') {
+                (*offed_buffer) = (*onebuffer);
+                (*onebuffer) = '\0';
+                read = 1;
+                goto job_done;
+            }
+
+            return EOF;
+        }
+
+        libssh2_session_set_blocking(session, 0);
+        
+        if ((*onebuffer) != '\0') {
+            (*offed_buffer) = (*onebuffer);
+            (*onebuffer) = '\0';
+            offed_buffer += 1;
+            read += 1;
+            size -= 1;
+        }
+        
+        status = libssh2_channel_read(channel, offed_buffer, size);
+        if (status >= 0) {
+            read += status;
+        }
+        
+        libssh2_session_set_blocking(session, saved_blockbit);
     }
 
-    libssh2_session_set_blocking(session, 0);
-    read = libssh2_channel_read(channel, offed_buffer, size);
-    libssh2_session_set_blocking(session, saved_blockbit);
-
 job_done:
-    return ((read == total) || (read > 0)) ? read : status;
+    return read;
 }
 
 static int channel_read_ready(Scheme_Input_Port *p) {
     LIBSSH2_CHANNEL *channel;
     LIBSSH2_SESSION *session;
     int saved_blockbit, read;
-    char beating_heart[4]; /* emoji takes 4 bytes */
+    char *onebuffer;
 
     /**
      * Returns 1 when a non-blocking (read-bytes) will return bytes or an EOF.
@@ -99,18 +121,23 @@ static int channel_read_ready(Scheme_Input_Port *p) {
     /**
      * TODO: this implementation is ugly.
      * libssh2 keeps hiding the socket descriptor
-     * since all channels in a session are sharing the descriptor.
+     * since all channels in a session are sharing the same descriptor.
      * 
      * The most important effect here is that no event will wakeup Racket.
      * The client side must control (sync/timeout) on its own.
      */
     session = ((struct port_object *)(p->port_data))->session;
     channel = ((struct port_object *)(p->port_data))->channel;
+    onebuffer = ((struct port_object *)(p->port_data))->read_ready;
     saved_blockbit = libssh2_session_get_blocking(session);
 
-    libssh2_session_set_blocking(session, 0);
-    read = libssh2_channel_read(channel, beating_heart, 4);
-    libssh2_session_set_blocking(session, saved_blockbit);
+    if ((*onebuffer) == '\0') {
+        libssh2_session_set_blocking(session, 0);
+        read = libssh2_channel_read(channel, onebuffer, 1);
+        libssh2_session_set_blocking(session, saved_blockbit);
+    } else {
+        read = 1;
+    }
 
     return (read == LIBSSH2_ERROR_EAGAIN) ? 0 : 1;
 }
@@ -132,7 +159,7 @@ static intptr_t channel_write_bytes(Scheme_Output_Port *out, char *buffer, intpt
     LIBSSH2_CHANNEL *channel;
     char *offed_buffer;
     int saved_blockbit;
-    int status, sent, total;
+    int sent ;
 
     /**
      * TODO:
@@ -153,9 +180,7 @@ static intptr_t channel_write_bytes(Scheme_Output_Port *out, char *buffer, intpt
     channel = ((struct port_object *)(out->port_data))->channel;
     saved_blockbit = libssh2_session_get_blocking(session);
     offed_buffer = buffer + offset; /* As deep in RVM here, the boundary is already checked. */
-    total = size;
     sent = 0;
-    status = 0;
 
     
     /**
@@ -164,10 +189,11 @@ static intptr_t channel_write_bytes(Scheme_Output_Port *out, char *buffer, intpt
      */
     libssh2_session_set_blocking(session, 0);
     sent = libssh2_channel_write(channel, offed_buffer, size);
-    libssh2_session_set_blocking(session, saved_blockbit);
 
 job_done:
-    return ((sent == total) || (sent > 0)) ? sent : status;
+    libssh2_session_set_blocking(session, saved_blockbit);
+
+    return sent;
 }
 
 static int channel_write_ready(Scheme_Output_Port *p) {
@@ -217,6 +243,7 @@ int open_direct_channel(LIBSSH2_SESSION* session, const char* host_seen_by_sshd,
         struct port_object *object = (Port_Object *)scheme_malloc_atomic(sizeof(struct port_object));
         object->session = session;
         object->channel = channel;
+        object->read_ready[0] = '\0';
 
         (*read) = (Scheme_Object *)scheme_make_input_port(scheme_make_port_type("<libssh2-channel-input-port>"),
                                                           (void *)object, /* input port data object */

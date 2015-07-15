@@ -268,7 +268,7 @@
               [#false (poll-manually (+ idle interval))]
               [(cons 'collapse reason) (error 'ssh-channel "Foxpipe@~a has to collapse: ~a!" sshd-host reason)]
               [(? exn? signal) (error 'ssh-channel (exn-message signal))]
-              [(? input-port?) (let ([r (read-line /dev/sshdin)])
+              [(? input-port?) (let ([r (read /dev/sshdin)])
                                  (thread-send izunac (cons sshd-host (box r)))
                                  (thread-resume izunac)
                                  (cond [(eof-object? r) (error 'ssh-channel "Remote server disconnected!")]

@@ -71,8 +71,9 @@
     (lambda [packet]
       (for ([{/dev/iznin /dev/iznout} ((inst in-hash Input-Port Output-Port) izunas)])
         (with-handlers ([exn? (lambda [e] (remove-port /dev/iznin 'exn))])
-          (display beating-heart# /dev/iznout) ;;; for checking POLLIN manually.
-          (displayln packet /dev/iznout)
+          (match packet
+            [(? string?) (write (string-split packet (~a #\newline)) /dev/iznout)]
+            [_ (write packet /dev/iznout)])
           (flush-output /dev/iznout)))))
   
   (define serve-forever : (-> (Evtof (List Natural String Natural)) (Evtof (List Input-Port Output-Port)) Void)
