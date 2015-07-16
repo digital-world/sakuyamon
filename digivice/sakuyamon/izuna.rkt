@@ -13,25 +13,13 @@
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/geolocation.rkt")
 
-  (require/typed "../../digitama/tunnel.rkt"
-                 [sakuyamon-foxpipe  (-> Thread
-                                         Nonnegative-Flonum
-                                         String
-                                         String
-                                         Index
-                                         [#:username String]
-                                         [#:id_rsa.pub Path-String]
-                                         [#:id_rsa Path-String]
-                                         [#:passphrase String]
-                                         Any)])
-  
   (define izuna-no-gui? : (Parameterof Boolean) (make-parameter (not (gui-available?))))
   (define sakuyamon-scepter-port : (Parameterof Index) (make-parameter (sakuyamon-foxpipe-port)))
   (define sakuyamon-scepter-hosts : (Parameterof (Listof String)) (make-parameter null))
 
   (define-type Tunnel-Dead-Evt (Evtof (Pairof String Symbol)))
   
-  (define sshcs : (HashTable String Thread) (make-hash))
+  (define sshcs : (HashTable String Place) (make-hash))
   (define on-sshcs : (HashTable String Tunnel-Dead-Evt) (make-hash))
 
   (define ~geolocation : (-> String String)
@@ -41,17 +29,20 @@
             [(false? (geolocation-city geo)) (format "~a[~a/~a]" ip (geolocation-continent geo) (geolocation-country geo))]
             [else (format "~a[~a ~a]" ip (geolocation-country geo) (geolocation-city geo))])))
 
-  (define build-tunnel : (-> Thread (-> String Any) String Void)
-    (lambda [izunac notify scepter-host]
+  (define build-tunnel : (-> (-> String Any) String Void)
+    (lambda [notify scepter-host]
       (notify scepter-host)
-      (define sshc : Thread (thread (thunk (sakuyamon-foxpipe izunac (* (sakuyamon-foxpipe-idle) 1.618)
-                                                              scepter-host "localhost" (sakuyamon-scepter-port)))))
+      (define sshc : Place (dynamic-place (build-path (digimon-digitama) "tunnel.rkt") 'sakuyamon-foxpipe))
+      (place-channel-put sshc (hash 'timeout (* (sakuyamon-foxpipe-idle) 1.618)
+                                    'sshd-host scepter-host
+                                    'host-seen-by-sshd "localhost"
+                                    'service-seen-by-sshd (sakuyamon-scepter-port)))
       (hash-set! sshcs scepter-host sshc)
-      (hash-set! on-sshcs scepter-host (wrap-evt (thread-dead-evt sshc) (const (cons scepter-host 'collapsed))))))
+      (hash-set! on-sshcs scepter-host (wrap-evt (place-dead-evt sshc) (const (cons scepter-host 'collapsed))))))
 
   (define cli-main : (-> Any)
     (lambda []
-      (define colors : (Listof Term-Color) (list 123 155 187 219 159 191 223 255))
+      (define colors : (Listof Term-Color) (list 123 155 187 159 191 223 255))
       (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
       (define print-message : (-> String Any Void)
         (lambda [scepter-host message]
@@ -80,20 +71,18 @@
                                    '(method host uri user-agent client))))])])
           (flush-output (current-output-port))))
       (define izunac : Thread
-        (thread (thunk (let ([izunac : Thread (current-thread)])
-                         (define on-syslog : (Evtof Any) (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive))))
+        (thread (thunk (let ([on-signal : (Evtof Any) (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))])
                          (define notify : (-> String Any) (lambda [host] (echof #:fgcolor 'blue "Connecting to ~a:~a.~n" host 22)))
-                         (for-each (lambda [[host : String]] (build-tunnel izunac notify host)) (sakuyamon-scepter-hosts))
+                         (for-each (lambda [[host : String]] (build-tunnel notify host)) (sakuyamon-scepter-hosts))
                          (let poll-channel ()
-                           (match (apply sync/timeout 0.35323 #| Number Theory: Hafner Sarnak McCurley Constant |# on-syslog (hash-values on-sshcs))
-                             [#false (thread-suspend izunac)]
-                             [(cons host (box message)) (print-message (cast host String) message)]
-                             [(list host figureprint ...) (echof #:fgcolor 'cyan "RSA[~a]: ~a~n" host figureprint)]
-                             [(? exn:break? signal) (for-each (lambda [[sshc : Thread]] (thread-send sshc signal)) (hash-values sshcs))]
-                             [(cons host (? flonum? s)) (thread-send (cast (hash-ref sshcs host) Thread) (cons 'collapse (format "idled ~as" s)))]
-                             [(cons host (? exn:break?)) (hash-remove! sshcs host)]
-                             [(cons host (? exn? exception)) (echof #:fgcolor 'red "~a: ~a~n" host (exn-message exception))]
-                             [(cons host 'collapsed) (when (hash-has-key? sshcs host) (build-tunnel izunac notify (cast host String)))])
+                           (match (apply sync on-signal (append (hash-values sshcs) (hash-values on-sshcs)))
+                             [(cons host (vector message)) (print-message (cast host String) message)]
+                             [(? exn:break? signal) (for-each (lambda [[sshc : Place]] (place-channel-put sshc signal)) (hash-values sshcs))]
+                             [(cons host (? flonum? s)) (place-channel-put (cast (hash-ref sshcs host) Place) (cons 'collapse (format "idled ~as" s)))]
+                             [(list host 'break _) (hash-remove! sshcs host)]
+                             [(list host 'fail message) (echof #:fgcolor 'red "~a: ~a~n" host message)]
+                             [(cons host 'collapsed) (when (hash-has-key? sshcs host) (build-tunnel notify (cast host String)))]
+                             [(list host figureprint ...) (echof #:fgcolor 'cyan "RSA[~a]: ~a~n" host figureprint)])
                            (unless (zero? (hash-count sshcs))
                              (poll-channel)))))))
       (with-handlers ([exn:break? (lambda [[signal : exn]] (and (thread-send izunac signal) (thread-resume izunac)))])
@@ -122,7 +111,7 @@
                 [{"-p"} ,(λ [[flag : String] [port : String]] (sakuyamon-scepter-port (cast (string->number port) Index)))
                         {"Use an alternative service <port>." "port"}]])
              (lambda [!flag . hostnames] (void (sakuyamon-scepter-hosts hostnames) (if (izuna-no-gui?) (cli-main) (gui-main))))
-             '{"hostname"}
+             '{"hostname"} ;;; Although it can watch multihosts at the same time, but this usage is not recommended due to poor (sync)
              (lambda [[-h : String]]
                (display (string-replace -h #px"  -- : .+?-h --'\\s*" ""))
                (exit 0)))))))

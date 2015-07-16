@@ -224,16 +224,27 @@
 ;;; So leave the typed C to FFI itself.
 
 (define sakuyamon-foxpipe
-  (lambda [izunac timeout sshd-host host-seen-by-sshd service-seen-by-sshd
-           #:username [username (current-tamer)] #:passphrase [passphrase ""]
-           #:id_rsa.pub [rsa.pub (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")]
-           #:id_rsa [id_rsa (build-path (find-system-path 'home-dir) ".ssh" "id_rsa")]]
+  (lambda [izunac]
+    (define argh (place-channel-get izunac))
+    (match-define (list timeout sshd-host host-seen-by-sshd service-seen-by-sshd)
+      (map (curry hash-ref argh) '(timeout sshd-host host-seen-by-sshd service-seen-by-sshd)))
+    (match-define (list username passphrase rsa.pub id_rsa)
+      (map (curry hash-ref argh)
+           '(username passphrase rsa.pub id_rsa)
+           (list (current-tamer) ""
+                 (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")
+                 (build-path (find-system-path 'home-dir) ".ssh" "id_rsa"))))
+
     (define-values [/dev/sshin /dev/sshout] (tcp-connect sshd-host 22))
     (parameterize ([current-custodian (make-custodian)])
       (define ssh-session (make-parameter #false))
       (define terminate/sendback-if-failed
         (lambda [maybe-exn]
-          (when (exn? maybe-exn) (thread-send izunac (cons sshd-host maybe-exn)))
+          (when (exn? maybe-exn)
+            (define exntype (if (exn:break? maybe-exn) 'break 'fail))
+            (define message (exn-message maybe-exn))
+            (displayln maybe-exn)
+            (place-channel-put izunac (list sshd-host exntype message)))
           (custodian-shutdown-all (current-custodian)) ;;; channel is also managed by custodian
           (with-handlers ([exn? (const 'unsafe-but-nonsense)])
             (when (ssh-session) ;;; libssh2 treats long reason as an error
@@ -243,34 +254,28 @@
             (libssh2_exit)
             (tcp-abandon-port /dev/sshin)
             (tcp-abandon-port /dev/sshout)
-            (collect-garbage)
-            (thread-resume izunac))))
+            (collect-garbage))))
       (with-handlers ([exn? terminate/sendback-if-failed])
         (define session (libssh2_session_init))
         (ssh-session session)
         (define ssh-socket (scheme_get_port_socket /dev/sshout)) ; /dev/sshin also works
         (libssh2_session_handshake session ssh-socket)
         (define figureprint (libssh2_hostkey_hash session 'LIBSSH2_HOSTKEY_HASH_SHA1))
-        (thread-send izunac (cons sshd-host (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint)))))
-        (thread-resume izunac)
+        (place-channel-put izunac (cons sshd-host (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint)))))
         (libssh2_userauth_publickey_fromfile session username rsa.pub id_rsa passphrase)
         (libssh2_session_set_blocking session #false)
         (let-values ([[/dev/sshdin /dev/sshdout] (open_direct_channel session host-seen-by-sshd service-seen-by-sshd)]
-                     [[on-signal] (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))]
-                     [[interval] 0.26149 #|Number Thoery: Meissel-Mertens Constant|#])
+                     [[interval] 0.26149 #|Number Thoery: Meissel Mertens Constant|#])
           (let poll-manually ([idle 0])
-            (when (>= idle timeout)
-              (thread-send izunac (cons sshd-host idle))
-              (thread-resume izunac))
+            (when (>= idle timeout) (place-channel-put izunac (cons sshd-host idle)))
             
             ;;; libssh2 hides the socket descriptor since all channels in a session are sharing the same.
             ;;; So there is no way to wake up Racket, we have to check it on an ugly way.
-            (match (sync/timeout interval /dev/sshdin on-signal)
+            (match (sync/timeout interval /dev/sshdin izunac)
               [#false (poll-manually (+ idle interval))]
               [(cons 'collapse reason) (error 'ssh-channel "Foxpipe@~a has to collapse: ~a!" sshd-host reason)]
               [(? exn? signal) (error 'ssh-channel (exn-message signal))]
               [(? input-port?) (let ([r (read /dev/sshdin)])
-                                 (thread-send izunac (cons sshd-host (box r)))
-                                 (thread-resume izunac)
+                                 (place-channel-put izunac (cons sshd-host (vector r)))
                                  (cond [(eof-object? r) (error 'ssh-channel "Remote server disconnected!")]
                                        [else (poll-manually 0)]))])))))))
