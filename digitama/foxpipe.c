@@ -18,15 +18,19 @@ typedef struct foxpipe_channel {
     char read_ready[1];
 } foxpipe_channel_t;
 
-static void channel_close_within_custodian(LIBSSH2_CHANNEL *channel) {
+static void channel_close_within_custodian(struct foxpipe_channel *foxpipe) {
     /**
      * The function name just indicates that
      * Racket code is free to leave the channel to the custodian.
      */
 
-    libssh2_channel_close(channel);
-    libssh2_channel_wait_closed(channel);
-    libssh2_channel_free(channel);
+    if (foxpipe->read_ready[0] != '\127') {
+        libssh2_channel_close(foxpipe->channel);
+        foxpipe->read_ready[0] = '\127'; 
+    } else {
+        libssh2_channel_wait_closed(foxpipe->channel);
+        libssh2_channel_free(foxpipe->channel);
+    }
 }
 
 static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t offset, intptr_t size, int nonblock, Scheme_Object *unless) {
@@ -125,12 +129,10 @@ static int channel_read_ready(Scheme_Input_Port *p) {
      */
 
     /**
-     * TODO: this implementation is ugly.
-     * libssh2 keeps hiding the socket descriptor
-     * since all channels in a session are sharing the same descriptor.
-     * 
-     * The most important effect here is that no event will wakeup Racket.
-     * The client side must control (sync/timeout) on its own.
+     * This implementation is correct since all channels in a session are
+     * sharing the same socket discriptor. When Racket is woken up by event,
+     * it would probably check like this to see if the coming data belongs
+     * to this channel.
      */
     session = ((struct foxpipe_channel *)(p->port_data))->session->sshclient;
     channel = ((struct foxpipe_channel *)(p->port_data))->channel;
@@ -149,14 +151,14 @@ static int channel_read_ready(Scheme_Input_Port *p) {
 }
 
 static void channel_in_close(Scheme_Input_Port *p) {
-    LIBSSH2_CHANNEL *channel;
+    foxpipe_channel_t *channel;
 
     /**
      * Called to close the port.
      * The port is not considered closed until the function returns.
      */
 
-    channel = ((struct foxpipe_channel *)(p->port_data))->channel;
+    channel = ((struct foxpipe_channel *)(p->port_data));
     channel_close_within_custodian(channel);
 }
 
@@ -220,7 +222,7 @@ static int channel_write_ready(Scheme_Output_Port *p) {
 }
 
 static void channel_out_close(Scheme_Output_Port *p) {
-    LIBSSH2_CHANNEL *channel;
+    foxpipe_channel_t *channel;
 
     /**
      * Called to close the port.
@@ -231,7 +233,7 @@ static void channel_out_close(Scheme_Output_Port *p) {
      * in which case the function must return without blocking.
      */
 
-    channel = ((struct foxpipe_channel *)(p->port_data))->channel;
+    channel = ((struct foxpipe_channel *)(p->port_data));
     channel_close_within_custodian(channel);
         
     /* The documentation says this function must be called here */
