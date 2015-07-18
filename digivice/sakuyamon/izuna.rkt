@@ -20,7 +20,6 @@
   (define-type Tunnel-Dead-Evt (Evtof (Pairof String Symbol)))
   
   (define sshcs : (HashTable String Place) (make-hash))
-  (define on-sshcs : (HashTable String Tunnel-Dead-Evt) (make-hash))
 
   (define ~geolocation : (-> String String)
     (lambda [ip]
@@ -29,16 +28,14 @@
             [(false? (geolocation-city geo)) (format "~a[~a/~a]" ip (geolocation-continent geo) (geolocation-country geo))]
             [else (format "~a[~a ~a]" ip (geolocation-country geo) (geolocation-city geo))])))
 
-  (define build-tunnel : (-> (-> String Any) String Void)
-    (lambda [notify scepter-host]
-      (notify scepter-host)
-      (define sshc : Place (dynamic-place (build-path (digimon-digitama) "tunnel.rkt") 'sakuyamon-foxpipe))
+  (define build-tunnel : (-> String Void)
+    (lambda [scepter-host]
+      (define sshc : Place (dynamic-place (build-path (digimon-digitama) "foxpipe.rkt") 'sakuyamon-foxpipe))
       (place-channel-put sshc (hash 'timeout (* (sakuyamon-foxpipe-idle) 1.618)
                                     'sshd-host scepter-host
                                     'host-seen-by-sshd "localhost"
                                     'service-seen-by-sshd (sakuyamon-scepter-port)))
-      (hash-set! sshcs scepter-host sshc)
-      (hash-set! on-sshcs scepter-host (wrap-evt (place-dead-evt sshc) (const (cons scepter-host 'collapsed))))))
+      (hash-set! sshcs scepter-host sshc)))
 
   (define cli-main : (-> Any)
     (lambda []
@@ -50,43 +47,47 @@
           (define heart : Char (list-ref hearts (cast (random (length hearts)) Index)))
           (cond [(equal? message beating-heart#) (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" msgcolor heart)]
                 [(list? message) (for-each (curry print-message scepter-host) message)] ;;; single-line message is also (list)ed.
-                [else (match (string-split (cast message String) #px"\\s+request:\\s+")
-                        [(list msg)
-                         (cond [(regexp-match #px"\\S+\\[\\d+\\]:\\s*$" msg)
-                                (void 'skip) #| empty-messaged log such as Safari[xxx]: |#]
-                               [(regexp-match* #px"\\d+(\\.\\d+){3}(?!\\.\\S)" msg)
-                                => (lambda [[ips : (Listof String)]]
-                                     (echof #:fgcolor msgcolor "~a~n"
-                                            (regexp-replaces msg (map (lambda [[ip : String]] (list ip (~geolocation ip))) ips))))]
-                               [else (echof #:fgcolor msgcolor "~a~n" msg)])]
-                        [(list msghead reqinfo)
-                         (let ([info (cast (with-input-from-string reqinfo read) HashTableTop)])
-                           (echof #:fgcolor msgcolor "~a ~a@~a //~a~a #\"~a\" " msghead
-                                  (hash-ref info 'method) (~geolocation (cast (hash-ref info 'client) String))
-                                  (hash-ref info 'host #false) (hash-ref info 'uri)
-                                  (hash-ref info 'user-agent #false))
-                           (echof #:fgcolor 245 "~s~n"
-                                  ((inst foldl Symbol HashTableTop Any Any)
-                                   (lambda [key [info : HashTableTop]] (hash-remove info key)) info
-                                   '(method host uri user-agent client))))])])
+                [(string? message) (match (string-split message #px"\\s+request:\\s+")
+                                     [(list msg)
+                                      (cond [(regexp-match #px"\\S+\\[\\d+\\]:\\s*$" msg)
+                                             (void 'skip) #| empty-messaged log such as Safari[xxx]: |#]
+                                            [(regexp-match* #px"\\d+(\\.\\d+){3}(?!\\.\\S)" msg)
+                                             => (lambda [[ips : (Listof String)]]
+                                                  (echof #:fgcolor msgcolor "~a~n"
+                                                         (regexp-replaces msg (map (lambda [[ip : String]] (list ip (~geolocation ip))) ips))))]
+                                            [else (echof #:fgcolor msgcolor "~a~n" msg)])]
+                                     [(list msghead reqinfo)
+                                      (let ([info (cast (with-input-from-string reqinfo read) HashTableTop)])
+                                        (echof #:fgcolor msgcolor "~a ~a@~a //~a~a #\"~a\" " msghead
+                                               (hash-ref info 'method) (~geolocation (cast (hash-ref info 'client) String))
+                                               (hash-ref info 'host #false) (hash-ref info 'uri)
+                                               (hash-ref info 'user-agent #false))
+                                        (echof #:fgcolor 245 "~s~n"
+                                               ((inst foldl Symbol HashTableTop Any Any)
+                                                (lambda [key [info : HashTableTop]] (hash-remove info key)) info
+                                                '(method host uri user-agent client))))])]
+                [else (echof #:fgcolor 245 "Unexpected Message: ~s~n" message)])
           (flush-output (current-output-port))))
-      (define izunac : Thread
-        (thread (thunk (let ([on-signal : (Evtof Any) (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))])
-                         (define notify : (-> String Any) (lambda [host] (echof #:fgcolor 'blue "Connecting to ~a:~a.~n" host 22)))
-                         (for-each (lambda [[host : String]] (build-tunnel notify host)) (sakuyamon-scepter-hosts))
-                         (let poll-channel ()
-                           (match (apply sync on-signal (append (hash-values sshcs) (hash-values on-sshcs)))
-                             [(cons host (vector message)) (print-message (cast host String) message)]
-                             [(? exn:break? signal) (for-each (lambda [[sshc : Place]] (place-channel-put sshc signal)) (hash-values sshcs))]
-                             [(cons host (? flonum? s)) (place-channel-put (cast (hash-ref sshcs host) Place) (cons 'collapse (format "idled ~as" s)))]
-                             [(list host 'break _) (hash-remove! sshcs host)]
-                             [(list host 'fail message) (echof #:fgcolor 'red "~a: ~a~n" host message)]
-                             [(cons host 'collapsed) (when (hash-has-key? sshcs host) (build-tunnel notify (cast host String)))]
-                             [(list host figureprint ...) (echof #:fgcolor 'cyan "RSA[~a]: ~a~n" host figureprint)])
-                           (unless (zero? (hash-count sshcs))
-                             (poll-channel)))))))
-      (with-handlers ([exn:break? (lambda [[signal : exn]] (and (thread-send izunac signal) (thread-resume izunac)))])
-        (sync/enable-break (thread-dead-evt izunac)))))
+      (for-each build-tunnel (sakuyamon-scepter-hosts))
+      (define on-signal : (-> exn Void)
+        (lambda [signal]
+          (newline)
+          (for-each (lambda [[sshc : Place]] (place-break sshc 'terminate)) (hash-values sshcs))
+          (let wait-channel ()
+            (define who (apply sync (hash-map sshcs (lambda [[host : String] [sshc : Place]]
+                                                      (wrap-evt (place-dead-evt sshc) (const host))))))
+            (hash-remove! sshcs who)
+            (echof #:fgcolor 'blue "~a: SSH Tunnel has collapsed~n" who)
+            (unless (zero? (hash-count sshcs)) (wait-channel)))))
+      (with-handlers ([exn:break? on-signal])
+        (let poll-channel ()
+          (match (apply sync/enable-break (hash-values sshcs))
+            [(cons host (vector message)) (print-message (cast host String) message)]
+            [(cons host (? flonum? s)) (place-channel-put (cast (hash-ref sshcs host) Place) (format "idled ~as" s))]
+            [(list host 'fail message) (echof #:fgcolor 'red "~a: ~a~n" host message)]
+            [(list host (? string? figureprint) ...) (echof #:fgcolor 'cyan "~a: RSA: ~a~n" host figureprint)]
+            [(list host 'notify (? string? fmt) argl ...) (echof #:fgcolor 'blue "~a: ~a~n" host (apply format fmt argl))])
+          (poll-channel)))))
 
   (define gui-main : (-> Any)
     (thunk ((lambda [[digivice% : Frame%]] (send* (make-object digivice% "Loading ..." #false) (show #true) (center 'both)))
