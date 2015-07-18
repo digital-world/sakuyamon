@@ -6,14 +6,17 @@
 
 @require{posix.rkt}
 
+(define last-ssh-session (make-parameter #false))
+
+(define raise-ssh-error
+  (curry raise-foreign-error
+         #:strerror (lambda [errno]
+                      (cond [(last-ssh-session) (let-values ([{_ errmsg} (foxpipe_last_error)]) errmsg)]
+                            [else "Unregistered error"]))))
+
 (define-ffi-definer define-ssh (ffi-lib "libssh2" #:global? #true))
 
-(define-cstruct _Foxpipe-Session
-  ([ssh_session (_cpointer/null 'libssh2_session)]
-   [dev_tcpin _racket]
-   [dev_tcpout _racket]))
-
-(define _foxpipe_session* _Foxpipe-Session-pointer/null)
+(define _foxpipe_session* (_cpointer/null 'foxpipe_session))
 
 (define _hashtype
   (_enum (list 'LIBSSH2_HOSTKEY_HASH_MD5  '= 1
@@ -35,14 +38,6 @@
                'SSH_DISCONNECT_AUTH_CANCELLED_BY_USER         '= 13
                'SSH_DISCONNECT_NO_MORE_AUTH_METHODS_AVAILABLE '= 14
                'SSH_DISCONNECT_ILLEGAL_USER_NAME              '= 15)))
-
-(define last-ssh-session (make-parameter #false))
-
-(define raise-ssh-error
-  (curry raise-foreign-error
-         #:strerror (lambda [errno]
-                      (cond [(last-ssh-session) (let-values ([{_ errmsg} (foxpipe_last_error)]) errmsg)]
-                            [else "Unregistered error"]))))
 
 (define-ssh libssh2_init
   ;;; this function will be invoked by libssh2_session_init if needed.
@@ -147,15 +142,14 @@
           (foxpipe_authenticate session username rsa.pub id_rsa passphrase)
           (parameterize ([current-custodian channel-custodian])
             (define-values [/dev/sshdin /dev/sshdout] (foxpipe_direct_channel session host-seen-by-sshd service-seen-by-sshd))
-            (let poll-manually ()
-              (match (sync/timeout/enable-break timeout (Foxpipe-Session-dev_tcpin session))
+            (let wait-sshd ()
+              (match (sync/timeout/enable-break timeout /dev/sshdin)
                 [(? false?)
                  (let ([reason (place-channel-put/get izunac (cons sshd-host timeout))])
                    (unless (false? reason)
                      (error 'ssh-channel "foxpipe has to collapse: ~a!" reason)))]
-                [(? input-port?)
-                 (let ([r (read /dev/sshdin)])
-                   (place-channel-put izunac (cons sshd-host (vector r)))
-                   (cond [(eof-object? r) (error 'ssh-channel "remote server disconnected!")]
-                         [else (poll-manually)]))]))))))))
-  
+                [(? input-port? /dev/sshdin)
+                 (match (read /dev/sshdin)
+                   [(? eof-object?) (error 'ssh-channel "remote server disconnected!")]
+                   [msgbox (void (place-channel-put izunac (cons sshd-host (vector msgbox)))
+                                 (wait-sshd))])]))))))))
