@@ -39,25 +39,27 @@
                                     'service-seen-by-sshd (sakuyamon-scepter-port)))
       (hash-set! sshcs scepter-host sshc)))
 
+  (define px.filter : (Listof Regexp)
+    (list #px"\\S+\\[\\d+\\]:\\s*$" #| empty-messaged log such as Safari[xxx] |#
+          #px"taskgated\\[\\d+\\]:" #| all especially "no system signature for unsigned ..." |#))
+  
   (define cli-main : (-> Any)
     (lambda []
       (define msgcolor : (-> Term-Color)
         ((inst sequence->repeated-generator Term-Color) (list 123 155 187 159 191 223 255)))
       (define heart : (-> Char)
         ((inst sequence->repeated-generator Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#)))
-      (define px.uninteresting : (Listof Regexp)
-        (list #px"\\S+\\[\\d+\\]:\\s*$" #| empty-messaged log such as Safari[xxx] |#
-              #px"taskgated\\[\\d+\\]:" #| all especially "no system signature for unsigned ..." |#))
       (define fold-message : (-> Any Void)
         (lambda [message]
-          (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" (msgcolor) message)))
+          (printf "\033[s\033[2C\033[38;5;~am~a\033[0m\033[u" (msgcolor) message)))
       (define print-message : (-> String Any Void)
         (lambda [scepter-host message]
+          (printf "\033[K") ; clear cursor line
           (cond [(equal? message beating-heart#) (fold-message (heart))]
                 [(list? message) (for-each (curry print-message scepter-host) message)] ;;; single-line message is also (list)ed.
                 [(string? message) (match (string-split message #px"\\s+request:\\s+")
                                      [(list msg)
-                                      (cond [(ormap (lambda [[px : Regexp]] (regexp-match px msg)) px.uninteresting) (fold-message msg)]
+                                      (cond [(ormap (lambda [[px : Regexp]] (regexp-match px msg)) px.filter) (fold-message msg)]
                                             [(regexp-match* #px"\\d+(\\.\\d+){3}(?!\\.\\S)" msg)
                                              => (lambda [[ips : (Listof String)]]
                                                   (echof #:fgcolor (msgcolor) "~a~n"
