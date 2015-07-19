@@ -31,8 +31,7 @@
   (define build-tunnel : (-> String Void)
     (lambda [scepter-host]
       (define sshc : Place (dynamic-place (build-path (digimon-digitama) "foxpipe.rkt") 'sakuyamon-foxpipe))
-      (place-channel-put sshc (hash 'timeout (* (sakuyamon-foxpipe-idle) 1.618)
-                                    'sshd-host scepter-host
+      (place-channel-put sshc (hash 'sshd-host scepter-host
                                     'host-seen-by-sshd "localhost"
                                     'service-seen-by-sshd (sakuyamon-scepter-port)))
       (hash-set! sshcs scepter-host sshc)))
@@ -41,10 +40,12 @@
     (lambda []
       (define colors : (Listof Term-Color) (list 123 155 187 159 191 223 255))
       (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
+      (define times : (Boxof Byte) (box 0))
       (define print-message : (-> String Any Void)
         (lambda [scepter-host message]
-          (define msgcolor : Term-Color (list-ref colors (cast (random (length colors)) Index)))
-          (define heart : Char (list-ref hearts (cast (random (length hearts)) Index)))
+          (define msgcolor : Term-Color (list-ref colors (remainder (unbox times) (length colors))))
+          (define heart : Char (list-ref hearts (remainder (unbox times) (length hearts))))
+          ((inst set-box! Byte) times (remainder (add1 (unbox times)) 255))
           (cond [(equal? message beating-heart#) (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" msgcolor heart)]
                 [(list? message) (for-each (curry print-message scepter-host) message)] ;;; single-line message is also (list)ed.
                 [(string? message) (match (string-split message #px"\\s+request:\\s+")
@@ -66,7 +67,7 @@
                                                ((inst foldl Symbol HashTableTop Any Any)
                                                 (lambda [key [info : HashTableTop]] (hash-remove info key)) info
                                                 '(method host uri user-agent client))))])]
-                [else (echof #:fgcolor 245 "Unexpected Message: ~s~n" message)])
+                [else (echof #:fgcolor 245 "Unexpected Message from ~a: ~s~n" scepter-host message)])
           (flush-output (current-output-port))))
       (for-each build-tunnel (sakuyamon-scepter-hosts))
       (define on-signal : (-> exn Void)
