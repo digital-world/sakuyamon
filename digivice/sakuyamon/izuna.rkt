@@ -9,6 +9,9 @@
   
   (require/typed racket/gui/dynamic
                  [gui-available? (-> Boolean)])
+
+  (require/typed racket/generator
+                 [sequence->repeated-generator (All [a] (-> (Sequenceof a) (-> a)))])
   
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/geolocation.rkt")
@@ -38,28 +41,32 @@
 
   (define cli-main : (-> Any)
     (lambda []
-      (define colors : (Listof Term-Color) (list 123 155 187 159 191 223 255))
-      (define hearts : (Listof Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#))
-      (define times : (Boxof Byte) (box 0))
+      (define msgcolor : (-> Term-Color)
+        ((inst sequence->repeated-generator Term-Color) (list 123 155 187 159 191 223 255)))
+      (define heart : (-> Char)
+        ((inst sequence->repeated-generator Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#)))
+      (define fold-message : (-> Any Void)
+        (match-lambda
+          ['heart (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" (msgcolor) (heart))]
+          [message (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" (msgcolor) message)]))
       (define print-message : (-> String Any Void)
         (lambda [scepter-host message]
-          (define msgcolor : Term-Color (list-ref colors (remainder (unbox times) (length colors))))
-          (define heart : Char (list-ref hearts (remainder (unbox times) (length hearts))))
-          ((inst set-box! Byte) times (remainder (add1 (unbox times)) 255))
-          (cond [(equal? message beating-heart#) (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" msgcolor heart)]
+          (cond [(equal? message beating-heart#) (fold-message 'heart)]
                 [(list? message) (for-each (curry print-message scepter-host) message)] ;;; single-line message is also (list)ed.
                 [(string? message) (match (string-split message #px"\\s+request:\\s+")
                                      [(list msg)
                                       (cond [(regexp-match #px"\\S+\\[\\d+\\]:\\s*$" msg)
-                                             (void 'skip) #| empty-messaged log such as Safari[xxx]: |#]
+                                             (fold-message msg) #| skip empty-messaged log such as Safari[xxx] |#]
+                                            [(regexp-match #px"taskgated\\[\\d+\\]:" msg)
+                                             (fold-message msg) #| disable taskgated: no system signature for unsigned ... |#]
                                             [(regexp-match* #px"\\d+(\\.\\d+){3}(?!\\.\\S)" msg)
                                              => (lambda [[ips : (Listof String)]]
-                                                  (echof #:fgcolor msgcolor "~a~n"
+                                                  (echof #:fgcolor (msgcolor) "~a~n"
                                                          (regexp-replaces msg (map (lambda [[ip : String]] (list ip (~geolocation ip))) ips))))]
                                             [else (echof #:fgcolor msgcolor "~a~n" msg)])]
                                      [(list msghead reqinfo)
                                       (let ([info (cast (with-input-from-string reqinfo read) HashTableTop)])
-                                        (echof #:fgcolor msgcolor "~a ~a@~a //~a~a #\"~a\" " msghead
+                                        (echof #:fgcolor (msgcolor) "~a ~a@~a //~a~a #\"~a\" " msghead
                                                (hash-ref info 'method) (~geolocation (cast (hash-ref info 'client) String))
                                                (hash-ref info 'host #false) (hash-ref info 'uri)
                                                (hash-ref info 'user-agent #false))
