@@ -71,9 +71,11 @@
     (lambda [packet]
       (for ([{/dev/iznin /dev/iznout} ((inst in-hash Input-Port Output-Port) izunas)])
         (with-handlers ([exn? (lambda [e] (remove-port /dev/iznin 'exn))])
+          ;;; (vector) is wrotten with the shape '#()', so clients have a natural boundary to stop (read)ing.
+          ;;; or they might have to check the next char again and again in nonblocking mode. 
           (match packet
-            [(? string?) (write (string-split packet (~a #\newline)) /dev/iznout)]
-            [_ (write packet /dev/iznout)])
+            [(? string?) (write (vector (string-split packet (~a #\newline))) /dev/iznout)]
+            [_ (write (vector packet) /dev/iznout)])
           (flush-output /dev/iznout)))))
   
   (define serve-forever : (-> (Evtof (List Natural String Natural)) (Evtof (List Input-Port Output-Port)) Void)

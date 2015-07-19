@@ -148,8 +148,8 @@
                  (let ([reason (place-channel-put/get izunac (cons sshd-host timeout))])
                    (unless (false? reason)
                      (error 'ssh-channel "foxpipe has to collapse: ~a!" reason)))]
-                [(? input-port? /dev/sshdin)
+                [(? input-port?)
                  (match (read /dev/sshdin)
                    [(? eof-object?) (error 'ssh-channel "remote server disconnected!")]
-                   [msgbox (void (place-channel-put izunac (cons sshd-host (vector msgbox)))
-                                 (wait-sshd))])]))))))))
+                   [msgvector (place-channel-put izunac (cons sshd-host msgvector))])])
+              (wait-sshd))))))))
