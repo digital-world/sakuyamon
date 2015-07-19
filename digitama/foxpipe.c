@@ -136,11 +136,6 @@ static int channel_read_ready(Scheme_Input_Port *p) {
      */
 
     if ((*onebuffer) == '\0') {
-        int sockfd;
-
-        scheme_get_port_socket(foxpipe->session->dev_tcpin, &sockfd);
-        scheme_fd_to_semaphore(sockfd, MZFD_CREATE_READ, 1);
-
         read = libssh2_channel_read(channel, onebuffer, 1);
     } else {
         read = 1;
@@ -237,7 +232,7 @@ static int channel_write_ready(Scheme_Output_Port *p) {
     return (libssh2_channel_window_write(channel) > 0) ? 1 : 0;
 }
 
-static void channel_write_need_wakeup(Scheme_Input_Port *port, void *fds) {
+static void channel_write_need_wakeup(Scheme_Output_Port *port, void *fds) {
     foxpipe_channel_t *channel;
     intptr_t dev_tcpout;
     fd_set *fdout, *fderr;
