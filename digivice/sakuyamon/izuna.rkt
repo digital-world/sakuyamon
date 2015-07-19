@@ -46,12 +46,11 @@
       (define heart : (-> Char)
         ((inst sequence->repeated-generator Char) (list beating-heart# two-heart# sparkling-heart# growing-heart# arrow-heart#)))
       (define fold-message : (-> Any Void)
-        (match-lambda
-          ['heart (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" (msgcolor) (heart))]
-          [message (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" (msgcolor) message)]))
+        (lambda [message]
+          (printf "\033[s\033[K\033[2C\033[38;5;~am~a\033[0m\033[u" (msgcolor) message)))
       (define print-message : (-> String Any Void)
         (lambda [scepter-host message]
-          (cond [(equal? message beating-heart#) (fold-message 'heart)]
+          (cond [(equal? message beating-heart#) (fold-message (heart))]
                 [(list? message) (for-each (curry print-message scepter-host) message)] ;;; single-line message is also (list)ed.
                 [(string? message) (match (string-split message #px"\\s+request:\\s+")
                                      [(list msg)
