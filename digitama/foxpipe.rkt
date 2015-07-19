@@ -109,9 +109,10 @@
 (define sakuyamon-foxpipe
   (lambda [izunac]
     (with-handlers ([exn:break? void])
+      (define time0 (current-inexact-milliseconds))
       (define argh (place-channel-get izunac))
-      (match-define (list timeout sshd-host host-seen-by-sshd service-seen-by-sshd)
-        (map (curry hash-ref argh) '(timeout sshd-host host-seen-by-sshd service-seen-by-sshd)))
+      (match-define (list sshd-host host-seen-by-sshd service-seen-by-sshd)
+        (map (curry hash-ref argh) '(sshd-host host-seen-by-sshd service-seen-by-sshd)))
       (match-define (list username passphrase rsa.pub id_rsa)
         (map (curry hash-ref argh)
              '(username passphrase rsa.pub id_rsa)
@@ -141,6 +142,7 @@
           (place-channel-put izunac (cons sshd-host (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint)))))
           (foxpipe_authenticate session username rsa.pub id_rsa passphrase)
           (parameterize ([current-custodian channel-custodian])
+            (define timeout (+ (sakuyamon-foxpipe-idle) (/ (- (current-inexact-milliseconds) time0) 1000.0)))
             (define-values [/dev/sshdin /dev/sshdout] (foxpipe_direct_channel session host-seen-by-sshd service-seen-by-sshd))
             (let wait-sshd ()
               (match (sync/timeout/enable-break timeout /dev/sshdin)
