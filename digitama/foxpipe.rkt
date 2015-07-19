@@ -6,13 +6,10 @@
 
 @require{posix.rkt}
 
-(define last-ssh-session (make-parameter #false))
-
-(define raise-ssh-error
-  (curry raise-foreign-error
-         #:strerror (lambda [errno]
-                      (cond [(last-ssh-session) (let-values ([{_ errmsg} (foxpipe_last_error)]) errmsg)]
-                            [else "Unregistered error"]))))
+(define raise-foxpipe-error
+  (lambda [src session]
+    (raise-foreign-error src (foxpipe_last_errno session)
+                         #:strerror (lambda [errno] (foxpipe_last_errmsg session)))))
 
 (define-ffi-definer define-ssh (ffi-lib "libssh2" #:global? #true))
 
@@ -47,8 +44,21 @@
 (define-ssh libssh2_exit
   (_fun -> _void))
 
-(define-ffi-definer define-tunnel (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
-                                                         "native" (system-library-subpath #false) "foxpipe")))
+(define-ffi-definer define-tunnel
+  (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
+                       "native" (system-library-subpath #false) "foxpipe")))
+
+(define-tunnel foxpipe_last_errno
+  (_fun [session : _foxpipe_session*]
+        -> _int))
+
+(define-tunnel foxpipe_last_errmsg
+  (_fun [session : _foxpipe_session*]
+        [errmsg : (_ptr o _bytes)]
+        [size : (_ptr o _int)]
+        -> [errno : _int]
+        -> errmsg)
+  #:c-id foxpipe_last_error)
 
 (define-tunnel foxpipe_construct
   (_fun [tcp-connect : _racket = tcp-connect/enable-break]
@@ -60,7 +70,7 @@
   (_fun [session : _foxpipe_session*]
         [type : _hashtype]
         -> [figureprint : _bytes]
-        -> (or figureprint (raise-ssh-error 'foxpipe_handshake (foxpipe_last_errno)))))
+        -> (or figureprint (raise-foxpipe-error 'foxpipe_handshake session))))
 
 (define-tunnel foxpipe_authenticate
   (_fun [session : _foxpipe_session*]
@@ -70,7 +80,7 @@
         [passphrase : _string]
         -> [status : _int]
         -> (cond [(zero? status) status]
-                 [else (raise-ssh-error 'foxpipe_authenticate status)])))
+                 [else (raise-foxpipe-error 'foxpipe_authenticate session)])))
 
 (define-tunnel foxpipe_collapse
   (_fun [session : _foxpipe_session*]
@@ -78,18 +88,7 @@
         [description : _string]
         -> [status : _int]
         -> (cond [(zero? status) status]
-                 [else (raise-ssh-error 'foxpipe_collapse status)])))
-
-(define-tunnel foxpipe_last_errno
-  (_fun [session : _foxpipe_session* = (last-ssh-session)]
-        -> _int))
-
-(define-tunnel foxpipe_last_error
-  (_fun [session : _foxpipe_session* = (last-ssh-session)]
-        [errmsg : (_ptr o _bytes)]
-        [size : (_ptr o _int)]
-        -> [errno : _int]
-        -> (values errno errmsg)))
+                 [else (raise-foxpipe-error 'foxpipe_collapse session)])))
 
 (define-tunnel foxpipe_direct_channel
   (_fun [session : _foxpipe_session*]
@@ -98,7 +97,7 @@
         [/dev/sshin : (_ptr o _racket)]
         [/dev/sshout : (_ptr o _racket)]
         -> [status : _int]
-        -> (cond [(negative? status) (raise-ssh-error 'foxpipe_direct_channel status)]
+        -> (cond [(negative? status) (raise-foxpipe-error 'foxpipe_direct_channel session)]
                  [else (values /dev/sshin /dev/sshout)])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

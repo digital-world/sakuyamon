@@ -14,8 +14,8 @@
 (struct exn:foreign exn:fail (errno))
 
 (define raise-foreign-error
-  (lambda [src errno #:strerror [strerror strerror]]
-    (raise (exn:foreign (format "~a: ~a; errno = ~a." src (strerror errno) errno)
+  (lambda [src errno #:strerror [error->string strerror]]
+    (raise (exn:foreign (format "~a: ~a; errno = ~a." src (error->string errno) errno)
                         (current-continuation-marks)
                         errno))))
 

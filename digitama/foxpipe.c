@@ -353,10 +353,12 @@ int foxpipe_direct_channel(foxpipe_session_t *session, const char* host_seen_by_
 
     libssh2_session_set_blocking(session->sshclient, 1); /* also disable the breaking */
     channel = libssh2_channel_direct_tcpip_ex(session->sshclient, host_seen_by_sshd, service, host_seen_by_sshd, 22);
-    libssh2_session_set_blocking(session->sshclient, 0);
 
     if (channel != NULL) {
-        foxpipe_channel_t *object = (foxpipe_channel_t*)scheme_malloc_atomic(sizeof(foxpipe_channel_t));
+        foxpipe_channel_t *object;
+        
+        libssh2_session_set_blocking(session->sshclient, 0);
+        object = (foxpipe_channel_t*)scheme_malloc_atomic(sizeof(foxpipe_channel_t));
         object->session = session;
         object->channel = channel;
         object->read_ready[0] = '\0';
