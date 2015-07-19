@@ -37,7 +37,6 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
     LIBSSH2_SESSION *session;
     LIBSSH2_CHANNEL *channel;
     intptr_t read, status;
-    intptr_t saved_blockbit;
     char *onebuffer, *offed_buffer;
 
     /**
@@ -75,7 +74,6 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
     session = ((foxpipe_channel_t *)(in->port_data))->session->sshclient;
     channel = ((foxpipe_channel_t *)(in->port_data))->channel;
     onebuffer = ((foxpipe_channel_t *)(in->port_data))->read_ready;
-    saved_blockbit = libssh2_session_get_blocking(session);
     offed_buffer = buffer + offset; /* As deep in RVM here, the boundary is already checked. */
     read = 0;
 
@@ -96,8 +94,6 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
             return EOF;
         }
 
-        libssh2_session_set_blocking(session, 0);
-
         if ((*onebuffer) != '\0') {
             (*offed_buffer) = (*onebuffer);
             (*onebuffer) = '\0';
@@ -110,8 +106,6 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
         if (status >= 0) {
             read += status;
         }
-
-        libssh2_session_set_blocking(session, saved_blockbit);
     }
 
 job_done:
@@ -119,31 +113,35 @@ job_done:
 }
 
 static int channel_read_ready(Scheme_Input_Port *p) {
+    foxpipe_channel_t *foxpipe;
     LIBSSH2_SESSION *session;
     LIBSSH2_CHANNEL *channel;
-    int saved_blockbit, read;
+    int read;
     char *onebuffer;
 
     /**
      * Returns 1 when a non-blocking (read-bytes) will return bytes or an EOF.
      */
 
+    foxpipe = (foxpipe_channel_t *)(p->port_data);
+    session = foxpipe->session->sshclient;
+    channel = foxpipe->channel;
+    onebuffer = foxpipe->read_ready;
+
     /**
      * This implementation is correct since all channels in a session are
-     * sharing the same socket discriptor. When Racket is woken up by event
-     * (say, what does channel_read_need_wakeup prepare for), it would likely
-     * check like this to see if the coming data belongs to this channel.
+     * sharing the same socket discriptor. When Racket is woken up by event,
+     * It would likely check like this to see if the coming data belongs
+     * to this channel.
      */
 
-    session = ((foxpipe_channel_t *)(p->port_data))->session->sshclient;
-    channel = ((foxpipe_channel_t *)(p->port_data))->channel;
-    onebuffer = ((foxpipe_channel_t *)(p->port_data))->read_ready;
-    saved_blockbit = libssh2_session_get_blocking(session);
-
     if ((*onebuffer) == '\0') {
-        libssh2_session_set_blocking(session, 0);
+        int sockfd;
+
+        scheme_get_port_socket(foxpipe->session->dev_tcpin, &sockfd);
+        scheme_fd_to_semaphore(sockfd, MZFD_CREATE_READ, 1);
+
         read = libssh2_channel_read(channel, onebuffer, 1);
-        libssh2_session_set_blocking(session, saved_blockbit);
     } else {
         read = 1;
     }
@@ -190,8 +188,7 @@ static intptr_t channel_write_bytes(Scheme_Output_Port *out, const char *buffer,
     LIBSSH2_SESSION *session;
     LIBSSH2_CHANNEL *channel;
     char *offed_buffer;
-    int saved_blockbit;
-    int sent ;
+    int sent;
 
     /**
      * TODO:
@@ -210,21 +207,16 @@ static intptr_t channel_write_bytes(Scheme_Output_Port *out, const char *buffer,
 
     session = ((foxpipe_channel_t *)(out->port_data))->session->sshclient;
     channel = ((foxpipe_channel_t *)(out->port_data))->channel;
-    saved_blockbit = libssh2_session_get_blocking(session);
     offed_buffer = (char *)buffer + offset; /* As deep in RVM here, the boundary is already checked. */
     sent = 0;
-
 
     /**
      * libssh2 channel does not have write buffer (channel.c _libssh2_channel_write).
      * libssh2 channel only deals with the first 32k bytes (RFC4253 6.1).
      */
-    libssh2_session_set_blocking(session, 0);
     sent = libssh2_channel_write(channel, offed_buffer, size);
 
 job_done:
-    libssh2_session_set_blocking(session, saved_blockbit);
-
     return sent;
 }
 
@@ -363,12 +355,10 @@ int foxpipe_last_error(foxpipe_session_t *session, char **errmsg, int *size) {
 int foxpipe_direct_channel(foxpipe_session_t *session, const char* host_seen_by_sshd, int service, Scheme_Object **dev_sshin, Scheme_Object **dev_sshout) {
     LIBSSH2_CHANNEL *channel;
     foxpipe_channel_t *object;
-    int saved_blockbit;
 
-    saved_blockbit = libssh2_session_get_blocking(session->sshclient);
     libssh2_session_set_blocking(session->sshclient, 1); /* also disable the breaking */
     channel = libssh2_channel_direct_tcpip_ex(session->sshclient, host_seen_by_sshd, service, host_seen_by_sshd, 22);
-    libssh2_session_set_blocking(session->sshclient, saved_blockbit);
+    libssh2_session_set_blocking(session->sshclient, 0);
 
     if (channel != NULL) {
         foxpipe_channel_t *object = (foxpipe_channel_t*)scheme_malloc_atomic(sizeof(foxpipe_channel_t));
