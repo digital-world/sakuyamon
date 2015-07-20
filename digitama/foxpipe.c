@@ -10,6 +10,7 @@ typedef struct foxpipe_session {
     LIBSSH2_SESSION *sshclient;
     Scheme_Input_Port *dev_tcpin;
     Scheme_Output_Port *dev_tcpout;
+    intptr_t sockfd;
 } foxpipe_session_t;
 
 typedef struct foxpipe_channel {
@@ -136,6 +137,7 @@ static int channel_read_ready(Scheme_Input_Port *p) {
      */
 
     if ((*onebuffer) == '\0') {
+        scheme_fd_to_semaphore(foxpipe->session->sockfd, MZFD_CREATE_READ, 1);
         read = libssh2_channel_read(channel, onebuffer, 1);
     } else {
         read = 1;
@@ -146,7 +148,6 @@ static int channel_read_ready(Scheme_Input_Port *p) {
 
 static void channel_read_need_wakeup(Scheme_Input_Port *port, void *fds) {
     foxpipe_channel_t *channel;
-    intptr_t dev_tcpin;
     fd_set *fdin, *fderr;
 
     /**
@@ -162,9 +163,8 @@ static void channel_read_need_wakeup(Scheme_Input_Port *port, void *fds) {
     fdin = ((fd_set *)fds) + 0;
     fderr = ((fd_set *)fds) + 2;
 
-    scheme_get_port_socket((Scheme_Object *)channel->session->dev_tcpin, &dev_tcpin);
-    MZ_FD_SET(dev_tcpin, fdin);
-    MZ_FD_SET(dev_tcpin, fderr);
+    MZ_FD_SET(channel->session->sockfd, fdin);
+    MZ_FD_SET(channel->session->sockfd, fderr);
 }
 
 static void channel_in_close(Scheme_Input_Port *p) {
@@ -234,7 +234,6 @@ static int channel_write_ready(Scheme_Output_Port *p) {
 
 static void channel_write_need_wakeup(Scheme_Output_Port *port, void *fds) {
     foxpipe_channel_t *channel;
-    intptr_t dev_tcpout;
     fd_set *fdout, *fderr;
 
     /**
@@ -250,9 +249,8 @@ static void channel_write_need_wakeup(Scheme_Output_Port *port, void *fds) {
     fdout = ((fd_set *)fds) + 1;
     fderr = ((fd_set *)fds) + 2;
 
-    scheme_get_port_socket((Scheme_Object *)channel->session->dev_tcpout, &dev_tcpout);
-    MZ_FD_SET(dev_tcpout, fdout);
-    MZ_FD_SET(dev_tcpout, fderr);
+    MZ_FD_SET(channel->session->sockfd, fdout);
+    MZ_FD_SET(channel->session->sockfd, fderr);
 }
 
 static void channel_out_close(Scheme_Output_Port *p) {
@@ -297,6 +295,7 @@ foxpipe_session_t *foxpipe_construct(Scheme_Object *tcp_connect, Scheme_Object *
             session->sshclient = sshclient;
             session->dev_tcpin = dev_tcpin;
             session->dev_tcpout = dev_tcpout;
+            scheme_get_port_socket((Scheme_Object *)dev_tcpin, &session->sockfd);
         } else {
             scheme_close_input_port((Scheme_Object *)dev_tcpin);
             scheme_close_output_port((Scheme_Object *)dev_tcpout);
@@ -307,13 +306,11 @@ foxpipe_session_t *foxpipe_construct(Scheme_Object *tcp_connect, Scheme_Object *
 }
 
 const char *foxpipe_handshake(foxpipe_session_t *session, int MD5_or_SHA1) {
-    intptr_t sshc_fd, status;
+    intptr_t status;
     const char *figureprint;
 
     figureprint = NULL;
-    scheme_get_port_socket((Scheme_Object *)session->dev_tcpin, &sshc_fd);
-
-    status = libssh2_session_handshake(session->sshclient, sshc_fd);
+    status = libssh2_session_handshake(session->sshclient, session->sockfd);
 
     if (status == 0) {
         figureprint = libssh2_hostkey_hash(session->sshclient, MD5_or_SHA1);

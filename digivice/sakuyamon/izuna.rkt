@@ -65,7 +65,7 @@
                                            ((inst foldl Symbol HashTableTop Any Any)
                                             (lambda [key [info : HashTableTop]] (hash-remove info key)) info
                                             '(method host uri user-agent client))))])]
-            [else (echof #:fgcolor 245 "Unexpected Message from ~a: ~s~n" scepter-host message)])
+            [else (echof #:fgcolor 245 "Unexpected Message from ~a: ~a(~s)~n" scepter-host message message)])
       (flush-output (current-output-port))))
   
   (define monitor-main : (-> String * Any)
