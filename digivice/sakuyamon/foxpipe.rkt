@@ -6,7 +6,7 @@
 
 (module+ sakuyamon
   (require "../../digitama/digicore.rkt")
-  (require "../../digitama/daemon.rkt")
+  (require (submod "../../digitama/posix.rkt" typed/ffi))
 
   (require/typed racket/base
                  [exn:break:hang-up? (-> Any Boolean)]

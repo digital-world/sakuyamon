@@ -22,7 +22,7 @@
 
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/dispatch.rkt")
-  (require "../../digitama/daemon.rkt")
+  (require (submod "../../digitama/posix.rkt" typed/ffi))
 
   (define {syslog-perror severity maybe . argl}
     (define message (apply format maybe argl))

@@ -20,8 +20,6 @@
                         errno))))
 
 (define-ffi-definer define-posix (ffi-lib #false))
-(define-ffi-definer define-digitama (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
-                                                         "native" (system-library-subpath #false) "posix")))
 
 (define-posix strerror
   (_fun [errno : _int]
@@ -68,6 +66,10 @@
         -> (unless (zero? status)
              (raise-foreign-error 'setegid (saved-errno)))))
 
+(define-ffi-definer define-digitama
+  (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
+                       "native" (system-library-subpath #false) "posix")))
+
 (define-digitama fetch_tamer_ids
   (_fun #:save-errno 'posix
         [username : _bytes]
@@ -94,18 +96,59 @@
                  [else (raise-foreign-error 'fetch_group_name errno)])))
 
 ;;; syslog.
+(define _facility
+  (_enum (list 'kernel        '= (arithmetic-shift 00 3) #| kernel messages |#
+               'user-level    '= (arithmetic-shift 01 3) #| random user-level messages |#
+               'mail          '= (arithmetic-shift 02 3) #| mail system |#
+               'daemon        '= (arithmetic-shift 03 3) #| system daemons |#
+               'authorization '= (arithmetic-shift 04 3) #| security/authorization messages |#
+               'syslog        '= (arithmetic-shift 05 3) #| messages generated internally by syslogd |#
+               'lp	           '= (arithmetic-shift 06 3) #| line printer subsystem |#
+               'news          '= (arithmetic-shift 07 3) #| netnews subsystem |#
+               'uucp          '= (arithmetic-shift 08 3) #| uucp subsystem |#
+               'altcron       '= (arithmetic-shift 09 3) #| BSD cron/at subsystem |#
+               'auth_private  '= (arithmetic-shift 10 3) #| BSD security/authorization messages |#
+               'ftp	   '= (arithmetic-shift 11 3) #| file transfer subsystem |#
+               'ntp	   '= (arithmetic-shift 12 3) #| network time subsystem |#
+               'audit         '= (arithmetic-shift 13 3) #| audit subsystem |#
+               'console       '= (arithmetic-shift 14 3) #| BSD console messages |#
+               'cron          '= (arithmetic-shift 15 3) #| cron/at subsystem |#
+               'local0        '= (arithmetic-shift 16 3) #| reserved for local use |#
+               'local1        '= (arithmetic-shift 17 3) #| reserved for local use |#
+               'local2        '= (arithmetic-shift 18 3) #| reserved for local use |#
+               'local3        '= (arithmetic-shift 19 3) #| reserved for local use |#
+               'local4        '= (arithmetic-shift 20 3) #| reserved for local use |#
+               'local5        '= (arithmetic-shift 21 3) #| reserved for local use |#
+               'local6        '= (arithmetic-shift 22 3) #| reserved for local use |#
+               'local7        '= (arithmetic-shift 23 3) #| reserved for local use |#)))
+
 (define _severity
-  (_enum (list 'emerg    #| system is unusable |#
-               'alert    #| action must be taken immediately |#
-               'fatal    #| critical conditions |#
-               'error    #| error conditions |#
-               'warning  #| warning conditions |#
-               'notice   #| normal but significant condition |#
-               'info     #| informational |#
-               'debug    #| debug-level messages |#)))
+  (_enum (list 'emerg    '= 0 #| system is unusable |#
+               'alert    '= 1 #| action must be taken immediately |#
+               'fatal    '= 2 #| critical conditions |#
+               'error    '= 3 #| error conditions |#
+               'warning  '= 4 #| warning conditions |#
+               'notice   '= 5 #| normal but significant condition |#
+               'info     '= 6 #| informational |#
+               'debug    '= 7 #| debug-level messages |#)))
 
 (define-digitama rsyslog
   (_fun _severity
         [topic : _symbol]
         [message : _string]
         -> _void))
+
+(module* typed/ffi typed/racket
+  (require/typed/provide (submod "..")
+                         [#:struct (exn:foreign exn) ([errno : Integer])]
+                         [strerror (-> Natural String)]
+                         [getuid (-> Natural)]
+                         [getgid (-> Natural)]
+                         [geteuid (-> Natural)]
+                         [getegid (-> Natural)]
+                         [seteuid (-> Natural Void)]
+                         [setegid (-> Natural Void)]
+                         [fetch_tamer_ids (-> Bytes (Values Natural Natural))]
+                         [fetch_tamer_name (-> Natural Bytes)]
+                         [fetch_tamer_group (-> Natural Bytes)]
+                         [rsyslog (-> Symbol Symbol String Void)]))

@@ -1,7 +1,7 @@
 #lang at-exp typed/racket
 
 @require{digicore.rkt}
-@require{daemon.rkt}
+@require[(submod "posix.rkt" typed/ffi)]
 
 @require{typed/web-server/http.rkt}
 @require{typed/web-server/configuration/responders.rkt}
