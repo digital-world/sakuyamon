@@ -42,15 +42,15 @@
 (define-ssh libssh2_exit
   (_fun -> _void))
 
-(define-ffi-definer define-tunnel
+(define-ffi-definer define-foxpipe
   (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
                        "native" (system-library-subpath #false) "foxpipe")))
 
-(define-tunnel foxpipe_last_errno
+(define-foxpipe foxpipe_last_errno
   (_fun [session : _foxpipe_session*]
         -> _int))
 
-(define-tunnel foxpipe_last_errmsg
+(define-foxpipe foxpipe_last_errmsg
   (_fun [session : _foxpipe_session*]
         [errmsg : (_ptr o _bytes)]
         [size : (_ptr o _int)]
@@ -58,19 +58,19 @@
         -> errmsg)
   #:c-id foxpipe_last_error)
 
-(define-tunnel foxpipe_construct
+(define-foxpipe foxpipe_construct
   (_fun [tcp-connect : _racket = tcp-connect/enable-break]
         [sshd_host : _racket]
         [sshd_port : _racket]
         -> [session : _foxpipe_session*]))
 
-(define-tunnel foxpipe_handshake
+(define-foxpipe foxpipe_handshake
   (_fun [session : _foxpipe_session*]
         [type : _hashtype]
         -> [figureprint : _bytes]
         -> (or figureprint (raise-foxpipe-error 'foxpipe_handshake session))))
 
-(define-tunnel foxpipe_authenticate
+(define-foxpipe foxpipe_authenticate
   (_fun [session : _foxpipe_session*]
         [username : _string]
         [publickey : _file]
@@ -80,7 +80,7 @@
         -> (cond [(zero? status) status]
                  [else (raise-foxpipe-error 'foxpipe_authenticate session)])))
 
-(define-tunnel foxpipe_collapse
+(define-foxpipe foxpipe_collapse
   (_fun [session : _foxpipe_session*]
         [reason : _disconnect_reason = 'SSH_DISCONNECT_BY_APPLICATION]
         [description : _string]
@@ -88,7 +88,7 @@
         -> (cond [(zero? status) status]
                  [else (raise-foxpipe-error 'foxpipe_collapse session)])))
 
-(define-tunnel foxpipe_direct_channel
+(define-foxpipe foxpipe_direct_channel
   (_fun [session : _foxpipe_session*]
         [host-seen-by-sshd : _string]
         [service-seen-by-sshd : _uint]

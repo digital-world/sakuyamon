@@ -13,6 +13,10 @@
 
 (struct exn:foreign exn:fail (errno))
 
+(define c-extern
+  (lambda [variable #:ctype [ctype #false] #:lib [lib #false]]
+    (get-ffi-obj variable lib (or ctype _int))))
+
 (define raise-foreign-error
   (lambda [src errno #:strerror [error->string strerror]]
     (raise (exn:foreign (format "~a: ~a; errno = ~a." src (error->string errno) errno)

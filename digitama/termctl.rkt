@@ -1,25 +1,18 @@
 #lang at-exp racket
 
-(provide (all-defined-out))
-
-(require file/sha1)
+(provide (all-defined-out) c-extern)
 
 @require{posix.rkt}
 
-(define ncurses (ffi-lib "libncurses" #:global? #true))
-(define-ffi-definer define-ncurses ncurses)
+(define-ffi-definer define-ncurses (ffi-lib "libncurses" #:global? #true))
+(define-ffi-definer define-termctl
+  (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
+                       "native" (system-library-subpath #false) "termctl")
+           #:global? #true))
 
 (define _window* (_cpointer/null 'WINDOW*))
 (define _winpad* (_cpointer/null 'WINDOW*))
 (define _ok/err (make-ctype _int #false (lambda [c] (not (eq? c -1)))))
-
-(define ncurs-extern-var
-  (lambda [variable-name]
-    (define ctype
-      (case variable-name
-        [(stdscr curscr) _window*]
-        [else #|LINES COLS TABSIZE COLORS COLOR_PAIRS|# _int]))
-    (get-ffi-obj variable-name ncurses ctype)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                         WARNING: ncurses uses YX-Coordinate System                          ;;;
@@ -67,7 +60,7 @@
 ;;; Output functions
 (define-ncurses wmove (_fun _window* _int _int -> _ok/err))
 (define-ncurses waddstr (_fun _window* _string -> _ok/err))
-(define-ncurses mvwaddstr (_fun _window* _int _int _string -> _ok/err))
+(define-ncurses mvwaddwstr (_fun _window* _int _int _string/ucs-4 -> _ok/err))
 (define-ncurses wrefresh (_fun _window* -> _ok/err))
 (define-ncurses wnoutrefresh (_fun _window* -> _ok/err))
 (define-ncurses wredrawln (_fun _window* [begin : _int] [n : _int] -> _ok/err))
@@ -92,40 +85,33 @@
                                  (integer->char ascii))))
 
 ;;; Color and Attribute functions
-(define _attribute
-  (let* ([_color #o00007700000]
-         [_a (_bitmask (list 'normal     '= #o00000000000
-                             'standout   '= #o00010000000
-                             'underline  '= #o00020000000
-                             'reverse    '= #o00040000000
-                             'blink      '= #o00100000000
-                             'dim        '= #o00200000000
-                             'bold       '= #o00400000000
-                             'altcharset '= #o01000000000
-                             'attributes '= #o31777700000
-                             'chartext   '= #o06000077777))]
-         [r->c (ctype-scheme->c _a)]
-         [c->r (ctype-c->scheme _a)])
-    (make-ctype _uint
-                (lambda [r] (let-values ([[color_pair attrs] (partition integer? r)])
-                              (define attr (r->c attrs))
-                              (cond [(null? color_pair) attr]
-                                    ; ATTRIBUTES | COLOR_PAIR(N)
-                                    [else (bitwise-ior attr (arithmetic-shift (car color_pair) 15))])))
-                (lambda [c] (cons (arithmetic-shift (bitwise-and c _color) -15) (c->r c))))))
-
-(define _color/term
-  (let* ([_stdcolor (_enum '(none = -1 black red green blue yellow magenta cyan white) _short)]
-         [r->c (ctype-scheme->c _stdcolor)]
-         [c->r (ctype-c->scheme _stdcolor)])
-    (make-ctype _short
-                (lambda [r] (if (symbol? r) (r->c r) r))
-                (lambda [c] (if (< c 16) (c->r c) c)))))
+(define-values [_attribute _color/term]
+  (let*-values ([[symbol-downcase] (compose1 string->symbol string-downcase symbol->string)]
+                [[_a _c] (values ((lambda [a] (_bitmask a _uint))
+                                  (foldl (lambda [a A] (list* (symbol-downcase a) '= (c-extern a #:ctype _uint) A)) null
+                                         (list 'NORMAL 'STANDOUT 'UNDERLINE 'REVERSE 'BLINK 'DIM 'BOLD
+                                               'INVIS 'PROTECT 'ALTCHARSET 'ATTRIBUTES 'CHARTEXT)))
+                                 ((lambda [c] (_enum c _short))
+                                  (foldl (lambda [c C] (list* (symbol-downcase c) '= (c-extern c #:ctype _short) C))
+                                         (list 'none '= -1) (list 'BLACK 'RED 'GREEN 'YELLOW 'BLUE 'MAGENTA 'CYAN 'WHITE))))]
+                [[ar->c cr->c] (values (ctype-scheme->c _a) (ctype-scheme->c _c))]
+                [[ac->r cc->r] (values (ctype-c->scheme _a) (ctype-c->scheme _c))])
+    (values (make-ctype _uint
+                        (lambda [r] (let-values ([[No. attrs] (partition integer? r)])
+                                      (bitwise-ior (ar->c attrs) (if (null? No.) 0 (color_pair (car No.))))))
+                        (lambda [c] (cons (pair_number c) (ac->r c))))
+            (make-ctype _short
+                        (lambda [r] (if (symbol? r) (cr->c r) r))
+                        (lambda [c] (if (< c 16) (cc->r c) c))))))
 
 (define _rgb/component
-  (make-ctype _short ;;; r/255 = c/1000 ==> 1000r = 255c
+  (make-ctype _short ;;; r/255 = c/1000 <==> 1000r = 255c
               (lambda [r] (exact-round (* r 1000/255))) 
               (lambda [c] (exact-round (* c 255/1000)))))
+
+(define-termctl pair_number (_fun _uint -> _int))
+(define-termctl color_pair (_fun _int -> _uint))
+(define color-number (ctype-scheme->c _color/term))
 
 (define-ncurses wattron (_fun _window* _attribute -> _int -> #true))
 (define-ncurses wattroff (_fun _window* _attribute -> _int -> #true))
@@ -158,27 +144,3 @@
 (define-ncurses reset_prog_mode (_fun -> _int -> #true))
 (define-ncurses def_shell_mode (_fun -> _int -> #true))
 (define-ncurses reset_shell_mode (_fun -> _int -> #true))
-
-
-
-(module+ test
-  (define stdscr (initscr))
-  (void ((curry plumber-add-flush! (current-plumber))
-         (lambda [this]
-           (plumber-flush-handle-remove! this)
-           (endwin))))
-
-  (with-handlers ([exn? (lambda [e] (and (def_prog_mode) (endwin) (displayln e) (reset_prog_mode)))])
-    (when (and stdscr (raw) (noecho) (idlok stdscr #true) (scrollok stdscr #true) (wtimeout stdscr -1))
-      (when (has_colors)
-        (start_color)
-        (assume_default_colors 'none 'none))
-
-      (init_pair 1 'blue 'none)
-      (wattron stdscr (list 1 'blink))
-      (for ([color (in-range (ncurs-extern-var 'COLORS))])
-        (waddstr stdscr (format "~a~n" (color_content color)))
-        (wrefresh stdscr))
-      (wattroff stdscr (list 'blink)))
-
-    (getch)))
