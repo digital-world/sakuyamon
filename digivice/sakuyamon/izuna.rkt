@@ -128,8 +128,18 @@
 (module* izuna racket
   (provide (all-defined-out))
 
+  (require racket/draw)
+
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/termctl.rkt")
+
+  (define window%
+    (class object% (super-new)
+      (init-field x y width height)
+
+      (define border (newwin height width y x))
+      (define screen (newpad border ))
+      (wborder border #\| #\| #\- #\- #\+ #\+ #\+ #\+)))
   
   (define digivice
     (lambda [izunad]
@@ -145,31 +155,32 @@
                 (when (and stdscr (raw) (noecho) (wtimeout stdscr 0) (keypad stdscr #true)
                            (idlok stdscr #true) (scrollok stdscr #true))
                   (place-channel-put izunad 'Okay)
+                  (wborder stdscr #\| #\| #\- #\- #\+ #\+ #\+ #\+)
+                  (define-values [width height] (values (getmaxx stdscr) (getmaxy stdscr)))
                   (when (has_colors)
                     (start_color)
                     (use_default_colors)
-                    (for ([c (in-range (c-extern 'COLORS))])
-                      (init_pair c c 'none)))
+                    (let ([C (c-extern 'COLORS)])
+                      (for ([c (in-range C)])
+                        (init_pair c c 'none)
+                        (init_pair (+ c C) 'none c))))
 
-                  (parameterize ([current-locale ""])
-                    (with-handlers ([exn:break? exit])
-                      (let recv-match-render-loop ()
-                        (match (or (getch) (sync/timeout/enable-break 0.26149 #| Number Thoery: Meissel–Mertens Constant |# izunad))
-                          [#\003 #| Ctrl+C |# (place-channel-put izunad 'exn:break:terminate)]
-                          [(? false?) (void "No key is pressed!")]
-                          [(? char? c) (void (mvwaddwstr stdscr (getcury stdscr) 2 (format "Pressed key: ~a ~a!~n" c (char->integer c)))
-                                             (wrefresh stdscr))]
-                          [(list color 'fold msg) (let ([attr (list (color-number color))])
-                                                    (wattron stdscr attr)
-                                                    (mvwaddwstr stdscr (getcury stdscr) 2 (~a msg))
-                                                    (wrefresh stdscr)
-                                                    (wattroff stdscr attr))]
-                          [(list color msg) (let ([attr (list (color-number color))])
-                                              (wattron stdscr attr)
-                                              (mvwaddwstr stdscr (getcury stdscr) 0 (~a msg))
-                                              (wrefresh stdscr)
-                                              (wattroff stdscr attr))])
-                        (recv-match-render-loop)))))))))))
+                  (with-handlers ([exn:break? exit])
+                    (let recv-match-render-loop ()
+                      (match (or (getch) (sync/timeout/enable-break 0.26149 #| Number Thoery: Meissel–Mertens Constant |# izunad))
+                        [#\003 #| Ctrl+C |# (place-channel-put izunad 'exn:break:terminate)]
+                        [(? false?) (void "No key is pressed!")]
+                        [(? char? c) (void (mvwaddwstr stdscr (getcury stdscr) 3 (format "Pressed key: ~a ~a!~n" c (char->integer c)))
+                                           (wrefresh stdscr))]
+                        [(list color 'fold msg) (wcolor_set stdscr (color-number color))
+                                                (wmove stdscr (getcury stdscr) (max (getcurx stdscr) 1))
+                                                (whline stdscr  #\= (string-length (~a msg)))
+                                                (wrefresh stdscr)]
+                        [(list color msg) (wcolor_set stdscr (color-number color))
+                                          (mvwaddwstr stdscr (getcury stdscr) 1 (~a msg))
+                                          (wrefresh stdscr)
+                                          (wstandend stdscr)])
+                      (recv-match-render-loop))))))))))
 
 (module* foxpipe racket
   (provide (all-defined-out))

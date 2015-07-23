@@ -11,6 +11,7 @@
 #endif
 
 /* Various video attributes */
+uintptr_t NORMAL = A_NORMAL;
 uintptr_t STANDOUT = A_STANDOUT;
 uintptr_t UNDERLINE = A_UNDERLINE;
 uintptr_t REVERSE = A_REVERSE;
@@ -19,20 +20,19 @@ uintptr_t DIM = A_DIM;
 uintptr_t BOLD = A_BOLD;
 uintptr_t ALTCHARSET = A_ALTCHARSET;
 
-uintptr_t INVIS = A_INVIS;     /* The next two are subject to change */
-uintptr_t PROTECT = A_PROTECT; /* so don't depend on them. */
+/**
+ * The next two are subject to change
+ * so don't depend on them.
+ **/
+uintptr_t INVIS = A_INVIS;
+uintptr_t PROTECT = A_PROTECT;
 
-uintptr_t NORMAL = A_NORMAL;
+/**
+ * The next three are combined as `chtype`
+ */
 uintptr_t ATTRIBUTES = A_ATTRIBUTES;
 uintptr_t CHARTEXT = A_CHARTEXT;
-
-uintptr_t color_pair(intptr_t n) {
-    return COLOR_PAIR(n);
-}
-
-intptr_t pair_number(uintmax_t n) {
-    return PAIR_NUMBER(n);
-}
+uintptr_t COLOR = A_COLOR;
 
 /* Colors */
 short BLACK = COLOR_BLACK;
