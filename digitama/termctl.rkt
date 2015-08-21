@@ -51,25 +51,25 @@
 (define-ncurses keypad (_fun _window* _bool -> _ok/err))
 (define-ncurses idlok (_fun _window* _bool -> _ok/err))
 (define-ncurses scrollok (_fun _window* _bool -> _ok/err))
-(define-ncurses delwin (_fun _window* -> _ok/err)) ; subwindows should be removed before removing their parent
+(define-ncurses delwin (_fun _window* -> _ok/err))
 (define-ncurses endwin (_fun -> _ok/err))
 
-;;; Window, SubWindow/Pad and Input/Output functions
+;;; Window and Input/Output functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; For the sake of simplicity, I only deal with real windows.                    ;;;
 ;;;                                                                               ;;;
-;;; (newwin 0 0 0 0) return a new full-screen window                              ;;;
-;;; The derivated window is just a specific portion of its parent, they share the ;;;
-;;; output buffer, so use it to save yourself from having to do a lot of complex  ;;;
-;;; cursor-positioning math.                                                      ;;;
+;;; (newwin 0 0 0 0) return a new full-screen window.                             ;;;
+;;; The derivated window sucks:                                                   ;;;
+;;;  it must be deleted first when deleting its parent;                           ;;;
+;;;  scrolling is unavaliable;                                                    ;;;
+;;;  it will not save you from the repainting headache.                           ;;;
 ;;; Pad and subpad are interesting, but I think the best way to dealing with pads ;;;
-;;; is managing the contexts with Racket since pads are just memory buffers that  ;;;
-;;; waiting for rendering but won't save you from computing draw-area reactangle  ;;;
-;;; position and size. Also pads cannot hold non-text data structure.             ;;;
+;;;  is managing the contexts with Racket since pads are just memory buffers that ;;;
+;;;  waiting for rendering but won't save you from computing draw-area reactangle ;;;
+;;;  position and size. Also pads cannot hold non-text data structure.            ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses newwin (_fun [nlines : _int] [ncols : _int] [beginy : _int] [beginx : _int] -> _window*))
-(define-ncurses derwin (_fun [parent : _window*] [nlines : _int] [ncols : _int] [beginy : _int] [beginx : _int] -> _window*))
-(define-ncurses mvderwin (_fun _window* [beginy : _int] [beginx : _int] -> _ok/err))
+(define-ncurses mvwin (_fun _window* [beginy : _int] [beginx : _int] -> _ok/err))
 (define-ncurses mvwvline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\|] [maxlong : _int] -> _ok/err))
 (define-ncurses mvwhline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\-] [maxlong : _int] -> _ok/err))
 
@@ -80,6 +80,9 @@
 
 (define-ncurses putwin (_fun _path -> _ok/err))
 (define-ncurses getwin (_fun _path -> _ok/err))
+(define-ncurses wclear (_fun _window* -> _ok/err)) ;;; it just calls (werase)
+(define-ncurses wclrtobot (_fun _window* -> _ok/err))
+(define-ncurses wclrtoeol (_fun _window* -> _ok/err))
 (define-ncurses overlay (_fun [src : _window*] [dest : _window*] -> _ok/err))
 (define-ncurses overwrite (_fun [src : _window*] [dest : _window*] -> _ok/err))
 (define-ncurses copywin (_fun [src : _window*] [dest : _window*]
@@ -94,6 +97,7 @@
 (define-ncurses wmove (_fun _window* _int _int -> _ok/err))
 (define-ncurses waddwstr (_fun _window* _string/ucs-4 -> _ok/err))
 (define-ncurses mvwaddwstr (_fun _window* _int _int _string/ucs-4 -> _ok/err))
+(define-ncurses wscrl (_fun _window* _int -> _ok/err)) ; not affects the derivated window, out-screen-lines will be removed
 (define-ncurses wrefresh (_fun _window* -> _ok/err))
 (define-ncurses wnoutrefresh (_fun _window* -> _ok/err))
 (define-ncurses wredrawln (_fun _window* [begin : _int] [n : _int] -> _ok/err))
@@ -186,29 +190,36 @@
     (start_color)
     (use_default_colors)
     (curs_set 0)
-    (define-values [field-size field-count columns lines colors] (values 4 16 (c-extern 'COLS) (c-extern 'LINES) (c-extern 'COLORS)))
-    (define-values [stdclr-cols stdclr-rows] (values (* field-count field-size) (ceiling (/ colors field-count))))
-    (define stdscr (newwin 0 0 0 0)) ; full screen window
-    (define stdclr (derwin stdscr stdclr-rows stdclr-cols 0 0))
-    (void ((curry plumber-add-flush! (current-plumber))
-           (lambda [this]
-             (plumber-flush-handle-remove! this)
-             (wrefresh stdscr)
-             ;(wrefresh stdclr) when stdclr is created via (newwin) in which cast it must be rendered after rendering stdscr
-             (wgetch stdscr)
-             (delwin stdclr) ; only if stdclr is created via (derwin) because parent always does not know its children.
-             (endwin)))
-          
-          (with-handlers ([exn:fail? (lambda [ef] (and (delwin stdclr) (endwin) (displayln (exn-message ef))))])
-            (when (and stdscr stdclr (raw) (noecho) (wtimeout stdscr -1) (keypad stdscr #true) (idlok stdscr #true) (scrollok stdscr #true))
-              (mvwaddwstr stdscr (getcury stdscr) (getcurx stdscr) (format "256 colors[default: ~a]" (pair_content 0)))
-              (mvderwin stdclr (add1 (quotient (- lines stdclr-rows) 2)) (quotient (- columns stdclr-cols) 2))
-              (for ([color-index (in-range (sub1 colors))])
-                (define pair-index (add1 color-index))
-                (init_pair pair-index 'none color-index)
-                (wcolor_set stdclr pair-index)
-                (waddwstr stdclr (~a color-index #:min-width field-size)) ; #\newline is not neccessary since the width has already been fitted 
-                (wstandend stdclr))
-              (mvwaddwstr stdscr (getcury stdscr) (getcurx stdscr) (format "~nPress any key to exit!"))
-              (mvwchgat stdscr (getcury stdscr) 0 -1 (list 'underline) 0)
-              (wstandend stdscr))))))
+    (define uncaught-exn (make-parameter #false))
+    (define-values [field-size field-count colors] (values 4 16 (c-extern 'COLORS)))
+    (define-values [stdclr-cols stdclr-rows] (values (add1 (* field-count field-size)) (ceiling (/ colors field-count))))
+    (define stdscr (newwin 0 0 0 0)) ; full screen window, size will auto-change when term has changed size. 
+    (define stdclr (newwin stdclr-rows stdclr-cols 0 0))
+    ((curry plumber-add-flush! (current-plumber))
+     (lambda [this] (let ([e (uncaught-exn)])
+                      (plumber-flush-handle-remove! this)
+                      (delwin stdscr) (delwin stdclr) (endwin)
+                      (when (exn? e) (displayln (exn-message e))))))
+
+    (with-handlers ([exn:fail? uncaught-exn])
+      (when (and stdscr stdclr (raw) (noecho) (wtimeout stdscr -1) (keypad stdscr #true) (idlok stdscr #true) (scrollok stdscr #true))
+        (let display-colors ()
+          (wclear stdscr)
+          (mvwaddwstr stdscr 0 0 (format "256 colors[default: ~a]" (pair_content 0)))
+          (mvwin stdclr (add1 (quotient (- (getmaxy stdscr) stdclr-rows) 2)) (quotient (- (getmaxx stdscr) stdclr-cols) 2))
+          (wmove stdclr 0 0)
+          (for ([color-index (in-range (sub1 colors))])
+            (define pair-index (add1 color-index))
+            (init_pair pair-index 'none color-index)
+            (wcolor_set stdclr pair-index)
+            (waddwstr stdclr (~a color-index #:min-width field-size))
+            (when (zero? (remainder pair-index field-count)) (waddwstr stdclr (~a #\newline)))
+            (wstandend stdclr))
+          (mvwaddwstr stdscr (getcury stdscr) (getcurx stdscr) (format "~nPress any key to exit!"))
+          (mvwchgat stdscr (getcury stdscr) 0 -1 (list 'underline) 0)
+          (wstandend stdscr)
+          (wrefresh stdscr)
+          (wrefresh stdclr) ; it must be rendered after rendering stdscr
+            
+          (when (char=? (wgetch stdscr) #\u19A)
+            (display-colors)))))))
