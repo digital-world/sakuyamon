@@ -81,6 +81,7 @@
     (lambda hostnames
       (define digivice : Place (dynamic-place `(submod ,(#%file) izuna) 'digivice))
       (when (sync digivice (wrap-evt (place-dead-evt digivice) (lambda [e] #false)))
+        (place-channel-put digivice hostnames)
         (for-each build-tunnel hostnames)
         (define on-signal : (-> exn Void)
           (lambda [signal]
@@ -133,14 +134,49 @@
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/termctl.rkt")
 
-  (define window%
-    (class object% (super-new)
-      (init-field x y width height)
+  #| +---------------+----------------------------------------+
+     | hosts%        | request%                               |
+     |               |                                        |
+     |               |                                        |
+     |               |                                        |
+     |               |                                        |
+     |               +----------------------------------------+
+     |               | rsyslog%                               |
+     |               |                                        |
+     |               |                                        |
+     +---------------+----------------------------------------+
+     | commandline%                                           |
+     +--------------------------------------------------------+ |#
 
-      (define border (newwin height width y x))
-      (define screen (newpad border ))
-      (wborder border #\| #\| #\- #\- #\+ #\+ #\+ #\+)))
+  (define host% (make-parameter #false))
+  (define request% (make-parameter #false))
+  (define rsyslog% (make-parameter #false))
+  (define commandline% (make-parameter #false))
+
+  (define create-window
+    (lambda [type% row column y x label vline?]
+      (define stdwin (newwin row column y x))
+      (unless (false? stdwin)
+        (when (type%) (delwin (type%)))
+        (type% stdwin)
+        (when vline?
+          (mvwvline stdwin 0 (sub1 column) row))
+        (when label
+          (mvwaddwstr stdwin (sub1 row) 0 (~a label #:max-width column))
+          (mvwchgat stdwin (sub1 row) 0 -1 (list 'underline) 0)
+          (wmove stdwin 0 0)))))
   
+  (define on-resized
+    (lambda [stdscr]
+      (define-values [columns rows] (values (getmaxx stdscr) (getmaxy stdscr)))
+      (define-values [host-width commandline-height rsyslog-height] (values 32 1 8))
+      (define-values [request-width request-height] (values (- columns host-width) (- rows commandline-height rsyslog-height)))
+      (create-window host% (- rows commandline-height) host-width 0 0 'host #true)
+      (create-window request% request-height request-width 0 host-width 'request #false)
+      (create-window rsyslog% rsyslog-height request-width request-height host-width 'rsyslog #false)
+      (create-window commandline% commandline-height columns rows 0 #false #false)
+      (for-each wrefresh (list stdscr (host%) (request%) (rsyslog%) (commandline%)))))
+
   (define digivice
     (lambda [izunad]
       (define stdscr (initscr))
@@ -152,34 +188,31 @@
 
       (call-as-normal-termination
        (thunk (with-handlers ([exn:fail? (lambda [ef] (and (endwin) (raise ef)))])
-                (when (and stdscr (raw) (noecho) (wtimeout stdscr 0) (keypad stdscr #true)
-                           (idlok stdscr #true) (scrollok stdscr #true))
-                  (place-channel-put izunad 'Okay)
-                  (wborder stdscr #\| #\| #\- #\- #\+ #\+ #\+ #\+)
-                  (define-values [width height] (values (getmaxx stdscr) (getmaxy stdscr)))
+                (when (and stdscr (raw) (noecho) (wtimeout stdscr 0) (keypad stdscr #true) (idlok stdscr #true) (scrollok stdscr #true))
                   (when (has_colors)
                     (start_color)
-                    (use_default_colors)
-                    (let ([C (c-extern 'COLORS)])
-                      (for ([c (in-range C)])
-                        (init_pair c c 'none)
-                        (init_pair (+ c C) 'none c))))
-
+                    (use_default_colors))
+                
+                  (define hostnames (place-channel-put/get izunad 'Okay))
+                  (on-resized stdscr)
+                  
                   (with-handlers ([exn:break? exit])
                     (let recv-match-render-loop ()
-                      (match (or (getch) (sync/timeout/enable-break 0.26149 #| Number Thoery: Meissel–Mertens Constant |# izunad))
-                        [#\003 #| Ctrl+C |# (place-channel-put izunad 'exn:break:terminate)]
+                      (match (or (wgetch stdscr) (sync/timeout/enable-break 0.26149 #| Number Thoery: Meissel–Mertens Constant |# izunad))
                         [(? false?) (void "No key is pressed!")]
-                        [(? char? c) (void (mvwaddwstr stdscr (getcury stdscr) 3 (format "Pressed key: ~a ~a!~n" c (char->integer c)))
-                                           (wrefresh stdscr))]
-                        [(list color 'fold msg) (wcolor_set stdscr (color-number color))
-                                                (wmove stdscr (getcury stdscr) (max (getcurx stdscr) 1))
-                                                (whline stdscr  #\= (string-length (~a msg)))
-                                                (wrefresh stdscr)]
-                        [(list color msg) (wcolor_set stdscr (color-number color))
-                                          (mvwaddwstr stdscr (getcury stdscr) 1 (~a msg))
-                                          (wrefresh stdscr)
-                                          (wstandend stdscr)])
+                        [(list color 'fold msg) ;(wcolor_set (rsyslog%) (color-number color))
+                                                (wmove (commandline%) 0 3)
+                                                ;(wrefresh (rsyslog%))
+                                                ]
+                        [(list color msg) ;(wcolor_set (request%) (color-number color))
+                                          (mvwaddwstr (rsyslog%) (getcury (rsyslog%)) 1 (~a msg))
+                                          (wrefresh (rsyslog%))
+                                          ;(wstandend (request%))
+                                          ]
+                        [#\003 #| Ctrl+C |# (place-channel-put izunad 'exn:break:terminate)]
+                        [#\u19A #| terminal size changed |# (on-resized stdscr)]
+                        [(? char? c) (void (mvwaddwstr (commandline%) 0 3 (format "Pressed key: ~a ~a!~n" c (char->integer c)))
+                                           (wrefresh (commandline%)))])
                       (recv-match-render-loop))))))))))
 
 (module* foxpipe racket
