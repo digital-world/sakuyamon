@@ -1,7 +1,5 @@
-" Maintainer: WarGrey Gyoudmon Ju <juzhenliang@gmail.com>
-" Last Change: 2013/09/25
-" Version: v1.618
-"
+""" These color definitions are used by izuna to highlight ncurses
+
 " To see all colors execute ":XtermColorTable".
 " xterm-256color only.
 

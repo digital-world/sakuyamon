@@ -30,8 +30,7 @@
                 [[named-color->c c->named-color] (values (ctype-scheme->c _named-color) (ctype-c->scheme _named-color))])
     (values ((lambda [a] (_bitmask a _uint))
              (foldl (lambda [a A] (list* (symbol-downcase a) '= (c-extern a #:ctype _uint) A))
-                    null (list 'NORMAL 'STANDOUT 'UNDERLINE 'REVERSE 'BLINK 'DIM 'BOLD
-                               'INVIS 'PROTECT 'ALTCHARSET 'ATTRIBUTES 'CHARTEXT)))
+                    null (list 'NORMAL 'STANDOUT 'UNDERLINE 'REVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT)))
             (make-ctype _short
                         (lambda [r] (if (integer? r) r (named-color->c r)))
                         (lambda [c] (if (< c 8) (c->named-color c) c))))))

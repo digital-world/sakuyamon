@@ -125,15 +125,45 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Meanwhile Typed Racket does not support CPonter well, So leave the "Typed C" to FFI itself. ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 (module* izuna racket
   (provide (all-defined-out))
-
-  (require racket/draw)
 
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/termctl.rkt")
 
+  (define vim-cterm-colors
+    #hash(("black" . 0) ("darkgray" . 8) ("darkgrey" . 8) ("lightgray" . 7) ("lightgrey" . 7) ("gray" . 7) ("grey" . 7) ("white" . 15)
+                        ("darkred" . 1) ("darkgreen" . 2) ("darkyellow" . 3) ("darkblue" . 4) ("brown" . 5) ("darkmagenta" . 5) ("darkcyan" . 6)
+                        ("red" . 9) ("lightred" . 9) ("green" . 10) ("lightgreen" . 10) ("yellow" . 11) ("lightyellow" . 11)
+                        ("blue" . 12) ("lightblue" . 12) ("magenta" . 13) ("lightmagenta" . 13) ("cyan" . 14) ("lightcyan" . 14)))
+  
+  (define vim-cterm-attrs
+    #hash(("none" . normal) ("standout" . standout) ("underline" . underline) ("undercurl" . undercurl)
+                            ("reverse" . reverse) ("inverse" . reverse) ("blink" . blink) ("bold" . bold)))
+
+  (struct color-pair (index cterm ctermfg ctermbg) #:prefab)
+  (define vim-highlight->ncurses-color-pair
+    (lambda [colors.vim]
+      (define highlight (make-hash))
+      (when (file-exists? colors.vim)
+        (with-input-from-file colors.vim
+          (thunk (for ([line (in-port read-line)]
+                       #:when (< (hash-count highlight) 256)
+                       #:when (regexp-match? #px"c?term([fb]g)?=" line))
+                   (define-values [attrs head] (partition (curry regexp-match #px"=") (string-split line)))
+                   (match-define (list cterm ctermfg ctermbg) (map make-parameter (list null 'none 'none)))
+                   (for ([token (in-list attrs)])
+                     (match token
+                       [(pregexp #px"ctermfg=(\\d+)" (list _ nfg)) (ctermfg (min 256 (string->number nfg)))]
+                       [(pregexp #px"ctermfg=(\\D+)" (list _ fg)) (ctermfg (hash-ref vim-cterm-colors (string-downcase fg) (const 'none)))]
+                       [(pregexp #px"ctermbg=(\\d+)" (list _ nbg)) (ctermbg (min 256 (string->number nbg)))]
+                       [(pregexp #px"ctermbg=(\\D+)" (list _ bg)) (ctermbg (hash-ref vim-cterm-colors (string-downcase bg) (const 'none)))]
+                       [term (cterm (filter-map (lambda [a] (hash-ref vim-cterm-attrs (string-downcase a) #false))
+                                                (map string-downcase (cdr (string-split term #px"[=,]")))))]))
+                   (hash-set! highlight (string->symbol (last head)) (color-pair (add1 (hash-count highlight)) (cterm) (ctermfg) (ctermbg)))))))
+      highlight))
+
+  
   #| +---------------+----------------------------------------+
      | hosts%        | request%                               |
      |               |                                        |
@@ -177,6 +207,14 @@
       (create-window commandline% commandline-height columns rows 0 #false #false)
       (for-each wrefresh (list stdscr (host%) (request%) (rsyslog%) (commandline%)))))
 
+  (define mvwaddhistr
+    (lambda [stdwin y x info fmt . contexts]
+      (init_pair (color-pair-index info) (color-pair-ctermfg info) (color-pair-ctermbg info))
+      (wattr_on stdwin (color-pair-cterm info))
+      (wcolor_set stdwin (color-pair-index info))
+      (mvwaddwstr stdwin y x (apply format fmt contexts))
+      (wstandend stdwin)))
+  
   (define digivice
     (lambda [izunad]
       (define stdscr (initscr))
@@ -189,9 +227,12 @@
       (call-as-normal-termination
        (thunk (with-handlers ([exn:fail? (lambda [ef] (and (endwin) (raise ef)))])
                 (when (and stdscr (raw) (noecho) (wtimeout stdscr 0) (keypad stdscr #true) (idlok stdscr #true) (scrollok stdscr #true))
+                  (define highlight (vim-highlight->ncurses-color-pair (build-path (digimon-stone) "colors.vim")))
                   (when (has_colors)
                     (start_color)
-                    (use_default_colors))
+                    (use_default_colors)
+                    (for ([[name group] (in-hash highlight)])
+                      (init_pair (color-pair-index group) (color-pair-ctermfg group) (color-pair-ctermbg group))))
                 
                   (define hostnames (place-channel-put/get izunad 'Okay))
                   (on-resized stdscr)
@@ -274,3 +315,45 @@
                      [(? eof-object?) (error 'ssh-channel "remote server disconnected!")]
                      [msgvector (place-channel-put izunac (cons sshd-host msgvector))])])
                 (recv-match-send-loop)))))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(module* test racket
+  (require (submod ".." izuna))
+  (require "../../digitama/digicore.rkt")
+  (require "../../digitama/termctl.rkt")
+
+  (define colors.vim (build-path (digimon-stone) "colors.vim"))
+  (define highlight (vim-highlight->ncurses-color-pair colors.vim))
+  (when (and (initscr) (has_colors))
+    (start_color)
+    (use_default_colors)
+    (curs_set 0)
+    (define uncaught-exn (make-parameter #false))
+    (define-values [field-size field-count] (values (+ 12 (apply max (map (compose1 string-length symbol->string) (hash-keys highlight)))) 4))
+    (define-values [stdclr-cols stdclr-rows] (values (add1 (* field-count field-size)) (+ 2 (ceiling (/ (hash-count highlight) field-count)))))
+    (define stdscr (newwin 0 0 0 0)) ; full screen window, size will auto-change when term has changed size. 
+    (define stdclr (newwin stdclr-rows stdclr-cols 0 0))
+    ((curry plumber-add-flush! (current-plumber))
+     (lambda [this] (let ([e (uncaught-exn)])
+                      (plumber-flush-handle-remove! this)
+                      (delwin stdscr) (delwin stdclr) (endwin)
+                      (when (exn? e) (displayln (exn-message e))))))
+
+    (with-handlers ([exn:fail? uncaught-exn])
+      (when (and stdscr stdclr (raw) (noecho) (wtimeout stdscr -1) (keypad stdscr #true) (idlok stdscr #true) (scrollok stdscr #true))
+        (let display-colors ()
+          (wclear stdscr)
+          (mvwaddhistr stdscr 0 0 (hash-ref highlight 'Visual) (~a "> raco test digivice/sakuyamon/izuna.rkt" #:min-width (getmaxx stdscr)))
+          (mvwin stdclr (add1 (quotient (- (getmaxy stdscr) stdclr-rows) 2)) (quotient (- (getmaxx stdscr) stdclr-cols) 2))
+          (wmove stdclr 0 0)
+          (for ([[name group] (in-hash highlight)]
+                [index (in-naturals 1)])
+            (mvwaddhistr stdclr (getcury stdclr) (getcurx stdclr) group
+                         (~a name #\[ (color-pair-ctermfg group) #\, (color-pair-ctermbg group) #\] #:min-width field-size))
+            (when (zero? (remainder index field-count)) (waddwstr stdclr (~a #\newline))))
+          (mvwaddhistr stdscr (- (getmaxy stdscr) 2) 0 (hash-ref highlight 'StatusLine) (~a "Press any key to exit!" #:min-width (getmaxx stdscr)))
+          (wrefresh stdscr)
+          (wrefresh stdclr) ; it must be rendered after rendering stdscr
+            
+          (when (char=? (wgetch stdscr) #\u19A)
+            (display-colors)))))))
