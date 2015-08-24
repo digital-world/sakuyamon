@@ -22,20 +22,27 @@
                 (lambda [r] (bitwise-and (char->integer r) mask))
                 (lambda [c] (integer->char (bitwise-and c mask))))))
 
-(define-values [_attr _color/term]
-  (let*-values ([[symbol-downcase] (compose1 string->symbol string-downcase symbol->string)]
-                [[_named-color] ((lambda [c] (_enum c _short))
-                                 (foldl (lambda [c C] (list* (symbol-downcase c) '= (c-extern c #:ctype _short) C))
-                                        (list 'none '= -1) (list 'BLACK 'RED 'GREEN 'YELLOW 'BLUE 'MAGENTA 'CYAN 'WHITE)))]
-                [[named-color->c c->named-color] (values (ctype-scheme->c _named-color) (ctype-c->scheme _named-color))])
-    (values ((lambda [a] (_bitmask a _uint))
-             (foldl (lambda [a A] (list* (symbol-downcase a) '= (c-extern a #:ctype _uint) A))
-                    null (list 'NORMAL 'STANDOUT 'UNDERLINE 'REVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT)))
-            (make-ctype _short
-                        (lambda [r] (if (integer? r) r (named-color->c r)))
-                        (lambda [c] (if (< c 8) (c->named-color c) c))))))
+(define _attr
+  ((lambda [a] (_bitmask a _uint))
+   (foldl (lambda [a As] (list* (string->symbol (string-downcase (symbol->string a))) '= (c-extern a #:ctype _uint) As))
+          null (list 'NORMAL 'STANDOUT 'UNDERLINE 'REVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT))))
 
-(define color-number (ctype-scheme->c _color/term))
+(define _color/term
+  (let* ([_named-color ((lambda [c] (_enum c _short #:unknown values))
+                        (foldl (lambda [c Cs] (list* c '= (hash-ref vim-colors (symbol->string c)) Cs)) (list 'none '= -1)
+                               ;;; racket->c can map multi names to one value, while c->racket uses the last name
+                               ;;; names in aliases will not be the value of c->racket
+                               (let ([aliases (list 'lightred 'lightgreen 'lightyellow 'lightblue 'lightmagenta 'lightcyan
+                                                    'darkgray 'lightgray 'lightgrey 'gray 'brown)])
+                                 (reverse (append aliases (remove* aliases (map string->symbol (hash-keys vim-colors))))))))])
+    (make-ctype _short
+                (lambda [r] (if (integer? r) r ((ctype-scheme->c _named-color) r)))
+                (ctype-c->scheme _named-color))))
+
+(define _rgb/component
+  (make-ctype _short ;;; r/255 = c/1000 <==> 1000r = 255c
+              (lambda [r] (exact-round (* r 1000/255))) 
+              (lambda [c] (exact-round (* c 255/1000)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                         WARNING: ncurses uses YX-Coordinate System                          ;;;
@@ -49,26 +56,22 @@
 (define-ncurses start_color (_fun -> _ok/err))
 (define-ncurses keypad (_fun _window* _bool -> _ok/err))
 (define-ncurses idlok (_fun _window* _bool -> _ok/err))
-(define-ncurses scrollok (_fun _window* _bool -> _ok/err))
 (define-ncurses delwin (_fun _window* -> _ok/err))
 (define-ncurses endwin (_fun -> _ok/err))
 
-;;; Window and Input/Output functions
+;;; Windows/Pads and Input/Output functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; For the sake of simplicity, I only deal with real windows.                    ;;;
+;;; For the sake of simplicity, I only deal with pads.                            ;;;
 ;;;                                                                               ;;;
-;;; (newwin 0 0 0 0) return a new full-screen window.                             ;;;
-;;; The derivated window sucks:                                                   ;;;
+;;; Shrinking terminal will cause windows resizing propertionlessly, while after  ;;;
+;;;  that reenlarging terminal will cause windows resizing in propertion to the   ;;;
+;;;  changed but wrong size.                                                      ;;;
+;;; The subwindow and subpad suck                                                 ;;;
 ;;;  it must be deleted first when deleting its parent;                           ;;;
-;;;  scrolling is unavaliable;                                                    ;;;
-;;;  it will not save you from the repainting headache.                           ;;;
-;;; Pad and subpad are interesting, but I think the best way to dealing with pads ;;;
-;;;  is managing the contexts with Racket since pads are just memory buffers that ;;;
-;;;  waiting for rendering but won't save you from computing draw-area reactangle ;;;
-;;;  position and size. Also pads cannot hold non-text data structure.            ;;;
+;;;  scrolling is unavaliable (as well as pads);                                  ;;;
+;;;  it will not save you from the move-and-repainting headache.                  ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-ncurses newwin (_fun [nlines : _int] [ncols : _int] [beginy : _int] [beginx : _int] -> _window*))
-(define-ncurses mvwin (_fun _window* [beginy : _int] [beginx : _int] -> _ok/err))
+(define-ncurses newpad (_fun [nlines : _int] [ncols : _int] -> _window*))
 (define-ncurses mvwvline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\|] [maxlong : _int] -> _ok/err))
 (define-ncurses mvwhline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\-] [maxlong : _int] -> _ok/err))
 
@@ -82,25 +85,22 @@
 (define-ncurses wclear (_fun _window* -> _ok/err)) ;;; it just calls (werase)
 (define-ncurses wclrtobot (_fun _window* -> _ok/err))
 (define-ncurses wclrtoeol (_fun _window* -> _ok/err))
-(define-ncurses overlay (_fun [src : _window*] [dest : _window*] -> _ok/err))
-(define-ncurses overwrite (_fun [src : _window*] [dest : _window*] -> _ok/err))
-(define-ncurses copywin (_fun [src : _window*] [dest : _window*]
-                              [sminrow : _int] [smincol : _int]
-                              [dminrow : _int] [dmincol : _int]
-                              [dmaxrow : _int] [dmaxcol : _int]
-                              [overlay : _bool]
-                              -> _ok/err))
 
 (define-ncurses wtimeout (_fun _window* _int -> _ok/err)) ;;; blocking mode for getch()
 (define-ncurses wgetch (_fun _window* -> [key : _int] -> (cond [(negative? key) #false] [else (integer->char key)])))
 (define-ncurses wmove (_fun _window* _int _int -> _ok/err))
 (define-ncurses waddwstr (_fun _window* _string/ucs-4 -> _ok/err))
 (define-ncurses mvwaddwstr (_fun _window* _int _int _string/ucs-4 -> _ok/err))
-(define-ncurses wscrl (_fun _window* _int -> _ok/err)) ; not affects the derivated window, out-screen-lines will be removed
 (define-ncurses wrefresh (_fun _window* -> _ok/err))
 (define-ncurses wnoutrefresh (_fun _window* -> _ok/err))
-(define-ncurses wredrawln (_fun _window* [begin : _int] [n : _int] -> _ok/err))
 (define-ncurses doupdate (_fun -> _ok/err))
+
+(define-ncurses prefresh (_fun [pad : _window*] [pady : _int] [padx : _int]
+                               [screeny : _int] [screenx : _int] [screeny+height : _int] [screenx+width : _bool]
+                               -> _ok/err))
+(define-ncurses pnoutrefresh (_fun [src : _window*] [pady : _int] [padx : _int]
+                                   [screeny : _int] [screenx : _int] [screeny+height : _int] [screenx+width : _bool]
+                                   -> _ok/err))
 
 ;;; Color and Attribute functions
 (define-ncurses has_colors (_fun -> _bool))
@@ -136,14 +136,8 @@
 ;;; It's your duty to manage the palette.                                         ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses init_pair (_fun _short _color/term _color/term -> _ok/err))
-
 (define-ncurses pair_content (_fun [pair : _short] [fg : (_ptr o _color/term)] [bg : (_ptr o _color/term)]
                                    -> [ status : _ok/err] -> (and status (cons fg bg))))
-
-(define _rgb/component
-  (make-ctype _short ;;; r/255 = c/1000 <==> 1000r = 255c
-              (lambda [r] (exact-round (* r 1000/255))) 
-              (lambda [c] (exact-round (* c 255/1000)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; This one is not recommended because ncurses cannot restore the correct color  ;;;
@@ -179,46 +173,82 @@
 (define-ncurses scr_init (_fun _file -> _ok/err))
 (define-ncurses scr_set (_fun _file -> _ok/err))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(struct color-pair (index cterm ctermfg ctermbg) #:prefab)
+(define :syntax (curryr hash-ref (const (color-pair 0 null 'none 'none))))
+(define vim-highlight->ncurses-color-pair
+  (lambda [colors.vim]
+    (define highlight (make-hash))
+    (when (file-exists? colors.vim)
+      (with-input-from-file colors.vim
+        (thunk (for ([line (in-port read-line)]
+                     #:when (< (hash-count highlight) 256)
+                     #:when (regexp-match? #px"c?term([fb]g)?=" line))
+                 (define-values [attrs head] (partition (curry regexp-match #px"=") (string-split line)))
+                 (match-define (list cterm ctermfg ctermbg) (map make-parameter (list null 'none 'none)))
+                 (for ([token (in-list attrs)])
+                   (match token
+                     [(pregexp #px"ctermfg=(\\d+)" (list _ nfg)) (ctermfg (min 256 (string->number nfg)))]
+                     [(pregexp #px"ctermfg=(\\D+)" (list _ fg)) (ctermfg (string->symbol (string-downcase fg)))]
+                     [(pregexp #px"ctermbg=(\\d+)" (list _ nbg)) (ctermbg (min 256 (string->number nbg)))]
+                     [(pregexp #px"ctermbg=(\\D+)" (list _ bg)) (ctermbg (string->symbol (string-downcase bg)))]
+                     [term (cterm (remove 'none (map (compose1 string->symbol string-downcase) (cdr (string-split term #px"[=,]")))))]))
+                 (hash-set! highlight (string->symbol (last head)) (color-pair (add1 (hash-count highlight)) (cterm) (ctermfg) (ctermbg)))))))
+    highlight))
 
+(define wstandon
+  (lambda [stdwin info]
+    (when (< 0 (color-pair-index info))
+      (init_pair (color-pair-index info) (color-pair-ctermfg info) (color-pair-ctermbg info)))
+    (wattr_on stdwin (color-pair-cterm info))
+    (wcolor_set stdwin (color-pair-index info))))
+
+(define mvwaddhistr
+  (lambda [stdwin y x info fmt . contexts]
+    (wstandon stdwin info)
+    (mvwaddwstr stdwin y x (apply format fmt contexts))
+    (wstandend stdwin)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module+ test
-  (provide (all-defined-out))
+  (define stdscr (initscr))
+  (define atexit (plumber-add-flush! (current-plumber) (lambda [this] (plumber-flush-handle-remove! this) (endwin))))
 
-  (when (and (initscr) (has_colors))
-    (start_color)
-    (use_default_colors)
-    (curs_set 0)
-    (define uncaught-exn (make-parameter #false))
-    (define-values [field-size field-count colors] (values 4 16 (c-extern 'COLORS)))
-    (define-values [stdclr-cols stdclr-rows] (values (add1 (* field-count field-size)) (ceiling (/ colors field-count))))
-    (define stdscr (newwin 0 0 0 0)) ; full screen window, size will auto-change when term has changed size. 
-    (define stdclr (newwin stdclr-rows stdclr-cols 0 0))
-    ((curry plumber-add-flush! (current-plumber))
-     (lambda [this] (let ([e (uncaught-exn)])
-                      (plumber-flush-handle-remove! this)
-                      (delwin stdscr) (delwin stdclr) (endwin)
-                      (when (exn? e) (displayln (exn-message e))))))
+  (define (uncaught-exn e)
+    (for ([line (in-list (call-with-input-string (exn-message e) port->lines))])
+      (waddwstr stdscr (~a line #\newline #:min-width (getmaxx stdscr))))
+    (wrefresh stdscr)
+    (void (wgetch stdscr)))
 
-    (with-handlers ([exn:fail? uncaught-exn])
-      (when (and stdscr stdclr (raw) (noecho) (wtimeout stdscr -1) (keypad stdscr #true) (idlok stdscr #true) (scrollok stdscr #true))
-        (let display-colors ()
-          (wclear stdscr)
-          (mvwaddwstr stdscr 0 0 (format "256 colors[default: ~a]" (pair_content 0)))
-          (mvwin stdclr (add1 (quotient (- (getmaxy stdscr) stdclr-rows) 2)) (quotient (- (getmaxx stdscr) stdclr-cols) 2))
-          (wmove stdclr 0 0)
-          (for ([color-index (in-range (sub1 colors))])
-            (define pair-index (add1 color-index))
-            (init_pair pair-index 'none color-index)
-            (wcolor_set stdclr pair-index)
-            (waddwstr stdclr (~a color-index #:min-width field-size))
-            (when (zero? (remainder pair-index field-count)) (waddwstr stdclr (~a #\newline)))
-            (wstandend stdclr))
-          (mvwaddwstr stdscr (getcury stdscr) (getcurx stdscr) (format "~nPress any key to exit!"))
-          (mvwchgat stdscr (getcury stdscr) 0 -1 (list 'underline) 0)
-          (wstandend stdscr)
-          (wrefresh stdscr)
-          (wrefresh stdclr) ; it must be rendered after rendering stdscr
-            
-          (when (char=? (wgetch stdscr) #\u19A)
-            (display-colors)))))))
+  (with-handlers ([exn:fail? uncaught-exn])
+    (unless (and (wrefresh stdscr) (has_colors) (start_color) (use_default_colors) (curs_set 0)
+                 (raw) (noecho) (wtimeout stdscr -1) (keypad stdscr #true) (idlok stdscr #true))
+      (error "A thunk of initializing failed!"))
+    
+    (define colors.vim (build-path (digimon-stone) "colors.vim"))
+    (define highlight (vim-highlight->ncurses-color-pair colors.vim))
+    (define-values [units fields] (values (+ 12 (apply max (map (compose1 string-length symbol->string) (hash-keys highlight)))) 4))
+    (define-values [cols rows] (values (add1 (* fields units)) (+ 2 (ceiling (/ (hash-count highlight) fields)))))
+    (define colorscheme (newpad rows cols))
+    (when (false? colorscheme) (error "Unable to create color area!"))
+    
+    (let display-colors ()
+      (define y (max (quotient (- (getmaxy stdscr) rows) 2) 0))
+      (define x (max (quotient (- (getmaxx stdscr) cols) 2) 0))
+      (wclear stdscr)
+      (mvwaddhistr stdscr 0 0 (:syntax highlight 'Visual) (~a "> raco test digivice/sakuyamon/izuna.rkt" #:min-width (getmaxx stdscr)))
+      (wmove colorscheme 0 0)
+      (for ([[name group] (in-hash highlight)]
+            [index (in-naturals 1)])
+        (mvwaddhistr stdscr (getcury colorscheme) (getcurx colorscheme) group
+                     (~a name #\[ (+ y (getcury colorscheme)) #\, (+ x (getcurx colorscheme)) #\] #:min-width units))
+        (mvwaddhistr colorscheme (getcury colorscheme) (getcurx colorscheme) group
+                     (~a name #\[ (color-pair-ctermfg group) #\, (color-pair-ctermbg group) #\] #:min-width units))
+        (when (zero? (remainder index fields)) (waddwstr colorscheme (~a #\newline))))
+      (mvwaddhistr stdscr (- (getmaxy stdscr) 2) 0 (:syntax highlight 'StatusLine) (~a "Press any key to exit!" #:min-width (getmaxx stdscr)))
+      (wnoutrefresh stdscr)
+      (pnoutrefresh colorscheme 0 0 y x (+ y rows) (+ x cols))
+      (doupdate)
+      
+      (when (char=? (wgetch colorscheme) #\u19A)
+        (display-colors)))))
