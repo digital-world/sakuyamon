@@ -89,17 +89,20 @@
 (define-ncurses wtimeout (_fun _window* _int -> _ok/err)) ;;; blocking mode for getch()
 (define-ncurses wgetch (_fun _window* -> [key : _int] -> (cond [(negative? key) #false] [else (integer->char key)])))
 (define-ncurses wmove (_fun _window* _int _int -> _ok/err))
+(define-ncurses waddch (_fun _window* _chtype -> _ok/err))
+(define-ncurses mvwaddch (_fun _window* _int _int _chtype -> _ok/err))
 (define-ncurses waddwstr (_fun _window* _string/ucs-4 -> _ok/err))
 (define-ncurses mvwaddwstr (_fun _window* _int _int _string/ucs-4 -> _ok/err))
 (define-ncurses wrefresh (_fun _window* -> _ok/err))
 (define-ncurses wnoutrefresh (_fun _window* -> _ok/err))
 (define-ncurses doupdate (_fun -> _ok/err))
 
+; Negative coordinates in these two rontines are treated as zero.
 (define-ncurses prefresh (_fun [pad : _window*] [pady : _int] [padx : _int]
-                               [screeny : _int] [screenx : _int] [screeny+height : _int] [screenx+width : _bool]
+                               [screeny : _int] [screenx : _int] [screeny+height : _int] [screenx+width : _int]
                                -> _ok/err))
 (define-ncurses pnoutrefresh (_fun [src : _window*] [pady : _int] [padx : _int]
-                                   [screeny : _int] [screenx : _int] [screeny+height : _int] [screenx+width : _bool]
+                                   [screeny : _int] [screenx : _int] [screeny+height : _int] [screenx+width : _int]
                                    -> _ok/err))
 
 ;;; Color and Attribute functions
@@ -178,6 +181,9 @@
 (define :syntax (curryr hash-ref (const (color-pair 0 null 'none 'none))))
 (define vim-highlight->ncurses-color-pair
   (lambda [colors.vim]
+    (define token->symbol (compose1 string->symbol string-downcase))
+    (define token->number (compose1 (curry min 256) string->number))
+    (define token->symlist (lambda [t] (map token->symbol (string-split t #px"(=|,|none)+"))))
     (define highlight (make-hash))
     (when (file-exists? colors.vim)
       (with-input-from-file colors.vim
@@ -185,15 +191,16 @@
                      #:when (< (hash-count highlight) 256)
                      #:when (regexp-match? #px"c?term([fb]g)?=" line))
                  (define-values [attrs head] (partition (curry regexp-match #px"=") (string-split line)))
-                 (match-define (list cterm ctermfg ctermbg) (map make-parameter (list null 'none 'none)))
+                 (define hi (vector (add1 (hash-count highlight)) null 'none 'none))
                  (for ([token (in-list attrs)])
                    (match token
-                     [(pregexp #px"ctermfg=(\\d+)" (list _ nfg)) (ctermfg (min 256 (string->number nfg)))]
-                     [(pregexp #px"ctermfg=(\\D+)" (list _ fg)) (ctermfg (string->symbol (string-downcase fg)))]
-                     [(pregexp #px"ctermbg=(\\d+)" (list _ nbg)) (ctermbg (min 256 (string->number nbg)))]
-                     [(pregexp #px"ctermbg=(\\D+)" (list _ bg)) (ctermbg (string->symbol (string-downcase bg)))]
-                     [term (cterm (remove 'none (map (compose1 string->symbol string-downcase) (cdr (string-split term #px"[=,]")))))]))
-                 (hash-set! highlight (string->symbol (last head)) (color-pair (add1 (hash-count highlight)) (cterm) (ctermfg) (ctermbg)))))))
+                     [(pregexp #px"c?term=(.+)" (list _ attrs)) (vector-set! hi 1 (token->symlist attrs))]
+                     [(pregexp #px"ctermfg=(\\d+)" (list _ nfg)) (vector-set! hi 2 (token->number nfg))]
+                     [(pregexp #px"ctermfg=(\\D+)" (list _ fg)) (vector-set! hi 2 (token->symbol fg))]
+                     [(pregexp #px"ctermbg=(\\d+)" (list _ nbg)) (vector-set! hi 3 (token->number nbg))]
+                     [(pregexp #px"ctermbg=(\\D+)" (list _ bg)) (vector-set! hi 3 (token->symbol bg))]
+                     [_ (void '(skip gui settings))]))
+                 (hash-set! highlight (string->symbol (last head)) (apply color-pair (vector->list hi)))))))
     highlight))
 
 (define wstandon
@@ -203,10 +210,16 @@
     (wattr_on stdwin (color-pair-cterm info))
     (wcolor_set stdwin (color-pair-index info))))
 
-(define mvwaddhistr
-  (lambda [stdwin y x info fmt . contexts]
+(define waddhistr
+  (lambda [stdwin info fmt . content]
     (wstandon stdwin info)
-    (mvwaddwstr stdwin y x (apply format fmt contexts))
+    (waddwstr stdwin (apply format fmt content))
+    (wstandend stdwin)))
+
+(define mvwaddhistr
+  (lambda [stdwin y x info fmt . content]
+    (wstandon stdwin info)
+    (mvwaddwstr stdwin y x (apply format fmt content))
     (wstandend stdwin)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -227,27 +240,22 @@
     
     (define colors.vim (build-path (digimon-stone) "colors.vim"))
     (define highlight (vim-highlight->ncurses-color-pair colors.vim))
-    (define-values [units fields] (values (+ 12 (apply max (map (compose1 string-length symbol->string) (hash-keys highlight)))) 4))
-    (define-values [cols rows] (values (add1 (* fields units)) (+ 2 (ceiling (/ (hash-count highlight) fields)))))
+    (define-values [units fields] (values (+ 24 (apply max (map (compose1 string-length symbol->string) (hash-keys highlight)))) 3))
+    (define-values [cols rows] (values (* fields units) (ceiling (/ (hash-count highlight) fields))))
     (define colorscheme (newpad rows cols))
     (when (false? colorscheme) (error "Unable to create color area!"))
-    
+    (for ([[name group] (in-hash highlight)])
+      (waddhistr colorscheme group (~a name #\[ (color-pair-ctermfg group) #\, (color-pair-ctermbg group) #\] #:min-width units)))
+    (wstandend colorscheme)
+      
     (let display-colors ()
-      (define y (max (quotient (- (getmaxy stdscr) rows) 2) 0))
-      (define x (max (quotient (- (getmaxx stdscr) cols) 2) 0))
+      (define-values [maxy y] (let ([maxy (- (getmaxy stdscr) 2)]) (values maxy (add1 (max (quotient (- (sub1 maxy) rows) 2) 0)))))
+      (define-values [maxx x] (let ([maxx (getmaxx stdscr)]) (values maxx (max (quotient (- maxx cols) 2) 0))))
       (wclear stdscr)
-      (mvwaddhistr stdscr 0 0 (:syntax highlight 'Visual) (~a "> raco test digivice/sakuyamon/izuna.rkt" #:min-width (getmaxx stdscr)))
-      (wmove colorscheme 0 0)
-      (for ([[name group] (in-hash highlight)]
-            [index (in-naturals 1)])
-        (mvwaddhistr stdscr (getcury colorscheme) (getcurx colorscheme) group
-                     (~a name #\[ (+ y (getcury colorscheme)) #\, (+ x (getcurx colorscheme)) #\] #:min-width units))
-        (mvwaddhistr colorscheme (getcury colorscheme) (getcurx colorscheme) group
-                     (~a name #\[ (color-pair-ctermfg group) #\, (color-pair-ctermbg group) #\] #:min-width units))
-        (when (zero? (remainder index fields)) (waddwstr colorscheme (~a #\newline))))
-      (mvwaddhistr stdscr (- (getmaxy stdscr) 2) 0 (:syntax highlight 'StatusLine) (~a "Press any key to exit!" #:min-width (getmaxx stdscr)))
+      (mvwaddhistr stdscr 0 0 (:syntax highlight 'Visual) (~a "> raco test digivice/sakuyamon/izuna.rkt" #:min-width maxx))
+      (mvwaddhistr stdscr maxy 0 (:syntax highlight 'StatusLine) (~a "Press any key to exit!" #:min-width maxx))
       (wnoutrefresh stdscr)
-      (pnoutrefresh colorscheme 0 0 y x (+ y rows) (+ x cols))
+      (pnoutrefresh colorscheme 0 0 y x (min (+ y rows) (sub1 maxy)) (min (+ x cols) maxx))
       (doupdate)
       
       (when (char=? (wgetch colorscheme) #\u19A)
