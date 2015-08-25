@@ -249,13 +249,13 @@
     (wstandend colorscheme)
       
     (let display-colors ()
-      (define-values [maxy y] (let ([maxy (- (getmaxy stdscr) 2)]) (values maxy (add1 (max (quotient (- (sub1 maxy) rows) 2) 0)))))
+      (define-values [maxy y] (let ([maxy (- (getmaxy stdscr) 3)]) (values maxy (add1 (max (quotient (- maxy rows) 2) 0)))))
       (define-values [maxx x] (let ([maxx (getmaxx stdscr)]) (values maxx (max (quotient (- maxx cols) 2) 0))))
       (wclear stdscr)
       (mvwaddhistr stdscr 0 0 (:syntax highlight 'Visual) (~a "> raco test digivice/sakuyamon/izuna.rkt" #:min-width maxx))
-      (mvwaddhistr stdscr maxy 0 (:syntax highlight 'StatusLine) (~a "Press any key to exit!" #:min-width maxx))
+      (mvwaddhistr stdscr (add1 maxy) 0 (:syntax highlight 'StatusLine) (~a "Press any key to exit!" #:min-width maxx))
       (wnoutrefresh stdscr)
-      (pnoutrefresh colorscheme 0 0 y x (min (+ y rows) (sub1 maxy)) (min (+ x cols) maxx))
+      (pnoutrefresh colorscheme 0 0 y x (min (+ y rows) maxy) (min (+ x cols) maxx))
       (doupdate)
       
       (when (char=? (wgetch colorscheme) #\u19A)
