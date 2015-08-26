@@ -14,17 +14,23 @@
 (define _window* (_cpointer/null 'WINDOW*))
 (define _ok/err (make-ctype _int #false (lambda [c] (not (eq? c -1)))))
 
-(define _chtype
-  (let ([mask (c-extern 'CHARTEXT)])
-    ;;; although char is combined with attribute and color, use (wcolor_set) and (wattr_on) instead
-    (make-ctype _uint
-                (lambda [r] (bitwise-and (char->integer r) mask))
-                (lambda [c] (integer->char (bitwise-and c mask))))))
-
 (define _attr
   ((lambda [a] (_bitmask a _uint))
    (foldl (lambda [a As] (list* (string->symbol (string-downcase (symbol->string a))) '= (c-extern a #:ctype _uint) As))
-          null (list 'NORMAL 'STANDOUT 'UNDERLINE 'REVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT))))
+          null (list 'NORMAL 'STANDOUT 'UNDERLINE 'UNDERCURL 'REVERSE 'INVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT
+                     'HORIZONTAL 'LEFT 'LOW 'RIGHT 'TOP 'VERTICAL 'COLORPAIR))))
+
+(define _chtype
+  (let ([attrmask (c-extern 'ATTRIBUTES #:ctype _long)]
+        [charmask (c-extern 'CHARTEXT #:ctype _long)]
+        [cpairmask (c-extern 'COLORPAIR #:ctype _long)]
+        [a->r (ctype-c->scheme _attr)]
+        [a->c (ctype-scheme->c _attr)])
+    ;;; although char is combined with attributes and color pair index, but (wattr_set) is more preferer;
+    ;;; since the full-supported chtype is too complex to FFI efficiently.
+    (make-ctype _long
+                (lambda [r] (bitwise-and (char->integer r) charmask))
+                (lambda [c] (integer->char (bitwise-and c charmask))))))
 
 (define _color/term
   (let* ([_named-color ((lambda [c] (_enum c _short #:unknown values))
@@ -140,13 +146,13 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; In order to reduce the complexity, I prefer (wattr_on) rather than (wattron)  ;;;
-;;; (wattron) and friends require OR COLOR_PAIR and ATTRIBUTES                    ;;;
-;;; while (wattr_on) only deals with attributes and leaves colors to (wcolor_set) ;;;
-;;; both of them works well with (wstandend).                                     ;;;
+;;;  since (wattron) and friends require OR COLOR_PAIR and ATTRIBUTES.            ;;;
+;;; All of them work well with (wstandend).                                       ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses wattr_on (_fun _window* _attr [opts : _pointer = #false] -> _ok/err -> #true))
-(define-ncurses wattr_off (_fun _window* _attr [opts : _pointer = #false] -> _ok/err -> #true))
+(define-ncurses wattr_set (_fun _window* _attr _color/term [opts : _pointer = #false] -> _ok/err -> #true))
 (define-ncurses wcolor_set (_fun _window* _color/term [opts : _pointer = #false] -> _ok/err -> #true))
+(define-ncurses wattr_off (_fun _window* _attr [opts : _pointer = #false] -> _ok/err -> #true))
 (define-ncurses wstandout (_fun _window* -> _ok/err -> #true))
 (define-ncurses wstandend (_fun _window* -> _ok/err -> #true))
 
@@ -226,8 +232,7 @@
 
 (define wstandset
   (lambda [stdwin info]
-    (wattr_on stdwin (color-pair-cterm info))
-    (wcolor_set stdwin (color-pair-index info))))
+    (wattr_set stdwin (color-pair-cterm info) (color-pair-index info))))
 
 (define waddhistr
   (lambda [stdwin info fmt . content]
