@@ -8,8 +8,7 @@
 
 (define-ffi-definer define-ncurses (ffi-lib "libncurses" #:global? #true))
 (define-ffi-definer define-termctl
-  (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
-                       "native" (system-library-subpath #false) "termctl")
+  (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths)) "native" (system-library-subpath #false) "termctl")
            #:global? #true))
 
 (define _window* (_cpointer/null 'WINDOW*))
@@ -54,8 +53,12 @@
 (define-ncurses cbreak (_fun -> _ok/err))
 (define-ncurses noecho (_fun -> _ok/err))
 (define-ncurses start_color (_fun -> _ok/err))
+(define-ncurses wtimeout (_fun _window* _int -> _ok/err))
 (define-ncurses keypad (_fun _window* _bool -> _ok/err))
 (define-ncurses idlok (_fun _window* _bool -> _ok/err))
+(define-ncurses idcok (_fun _window* _bool -> _ok/err))
+(define-ncurses scrollok (_fun _window* _bool -> _ok/err))
+(define-ncurses clearok (_fun _window* _bool -> _ok/err))
 (define-ncurses delwin (_fun _window* -> _ok/err))
 (define-ncurses endwin (_fun -> _ok/err))
 
@@ -69,33 +72,48 @@
 ;;; The subwindow and subpad suck                                                 ;;;
 ;;;  it must be deleted first when deleting its parent;                           ;;;
 ;;;  scrolling is unavaliable (as well as pads);                                  ;;;
-;;;  it will not save you from the move-and-repainting headache.                  ;;;
+;;;  its size cannot be changed manually.                                         ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-ncurses newpad (_fun [nlines : _int] [ncols : _int] -> _window*))
+(define-ncurses newwin (_fun [nrows : _int] [ncols : _int] [y : _int] [x : _int] -> _window*))
+(define-ncurses newpad (_fun [nrows : _int] [ncols : _int] -> _window*))
 (define-ncurses mvwvline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\|] [maxlong : _int] -> _ok/err))
 (define-ncurses mvwhline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\-] [maxlong : _int] -> _ok/err))
 
+(define-ncurses wresize (_fun _window* [rows : _int] [cols : _int] -> _ok/err))
 (define-ncurses getcury (_fun _window* -> _int))
 (define-ncurses getcurx (_fun _window* -> _int))
 (define-ncurses getmaxy (_fun _window* -> _int))
 (define-ncurses getmaxx (_fun _window* -> _int))
 
-(define-ncurses putwin (_fun _path -> _ok/err))
-(define-ncurses getwin (_fun _path -> _ok/err))
+(define-ncurses wgetch (_fun _window* -> [key : _int] -> (cond [(negative? key) #false] [else (integer->char key)])))
+(define-ncurses wmove (_fun _window* _int _int -> _ok/err))
+(define-ncurses wscrl (_fun _window* _int -> _ok/err))
+(define-ncurses wrefresh (_fun _window* -> _ok/err))
+(define-ncurses wnoutrefresh (_fun _window* -> _ok/err))
+(define-ncurses doupdate (_fun -> _ok/err))
+
 (define-ncurses wclear (_fun _window* -> _ok/err)) ;;; it just calls (werase)
 (define-ncurses wclrtobot (_fun _window* -> _ok/err))
 (define-ncurses wclrtoeol (_fun _window* -> _ok/err))
-
-(define-ncurses wtimeout (_fun _window* _int -> _ok/err)) ;;; blocking mode for getch()
-(define-ncurses wgetch (_fun _window* -> [key : _int] -> (cond [(negative? key) #false] [else (integer->char key)])))
-(define-ncurses wmove (_fun _window* _int _int -> _ok/err))
+(define-ncurses winsdelln (_fun _window* _int -> _ok/err))
+(define-ncurses wdelch (_fun _window* -> _ok/err))
+(define-ncurses mvwdelch (_fun _window* _int _int -> _ok/err))
+(define-ncurses wdeleteln (_fun _window* -> _ok/err))
+(define-ncurses winsch (_fun _window* -> _ok/err))
+(define-ncurses mvwinsch (_fun _window* _int _int -> _ok/err))
+(define-ncurses winsertln (_fun _window* -> _ok/err))
 (define-ncurses waddch (_fun _window* _chtype -> _ok/err))
 (define-ncurses mvwaddch (_fun _window* _int _int _chtype -> _ok/err))
 (define-ncurses waddwstr (_fun _window* _string/ucs-4 -> _ok/err))
 (define-ncurses mvwaddwstr (_fun _window* _int _int _string/ucs-4 -> _ok/err))
-(define-ncurses wrefresh (_fun _window* -> _ok/err))
-(define-ncurses wnoutrefresh (_fun _window* -> _ok/err))
-(define-ncurses doupdate (_fun -> _ok/err))
+
+(define-ncurses putwin (_fun _path -> _ok/err))
+(define-ncurses getwin (_fun _path -> _ok/err))
+(define-ncurses overlay (_fun [src : _window*] [dest : _window*] -> _ok/err)) ; blanks are not copied
+(define-ncurses overwrite (_fun [src : _window*] [dest : _window*] -> _ok/err)) ; blanks are copied either
+(define-ncurses copywin (_fun [src : _window*] [dest : _window*] [srcy : _int] [srcx : _int]
+                              [desty : _int] [destx : _int] [desty+height : _int] [destx+width : _int] [overlay : _bool]
+                               -> _ok/err))
 
 ; Negative coordinates in these two rontines are treated as zero.
 (define-ncurses prefresh (_fun [pad : _window*] [pady : _int] [padx : _int]
@@ -179,19 +197,21 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (struct color-pair (index cterm ctermfg ctermbg) #:prefab)
 (define :syntax (curryr hash-ref (const (color-pair 0 null 'none 'none))))
-(define vim-highlight->ncurses-color-pair
+(define vim-highlight->ncurses-color-pair ;;; this function should invoked after (initscr)
   (lambda [colors.vim]
     (define token->symbol (compose1 string->symbol string-downcase))
     (define token->number (compose1 (curry min 256) string->number))
     (define token->symlist (lambda [t] (map token->symbol (string-split t #px"(=|,|none)+"))))
     (define highlight (make-hash))
+    (define color? (has_colors))
     (when (file-exists? colors.vim)
       (with-input-from-file colors.vim
         (thunk (for ([line (in-port read-line)]
                      #:when (< (hash-count highlight) 256)
                      #:when (regexp-match? #px"c?term([fb]g)?=" line))
                  (define-values [attrs head] (partition (curry regexp-match #px"=") (string-split line)))
-                 (define hi (vector (add1 (hash-count highlight)) null 'none 'none))
+                 (define ipair (add1 (hash-count highlight)))
+                 (define hi (vector ipair null 'none 'none))
                  (for ([token (in-list attrs)])
                    (match token
                      [(pregexp #px"c?term=(.+)" (list _ attrs)) (vector-set! hi 1 (token->symlist attrs))]
@@ -200,25 +220,24 @@
                      [(pregexp #px"ctermbg=(\\d+)" (list _ nbg)) (vector-set! hi 3 (token->number nbg))]
                      [(pregexp #px"ctermbg=(\\D+)" (list _ bg)) (vector-set! hi 3 (token->symbol bg))]
                      [_ (void '(skip gui settings))]))
+                 (unless (false? color?) (init_pair ipair (vector-ref hi 2) (vector-ref hi 3)))
                  (hash-set! highlight (string->symbol (last head)) (apply color-pair (vector->list hi)))))))
     highlight))
 
-(define wstandon
+(define wstandset
   (lambda [stdwin info]
-    (when (< 0 (color-pair-index info))
-      (init_pair (color-pair-index info) (color-pair-ctermfg info) (color-pair-ctermbg info)))
     (wattr_on stdwin (color-pair-cterm info))
     (wcolor_set stdwin (color-pair-index info))))
 
 (define waddhistr
   (lambda [stdwin info fmt . content]
-    (wstandon stdwin info)
+    (wstandset stdwin info)
     (waddwstr stdwin (apply format fmt content))
     (wstandend stdwin)))
 
 (define mvwaddhistr
   (lambda [stdwin y x info fmt . content]
-    (wstandon stdwin info)
+    (wstandset stdwin info)
     (mvwaddwstr stdwin y x (apply format fmt content))
     (wstandend stdwin)))
 
@@ -235,7 +254,7 @@
 
   (with-handlers ([exn:fail? uncaught-exn])
     (unless (and (wrefresh stdscr) (has_colors) (start_color) (use_default_colors) (curs_set 0)
-                 (raw) (noecho) (wtimeout stdscr -1) (keypad stdscr #true) (idlok stdscr #true))
+                 (raw) (noecho) (wtimeout stdscr -1) (keypad stdscr #true))
       (error "A thunk of initializing failed!"))
     
     (define colors.vim (build-path (digimon-stone) "colors.vim"))
