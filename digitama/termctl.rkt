@@ -89,7 +89,7 @@
 ;;;  scrolling is unavaliable (as well as pads);                                  ;;;
 ;;;  its size cannot be changed manually.                                         ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-ncurses newwin (_fun [nrows : _int] [ncols : _int] [y : _int] [x : _int] -> _window*))
+(define-ncurses newwin (_fun [nrows : _int] [ncols : _int] [y : _int] [x : _int] -> _window*) #:wrap (allocator delwin))
 (define-ncurses newpad (_fun [nrows : _int] [ncols : _int] -> _window*) #:wrap (allocator delwin))
 (define-ncurses mvwvline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\|] [maxlong : _int] -> _ok/err))
 (define-ncurses mvwhline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\-] [maxlong : _int] -> _ok/err))

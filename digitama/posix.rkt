@@ -145,6 +145,7 @@
         -> _void))
 
 (module* typed/ffi typed/racket
+  ;;; Meanwhile Typed Racket does not support _pointer well
   (require/typed/provide (submod "..")
                          [#:struct (exn:foreign exn) ([errno : Integer])]
                          [strerror (-> Natural String)]
