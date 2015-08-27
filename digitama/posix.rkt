@@ -4,11 +4,13 @@
 (provide (all-from-out "digicore.rkt"))
 (provide (all-from-out ffi/unsafe))
 (provide (all-from-out ffi/unsafe/define))
+(provide (all-from-out ffi/unsafe/alloc))
 
 @require{digicore.rkt}
 
 (require ffi/unsafe)
 (require ffi/unsafe/define)
+(require ffi/unsafe/alloc)
 (require (only-in '#%foreign ctype-c->scheme ctype-scheme->c))
 
 (struct exn:foreign exn:fail (errno))

@@ -15,6 +15,14 @@ uintptr_t ATTRIBUTES = A_ATTRIBUTES;
 uintptr_t CHARTEXT = A_CHARTEXT;
 uintptr_t COLORPAIR = A_COLOR;
 
+unsigned long color_pair(short n) {
+    return COLOR_PAIR(n);
+}
+
+short pair_number(unsigned long c) {
+    return PAIR_NUMBER(c);
+}
+
 /* `chtype` attributes, ordered from low-bit to high-bit */
 uintptr_t NORMAL = A_NORMAL;
 uintptr_t NONE = A_NORMAL; /* vim compatible */
@@ -35,6 +43,14 @@ uintptr_t LOW = A_LOW;
 uintptr_t RIGHT = A_RIGHT;
 uintptr_t TOP = A_TOP;
 uintptr_t VERTICAL = A_VERTICAL;
+
+void wbkgd_reset(WINDOW* stdwin, attr_t attrs, short color, short ch) {
+    wbkgd(stdwin, attrs | COLOR_PAIR(color) | ch);
+}
+
+void wbkgd_set(WINDOW* stdwin, attr_t attrs, short color, short ch) {
+    wbkgdset(stdwin, attrs | COLOR_PAIR(color) | ch);
+}
 
 /* 
  * Begin ViM Modeline

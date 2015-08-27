@@ -6,6 +6,8 @@
 
 @require{posix.rkt}
 
+(struct chtype (char attributes color-pair) #:prefab)
+
 (define-ffi-definer define-ncurses (ffi-lib "libncurses" #:global? #true))
 (define-ffi-definer define-termctl
   (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths)) "native" (system-library-subpath #false) "termctl")
@@ -18,19 +20,24 @@
   ((lambda [a] (_bitmask a _uint))
    (foldl (lambda [a As] (list* (string->symbol (string-downcase (symbol->string a))) '= (c-extern a #:ctype _uint) As))
           null (list 'NORMAL 'STANDOUT 'UNDERLINE 'UNDERCURL 'REVERSE 'INVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT
-                     'HORIZONTAL 'LEFT 'LOW 'RIGHT 'TOP 'VERTICAL 'COLORPAIR))))
+                     'HORIZONTAL 'LEFT 'LOW 'RIGHT 'TOP 'VERTICAL))))
 
 (define _chtype
   (let ([attrmask (c-extern 'ATTRIBUTES #:ctype _long)]
         [charmask (c-extern 'CHARTEXT #:ctype _long)]
         [cpairmask (c-extern 'COLORPAIR #:ctype _long)]
-        [a->r (ctype-c->scheme _attr)]
-        [a->c (ctype-scheme->c _attr)])
-    ;;; although char is combined with attributes and color pair index, but (wattr_set) is more preferer;
-    ;;; since the full-supported chtype is too complex to FFI efficiently.
+        [color_pair (c-extern 'color_pair #:ctype (_fun _short -> _long))]
+        [pair_number (c-extern 'pair_number #:ctype (_fun _long -> _short))]
+        [integer->attrs (ctype-c->scheme _attr)]
+        [attrs->integer (ctype-scheme->c _attr)])
     (make-ctype _long
-                (lambda [r] (bitwise-and (char->integer r) charmask))
-                (lambda [c] (integer->char (bitwise-and c charmask))))))
+                (lambda [r] (cond [(char? r) (bitwise-and (char->integer r) charmask)]
+                                  [else (bitwise-ior (bitwise-and (char->integer (chtype-char r)) charmask)
+                                                     (attrs->integer (chtype-attributes r))
+                                                     (color_pair (chtype-color-pair r)))]))
+                (lambda [c] (chtype (integer->char (bitwise-and c charmask))
+                                    (integer->attrs (bitwise-and c attrmask))
+                                    (pair_number (bitwise-and c cpairmask)))))))
 
 (define _color/term
   (let* ([_named-color ((lambda [c] (_enum c _short #:unknown values))
@@ -55,6 +62,8 @@
 
 ;;; Initialization
 (define-ncurses initscr (_fun -> _window*))
+(define-ncurses beep (_fun -> _ok/err))
+(define-ncurses flash (_fun -> _ok/err))
 (define-ncurses raw (_fun -> _ok/err))
 (define-ncurses cbreak (_fun -> _ok/err))
 (define-ncurses noecho (_fun -> _ok/err))
@@ -65,7 +74,7 @@
 (define-ncurses idcok (_fun _window* _bool -> _ok/err))
 (define-ncurses scrollok (_fun _window* _bool -> _ok/err))
 (define-ncurses clearok (_fun _window* _bool -> _ok/err))
-(define-ncurses delwin (_fun _window* -> _ok/err))
+(define-ncurses delwin (_fun _window* -> _ok/err) #:wrap (deallocator))
 (define-ncurses endwin (_fun -> _ok/err))
 
 ;;; Windows/Pads and Input/Output functions
@@ -81,17 +90,23 @@
 ;;;  its size cannot be changed manually.                                         ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses newwin (_fun [nrows : _int] [ncols : _int] [y : _int] [x : _int] -> _window*))
-(define-ncurses newpad (_fun [nrows : _int] [ncols : _int] -> _window*))
+(define-ncurses newpad (_fun [nrows : _int] [ncols : _int] -> _window*) #:wrap (allocator delwin))
 (define-ncurses mvwvline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\|] [maxlong : _int] -> _ok/err))
 (define-ncurses mvwhline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\-] [maxlong : _int] -> _ok/err))
 
 (define-ncurses wresize (_fun _window* [rows : _int] [cols : _int] -> _ok/err))
 (define-ncurses getcury (_fun _window* -> _int))
 (define-ncurses getcurx (_fun _window* -> _int))
+(define-ncurses getbegy (_fun _window* -> _int))
+(define-ncurses getbegx (_fun _window* -> _int))
 (define-ncurses getmaxy (_fun _window* -> _int))
 (define-ncurses getmaxx (_fun _window* -> _int))
 
-(define-ncurses wgetch (_fun _window* -> [key : _int] -> (cond [(negative? key) #false] [else (integer->char key)])))
+(define-ncurses flushinp (_fun -> _ok/err -> #true))
+(define-ncurses getch (_fun -> [key : _int] -> (and (>= key 0) (integer->char key))))
+(define-ncurses winch (_fun _window* -> _chtype))
+(define-ncurses mvwinch (_fun _window* _int _int -> _chtype))
+
 (define-ncurses wmove (_fun _window* _int _int -> _ok/err))
 (define-ncurses wscrl (_fun _window* _int -> _ok/err))
 (define-ncurses wrefresh (_fun _window* -> _ok/err))
@@ -133,6 +148,8 @@
 (define-ncurses has_colors (_fun -> _bool))
 (define-ncurses use_default_colors (_fun -> _ok/err))
 (define-ncurses assume_default_colors (_fun _color/term _color/term -> _ok/err))
+(define-termctl wbkgd_reset (_fun _window* _attr _color/term _chtype -> _void))
+(define-termctl wbkgd_set (_fun _window* _attr _color/term _chtype -> _void))
 
 (define-ncurses mvwchgat
   (_fun [win : _window*]
@@ -234,6 +251,10 @@
   (lambda [stdwin info]
     (wattr_set stdwin (color-pair-cterm info) (color-pair-index info))))
 
+(define wbkgdhiset
+  (lambda [stdwin info]
+    (wbkgd_set stdwin (color-pair-cterm info) (color-pair-index info) #\000)))
+
 (define waddhistr
   (lambda [stdwin info fmt . content]
     (wstandset stdwin info)
@@ -255,7 +276,7 @@
     (for ([line (in-list (call-with-input-string (exn-message e) port->lines))])
       (waddwstr stdscr (~a line #\newline #:min-width (getmaxx stdscr))))
     (wrefresh stdscr)
-    (void (wgetch stdscr)))
+    (void (getch)))
 
   (with-handlers ([exn:fail? uncaught-exn])
     (unless (and (wrefresh stdscr) (has_colors) (start_color) (use_default_colors) (curs_set 0)
@@ -269,18 +290,18 @@
     (define colorscheme (newpad rows cols))
     (when (false? colorscheme) (error "Unable to create color area!"))
     (for ([[name group] (in-hash highlight)])
-      (waddhistr colorscheme group (~a name #\[ (color-pair-ctermfg group) #\, (color-pair-ctermbg group) #\] #:min-width units)))
+      (waddhistr colorscheme group (~a name #\[ (color-pair-ctermfg group) #\, (color-pair-ctermbg group) #\] #:width units)))
     (wstandend colorscheme)
       
     (let display-colors ()
-      (define-values [maxy y] (let ([maxy (- (getmaxy stdscr) 3)]) (values maxy (add1 (max (quotient (- maxy rows) 2) 0)))))
+      (define-values [maxy y] (let ([maxy (- (getmaxy stdscr) 2)]) (values maxy (add1 (max (quotient (- maxy rows) 2) 0)))))
       (define-values [maxx x] (let ([maxx (getmaxx stdscr)]) (values maxx (max (quotient (- maxx cols) 2) 0))))
       (wclear stdscr)
-      (mvwaddhistr stdscr 0 0 (:syntax highlight 'Visual) (~a "> raco test digivice/sakuyamon/izuna.rkt" #:min-width maxx))
-      (mvwaddhistr stdscr (add1 maxy) 0 (:syntax highlight 'StatusLine) (~a "Press any key to exit!" #:min-width maxx))
+      (mvwaddhistr stdscr 0 0 (:syntax highlight 'Visual) (~a "> raco test digivice/sakuyamon/izuna.rkt" #:width maxx))
+      (mvwaddhistr stdscr (add1 maxy) 0 (:syntax highlight 'StatusLine) (~a "Press any key to exit!" #:width maxx))
       (wnoutrefresh stdscr)
       (pnoutrefresh colorscheme 0 0 y x (min (+ y rows) maxy) (min (+ x cols) maxx))
       (doupdate)
       
-      (when (char=? (wgetch colorscheme) #\u19A)
+      (when (char=? (getch) #\u19A)
         (display-colors)))))
