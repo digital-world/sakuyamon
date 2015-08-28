@@ -1,6 +1,6 @@
 #lang at-exp racket
 
-(provide (all-defined-out) c-extern)
+(provide (except-out (all-defined-out) OK ERR) c-extern)
 
 (require racket/draw)
 
@@ -13,8 +13,12 @@
   (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths)) "native" (system-library-subpath #false) "termctl")
            #:global? #true))
 
+(define OK (c-extern 'OKAY))
+(define ERR (c-extern 'ERROR))
+
 (define _window* (_cpointer/null 'WINDOW*))
-(define _ok/err (make-ctype _int #false (lambda [c] (not (eq? c -1)))))
+(define _ok/err (make-ctype _int #false (lambda [c] (not (eq? c ERR)))))
+(define stdscr (make-parameter #false))
 
 (define _attr
   ((lambda [a] (_bitmask a _uint))
@@ -61,15 +65,32 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;; Initialization
-(define-ncurses initscr (_fun -> _window*))
+(define-ncurses ripoffline ; this can be invoked up to 5 times
+  (_fun [gt0@top/lt0@bottom : _int]
+        ((lambda [r->c] (make-ctype _fpointer r->c #false))
+         (lambda [r] ((curryr function-ptr (_fun [bar : _window*] [cols : _int] -> _int))
+                      (lambda [bar cols] ; (ripoffline) registers (hook/2) to be invoked inside (initscr)
+                        (unless (false? bar) ; inability to allocate the ripped off line window
+                          ((lambda _ (if (wnoutrefresh bar) OK ERR)) ; (hook/2) should return an integer value which is indeed useless
+                           (match r
+                             [(? parameter? outside-needs-this) (outside-needs-this bar)]
+                             [(? procedure? hook/2-as-expected) (hook/2-as-expected bar cols)]
+                             [(list-no-order (? procedure? hook/2) attrs ...) (void (wbkgdset bar (chtype #\nul attrs 0)) (hook/2 bar cols))])))))))
+        -> _ok/err ; always #true
+        -> (void)))
+
+(define-ncurses initscr (_fun -> [curwin : _window*] -> (and (stdscr curwin) curwin)))
 (define-ncurses beep (_fun -> _ok/err))
 (define-ncurses flash (_fun -> _ok/err))
 (define-ncurses raw (_fun -> _ok/err))
 (define-ncurses cbreak (_fun -> _ok/err))
 (define-ncurses noecho (_fun -> _ok/err))
 (define-ncurses start_color (_fun -> _ok/err))
-(define-ncurses wtimeout (_fun _window* _int -> _ok/err))
-(define-ncurses keypad (_fun _window* _bool -> _ok/err))
+(define-ncurses timeout (_fun _int -> _ok/err))
+(define-ncurses flushinp (_fun -> _ok/err -> #true))
+(define-ncurses qiflush (_fun -> _ok/err)) ; Break, SIGINT, SIGQUIT
+(define-ncurses intrflush (_fun [null : _window* = #false] _bool -> _ok/err)) ; SIGINT, SIGQUIT, SIGTSTP
+(define-ncurses keypad (_fun [stdwin : _window* = (stdscr)] _bool -> _ok/err))
 (define-ncurses idlok (_fun _window* _bool -> _ok/err))
 (define-ncurses idcok (_fun _window* _bool -> _ok/err))
 (define-ncurses scrollok (_fun _window* _bool -> _ok/err))
@@ -102,7 +123,7 @@
 (define-ncurses getmaxy (_fun _window* -> _int))
 (define-ncurses getmaxx (_fun _window* -> _int))
 
-(define-ncurses flushinp (_fun -> _ok/err -> #true))
+;;; TODO: add support to winchstr, winstr and friends which can get content from buffer.
 (define-ncurses getch (_fun -> [key : _int] -> (and (>= key 0) (integer->char key))))
 (define-ncurses winch (_fun _window* -> _chtype))
 (define-ncurses mvwinch (_fun _window* _int _int -> _chtype))
@@ -148,8 +169,8 @@
 (define-ncurses has_colors (_fun -> _bool))
 (define-ncurses use_default_colors (_fun -> _ok/err))
 (define-ncurses assume_default_colors (_fun _color/term _color/term -> _ok/err))
-(define-termctl wbkgd_reset (_fun _window* _attr _color/term _chtype -> _void))
-(define-termctl wbkgd_set (_fun _window* _attr _color/term _chtype -> _void))
+(define-ncurses wbkgd (_fun _window* _chtype -> _void))
+(define-ncurses wbkgdset (_fun _window* _chtype -> _void))
 
 (define-ncurses mvwchgat
   (_fun [win : _window*]
@@ -218,22 +239,20 @@
 (define-ncurses scr_set (_fun _file -> _ok/err))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(struct color-pair (index cterm ctermfg ctermbg) #:prefab)
-(define :syntax (curryr hash-ref (const (color-pair 0 null 'none 'none))))
-(define vim-highlight->ncurses-color-pair ;;; this function should invoked after (initscr)
+(define load-vim-highlight! ;;; this function should invoked after (initscr)
   (lambda [colors.vim]
     (define token->symbol (compose1 string->symbol string-downcase))
     (define token->number (compose1 (curry min 256) string->number))
     (define token->symlist (lambda [t] (map token->symbol (string-split t #px"(=|,|none)+"))))
-    (define highlight (make-hash))
     (define color? (has_colors))
     (when (file-exists? colors.vim)
+      (hash-clear! vim-highlight)
       (with-input-from-file colors.vim
         (thunk (for ([line (in-port read-line)]
-                     #:when (< (hash-count highlight) 256)
+                     #:when (< (hash-count vim-highlight) 256)
                      #:when (regexp-match? #px"c?term([fb]g)?=" line))
                  (define-values [attrs head] (partition (curry regexp-match #px"=") (string-split line)))
-                 (define ipair (add1 (hash-count highlight)))
+                 (define ipair (add1 (hash-count vim-highlight)))
                  (define hi (vector ipair null 'none 'none))
                  (for ([token (in-list attrs)])
                    (match token
@@ -244,64 +263,78 @@
                      [(pregexp #px"ctermbg=(\\D+)" (list _ bg)) (vector-set! hi 3 (token->symbol bg))]
                      [_ (void '(skip gui settings))]))
                  (unless (false? color?) (init_pair ipair (vector-ref hi 2) (vector-ref hi 3)))
-                 (hash-set! highlight (string->symbol (last head)) (apply color-pair (vector->list hi)))))))
-    highlight))
+                 (hash-set! vim-highlight (string->symbol (last head)) (apply highlight (vector->list hi)))))))))
 
 (define wstandset
-  (lambda [stdwin info]
-    (wattr_set stdwin (color-pair-cterm info) (color-pair-index info))))
+  (lambda [stdwin vim-hiname]
+    (match (hash-ref vim-highlight vim-hiname (const #false))
+      [(? false?) (wattr_set stdwin null 0)]
+      [hi (wattr_set stdwin (highlight-cterm hi) (highlight-index hi))])))
 
 (define wbkgdhiset
-  (lambda [stdwin info]
-    (wbkgd_set stdwin (color-pair-cterm info) (color-pair-index info) #\000)))
+  (lambda [stdwin vim-hiname]
+    (match (hash-ref vim-highlight vim-hiname (const #false))
+      [(? false?) (wbkgdset stdwin (chtype #\nul null 0))]
+      [hi (wbkgdset stdwin (chtype #\nul (highlight-cterm hi) (highlight-index hi)))])))
 
 (define waddhistr
-  (lambda [stdwin info fmt . content]
-    (wstandset stdwin info)
+  (lambda [stdwin vim-hiname fmt . content]
+    (wstandset stdwin vim-hiname)
     (waddwstr stdwin (apply format fmt content))
     (wstandend stdwin)))
 
 (define mvwaddhistr
-  (lambda [stdwin y x info fmt . content]
-    (wstandset stdwin info)
+  (lambda [stdwin y x vim-hiname fmt . content]
+    (wstandset stdwin vim-hiname)
     (mvwaddwstr stdwin y x (apply format fmt content))
     (wstandend stdwin)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module+ test
-  (define stdscr (initscr))
-  (define atexit (plumber-add-flush! (current-plumber) (lambda [this] (plumber-flush-handle-remove! this) (endwin))))
+  (define statusbar (make-parameter #false))
+  (ripoffline 1 (list 'reverse (lambda [titlebar cols] (waddwstr titlebar (~a "> raco test digitama/termctl.rkt" #:width cols)))))
+  (ripoffline -1 statusbar)
+  (void (initscr)
+        (plumber-add-flush! (current-plumber) (lambda [this] (plumber-flush-handle-remove! this) (endwin))))
 
   (define (uncaught-exn e)
     (for ([line (in-list (call-with-input-string (exn-message e) port->lines))])
-      (waddwstr stdscr (~a line #\newline #:min-width (getmaxx stdscr))))
-    (wrefresh stdscr)
+      (waddwstr (stdscr) (~a (string-trim line) #\newline #:max-width (getmaxx (stdscr)))))
+    (wrefresh (stdscr))
     (void (getch)))
 
   (with-handlers ([exn:fail? uncaught-exn])
-    (unless (and (wrefresh stdscr) (has_colors) (start_color) (use_default_colors) (curs_set 0)
-                 (raw) (noecho) (wtimeout stdscr -1) (keypad stdscr #true))
+    (unless (and (stdscr) (statusbar) (has_colors) (start_color) (use_default_colors) (curs_set 0)
+                 (raw) (noecho) (timeout -1) (keypad #true))
       (error "A thunk of initializing failed!"))
     
-    (define colors.vim (build-path (digimon-stone) "colors.vim"))
-    (define highlight (vim-highlight->ncurses-color-pair colors.vim))
-    (define-values [units fields] (values (+ 24 (apply max (map (compose1 string-length symbol->string) (hash-keys highlight)))) 3))
-    (define-values [cols rows] (values (* fields units) (ceiling (/ (hash-count highlight) fields))))
+    (load-vim-highlight! (build-path (digimon-stone) "colors.vim"))
+    (define-values [units fields] (values (+ 24 (apply max (map (compose1 string-length symbol->string) (hash-keys vim-highlight)))) 3))
+    (define-values [cols rows] (values (* fields units) (ceiling (/ (hash-count vim-highlight) fields))))
     (define colorscheme (newpad rows cols))
     (when (false? colorscheme) (error "Unable to create color area!"))
-    (for ([[name group] (in-hash highlight)])
-      (waddhistr colorscheme group (~a name #\[ (color-pair-ctermfg group) #\, (color-pair-ctermbg group) #\] #:width units)))
+    (for ([[name group] (in-hash vim-highlight)])
+      (waddhistr colorscheme name (~a name #\[ (highlight-ctermfg group) #\, (highlight-ctermbg group) #\] #:width units)))
     (wstandend colorscheme)
-      
+    
     (let display-colors ()
-      (define-values [maxy y] (let ([maxy (- (getmaxy stdscr) 2)]) (values maxy (add1 (max (quotient (- maxy rows) 2) 0)))))
-      (define-values [maxx x] (let ([maxx (getmaxx stdscr)]) (values maxx (max (quotient (- maxx cols) 2) 0))))
-      (wclear stdscr)
-      (mvwaddhistr stdscr 0 0 (:syntax highlight 'Visual) (~a "> raco test digivice/sakuyamon/izuna.rkt" #:width maxx))
-      (mvwaddhistr stdscr (add1 maxy) 0 (:syntax highlight 'StatusLine) (~a "Press any key to exit!" #:width maxx))
-      (wnoutrefresh stdscr)
+      (define-values [maxy y] (let ([maxy (getmaxy (stdscr))]) (values maxy (max (quotient (- maxy rows) 2) 0))))
+      (define-values [maxx x] (let ([maxx (getmaxx (stdscr))]) (values maxx (max (quotient (- maxx cols) 2) 0))))
+      (mvwaddhistr (statusbar) 0 0 'StatusLine (~a "Press any key to Exit!" #:width maxx))
+      (wnoutrefresh (stdscr))
+      (wnoutrefresh (statusbar))
       (pnoutrefresh colorscheme 0 0 y x (min (+ y rows) maxy) (min (+ x cols) maxx))
       (doupdate)
       
-      (when (char=? (getch) #\u19A)
+      (when (char=? (getch) #\u019A)
+        (wclear (stdscr))
         (display-colors)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(module digitama racket
+  (provide (all-defined-out))
+
+  (struct highlight (index cterm ctermfg ctermbg) #:prefab)
+  (define vim-highlight (make-hash)))
+
+(require (submod "." digitama))

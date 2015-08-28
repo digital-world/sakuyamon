@@ -10,6 +10,10 @@
 #include <ncurses.h>
 #endif
 
+/* return code */
+int OKAY = OK;
+int ERROR = ERR;
+
 /* `chtype` masks */
 uintptr_t ATTRIBUTES = A_ATTRIBUTES;
 uintptr_t CHARTEXT = A_CHARTEXT;
@@ -44,16 +48,9 @@ uintptr_t RIGHT = A_RIGHT;
 uintptr_t TOP = A_TOP;
 uintptr_t VERTICAL = A_VERTICAL;
 
-void wbkgd_reset(WINDOW* stdwin, attr_t attrs, short color, short ch) {
-    wbkgd(stdwin, attrs | COLOR_PAIR(color) | ch);
-}
-
-void wbkgd_set(WINDOW* stdwin, attr_t attrs, short color, short ch) {
-    wbkgdset(stdwin, attrs | COLOR_PAIR(color) | ch);
-}
-
 /* 
  * Begin ViM Modeline
  * vim:ft=c:ts=4:
  * End ViM
  */
+
