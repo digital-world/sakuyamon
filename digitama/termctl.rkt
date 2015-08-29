@@ -60,13 +60,17 @@
               (lambda [r] (exact-round (* r 1000/255))) 
               (lambda [c] (exact-round (* c 255/1000)))))
 
-(define acs_map (lambda [key] (hash-ref (force acs-map) key (const (chtype #\nul null 0)))))
 (define acs-map (let ([acsmap (c-extern 'initailizer_element_should_be_constant #:ctype (_fun _symbol -> _chtype))])
                   (delay #| at this point ncureses has not initailized yet |#
                     (make-hash (map (lambda [acs] (cons acs (acsmap acs)))
                                     (list 'ULCORNER 'LLCORNER 'URCORNER 'LRCORNER 'RTEE 'LTEE 'BTEE 'TTEE 'HLINE 'VLINE
                                           'S1 'S3 'S7 'S9 'DIAMOND 'CKBOARD 'DEGREE 'BULLET 'BOARD 'LANTERN 'BLOCK 'STERLING
                                           'LARROW 'RARROW 'DARROW 'UARROW 'PLUS 'PLMINUS 'LEQUAL 'GEQUAL 'PI 'NEQUAL))))))
+
+(define acs_map
+  (lambda [key #:extra_attrs [attrs null]]
+    (define altchar (hash-ref (force acs-map) key (const (chtype #\nul null 0))))
+    (chtype (chtype-char altchar) (append (chtype-attributes altchar) attrs) 0)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                         WARNING: ncurses uses YX-Coordinate System                          ;;;
@@ -128,6 +132,7 @@
                               [_chtype = (acs_map 'ULCORNER)] [_chtype = (acs_map 'URCORNER)] [_chtype = (acs_map 'LLCORNER)] [_chtype = (acs_map 'LRCORNER)]
                               -> _ok/err))
 
+(define-ncurses mvwin (_fun _window* [y : _int] [x : _int] -> _ok/err))
 (define-ncurses wresize (_fun _window* [rows : _int] [cols : _int] -> _ok/err))
 (define-ncurses wsetscrreg (_fun _window* [top : _int] [bot : _int] -> _ok/err))
 (define-ncurses getcury (_fun _window* -> _int))
@@ -332,6 +337,7 @@
     (load-vim-highlight! (build-path (digimon-stone) colors.vim))
     (define-values [units fields] (values (+ 24 (apply max (map (compose1 string-length symbol->string) (hash-keys vim-highlight)))) 3))
     (define-values [cols rows] (values (* fields units) (ceiling (/ (hash-count vim-highlight) fields))))
+    (define stdclr (newwin 0 0 0 0)) ; full screen window
     (define colorscheme (newpad rows cols))
     (when (false? colorscheme) (error "Unable to create color area!"))
     (for ([[name group] (in-hash vim-highlight)])
@@ -342,7 +348,8 @@
       (define-values [maxy mby y] (let ([maxy (getmaxy (stdscr))]) (values maxy (min maxy (+ rows 2)) (max (quotient (- maxy rows 2) 2) 0))))
       (define-values [maxx mbx x] (let ([maxx (getmaxx (stdscr))]) (values maxx (min maxx (+ cols 2)) (max (quotient (- maxx cols 2) 2) 0))))
       (define-values [title title-offset] (values (format " stone/~a " colors.vim) 2))
-      (define stdclr (newwin mby mbx y x))
+      (wresize stdclr mby mbx)
+      (mvwin stdclr y x)
       (when (false? colorscheme) (error "Unable to create color area border!"))
       (wstandset stdclr 'VertSplit)
       (wborder stdclr)
@@ -359,7 +366,6 @@
       (doupdate)
       
       (when (char=? (getch) #\u019A)
-        (delwin stdclr)
         (wclear (stdscr))
         (wclear (statusbar))
         (display-colors)))))
