@@ -262,13 +262,13 @@
   (lambda [colors.vim]
     (define token->symbol (compose1 string->symbol string-downcase))
     (define token->number (compose1 (curry min 256) string->number))
-    (define token->symlist (lambda [t] (map token->symbol (string-split t #px"(=|,|none)+"))))
+    (define token->symlist (lambda [t] (remove* (list 'none) (map token->symbol (string-split t #px"(=|,)+")))))
     (define color? (has_colors))
     (when (file-exists? colors.vim)
       (hash-clear! vim-highlight)
       (with-input-from-file colors.vim
         (thunk (for ([line (in-port read-line)]
-                     #:when (< (hash-count vim-highlight) 256)
+                     #:when (< (hash-count vim-highlight) (sub1 256))
                      #:when (regexp-match? #px"c?term([fb]g)?=" line))
                  (define-values [attrs head] (partition (curry regexp-match #px"=") (string-split line)))
                  (define ipair (add1 (hash-count vim-highlight)))
@@ -281,8 +281,9 @@
                      [(pregexp #px"ctermbg=(\\d+)" (list _ nbg)) (vector-set! hi 3 (token->number nbg))]
                      [(pregexp #px"ctermbg=(\\D+)" (list _ bg)) (vector-set! hi 3 (token->symbol bg))]
                      [_ (void '(skip gui settings))]))
-                 (unless (false? color?) (init_pair ipair (vector-ref hi 2) (vector-ref hi 3)))
-                 (hash-set! vim-highlight (string->symbol (last head)) (apply highlight (vector->list hi)))))))))
+                 (with-handlers ([void void])
+                   (unless (false? color?) (init_pair ipair (vector-ref hi 2) (vector-ref hi 3)))
+                   (hash-set! vim-highlight (string->symbol (last head)) (apply highlight (vector->list hi))))))))))
 
 (define wstandset
   (lambda [stdwin vim-hiname]
@@ -315,9 +316,9 @@
     (wstandend stdwin)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(module+ test
+(module+ main
   (define statusbar (make-parameter #false))
-  (ripoffline 1 (list 'reverse (lambda [titlebar cols] (waddwstr titlebar (~a "> raco test digitama/termctl.rkt" #:width cols)))))
+  (ripoffline 1 (list 'reverse (lambda [titlebar cols] (waddwstr titlebar (~a "> racket digitama/termctl.rkt" #:width cols)))))
   (ripoffline -1 statusbar)
   (void (initscr)
         (plumber-add-flush! (current-plumber) (lambda [this] (plumber-flush-handle-remove! this) (endwin))))
@@ -331,44 +332,57 @@
   (with-handlers ([exn:fail? uncaught-exn])
     (unless (and (stdscr) (statusbar) (has_colors) (start_color) (use_default_colors) (curs_set 0)
                  (raw) (noecho) (timeout -1) (keypad #true))
-      (error "A thunk of initializing failed!"))
+      (error "A thunk of initializing failed!")))
 
-    (define colors.vim "colors.vim")
-    (load-vim-highlight! (build-path (digimon-stone) colors.vim))
-    (define-values [units fields] (values (+ 24 (apply max (map (compose1 string-length symbol->string) (hash-keys vim-highlight)))) 3))
-    (define-values [cols rows] (values (* fields units) (ceiling (/ (hash-count vim-highlight) fields))))
-    (define stdclr (newwin 0 0 0 0)) ; full screen window
-    (define colorscheme (newpad rows cols))
-    (when (false? colorscheme) (error "Unable to create color area!"))
-    (for ([[name group] (in-hash vim-highlight)])
-      (waddhistr colorscheme name (~a name #\[ (highlight-ctermfg group) #\, (highlight-ctermbg group) #\] #:width units)))
-    (wstandend colorscheme)
+  (define :highlight
+    (lambda [colors.vim hints]
+      (with-handlers ([exn:fail? uncaught-exn])
+        (load-vim-highlight! colors.vim)
+        (define-values [units fields] (values (+ 24 (apply max 0 (map (compose1 string-length symbol->string) (hash-keys vim-highlight)))) 3))
+        (define-values [cols rows] (values (* fields units) (max (ceiling (/ (hash-count vim-highlight) fields)) 1)))
+        (define stdclr (newwin 0 0 0 0)) ; full screen window
+        (define colorscheme (newpad rows cols))
+        (when (false? colorscheme) (error "Unable to create color area!"))
+        (for ([name (in-list (sort (hash-keys vim-highlight) symbol<?))])
+          (define group (hash-ref vim-highlight name))
+          (waddhistr colorscheme name (~a name #\[ (highlight-ctermfg group) #\, (highlight-ctermbg group) #\] #:width units)))
+        (wstandend colorscheme)
     
-    (let display-colors ()
-      (define-values [maxy mby y] (let ([maxy (getmaxy (stdscr))]) (values maxy (min maxy (+ rows 2)) (max (quotient (- maxy rows 2) 2) 0))))
-      (define-values [maxx mbx x] (let ([maxx (getmaxx (stdscr))]) (values maxx (min maxx (+ cols 2)) (max (quotient (- maxx cols 2) 2) 0))))
-      (define-values [title title-offset] (values (format " stone/~a " colors.vim) 2))
-      (wresize stdclr mby mbx)
-      (mvwin stdclr y x)
-      (when (false? colorscheme) (error "Unable to create color area border!"))
-      (wstandset stdclr 'VertSplit)
-      (wborder stdclr)
-      (unless (< mbx (+ title-offset (string-length title) 2))
-        (wmove stdclr 0 2)
-        (mvwaddch stdclr 0 title-offset (acs_map 'RTEE))
-        (mvwaddch stdclr 0 (+ title-offset (string-length title) 1) (acs_map 'LTEE))
-        (mvwaddhistr stdclr 0 (add1 title-offset) 'TabLineFill "~a" title))
-      (mvwaddhistr (statusbar) 0 0 'StatusLine (~a "Press any key to Exit!" #:width maxx))
-      (wnoutrefresh (stdscr))
-      (wnoutrefresh stdclr)
-      (pnoutrefresh colorscheme 0 0 (add1 y) (add1 x) (min (+ rows y 1) (sub1 maxy)) (min (+ cols x 1) (sub1 maxx)))
-      (wnoutrefresh (statusbar))
-      (doupdate)
-      
-      (when (char=? (getch) #\u019A)
-        (wclear (stdscr))
-        (wclear (statusbar))
-        (display-colors)))))
+        (let display-colors ()
+          (define-values [maxy mby y] (let ([maxy (getmaxy (stdscr))]) (values maxy (min maxy (+ rows 2)) (max (quotient (- maxy rows 2) 2) 0))))
+          (define-values [maxx mbx x] (let ([maxx (getmaxx (stdscr))]) (values maxx (min maxx (+ cols 2)) (max (quotient (- maxx cols 2) 2) 0))))
+          (define-values [title title-offset] (values (format " ~a " (file-name-from-path colors.vim)) 2))
+          (wresize stdclr mby mbx)
+          (mvwin stdclr y x)
+          (when (false? colorscheme) (error "Unable to create color area border!"))
+          (wclear (stdscr))
+          (wclear (statusbar))
+          (wstandset stdclr 'VertSplit)
+          (wborder stdclr)
+          (unless (< mbx (+ title-offset (string-length title) 2))
+            (wmove stdclr 0 2)
+            (mvwaddch stdclr 0 title-offset (acs_map 'RTEE))
+            (mvwaddch stdclr 0 (+ title-offset (string-length title) 1) (acs_map 'LTEE))
+            (mvwaddhistr stdclr 0 (add1 title-offset) 'TabLineFill "~a" title))
+          (mvwaddhistr (statusbar) 0 0 'StatusLine (~a hints #:width maxx))
+          (wnoutrefresh (stdscr))
+          (wnoutrefresh stdclr)
+          (pnoutrefresh colorscheme 0 0 (add1 y) (add1 x) (min (+ rows y 1) (sub1 maxy)) (min (+ cols x 1) (sub1 maxx)))
+          (wnoutrefresh (statusbar))
+          (doupdate)
+
+          (let ([ch (getch)])
+            (if (char=? ch #\u019A)
+                (display-colors)
+                (for-each delwin (list stdclr colorscheme)))
+            ch)))))
+
+  (match (current-command-line-arguments)
+    [(vector) (:highlight (build-path (digimon-stone) "colors.vim") "Press any key to Exit!")]
+    [colors (let :colorscheme ([index 0])
+              (case (:highlight (vector-ref colors index) "Control Hints: [J: Next; K: Prev; Others: Exit]")
+                [(#\J #\j) (:colorscheme (min (add1 index) (sub1 (vector-length colors))))]
+                [(#\K #\k) (:colorscheme (max (sub1 index) 0))]))]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module digitama racket
