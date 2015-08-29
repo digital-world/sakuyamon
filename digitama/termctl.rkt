@@ -24,7 +24,7 @@
   ((lambda [a] (_bitmask a _uint))
    (foldl (lambda [a As] (list* (string->symbol (string-downcase (symbol->string a))) '= (c-extern a #:ctype _uint) As))
           null (list 'NORMAL 'STANDOUT 'UNDERLINE 'UNDERCURL 'REVERSE 'INVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT
-                     'HORIZONTAL 'LEFT 'LOW 'RIGHT 'TOP 'VERTICAL))))
+                     'HORIZONTAL 'LEFT 'LOW 'RIGHT 'TOP 'VERTICAL 'ALTCHARSET))))
 
 (define _chtype
   (let ([attrmask (c-extern 'ATTRIBUTES #:ctype _long)]
@@ -59,6 +59,14 @@
   (make-ctype _short ;;; r/255 = c/1000 <==> 1000r = 255c
               (lambda [r] (exact-round (* r 1000/255))) 
               (lambda [c] (exact-round (* c 255/1000)))))
+
+(define acs_map (lambda [key] (hash-ref (force acs-map) key (const (chtype #\nul null 0)))))
+(define acs-map (let ([acsmap (c-extern 'initailizer_element_should_be_constant #:ctype (_fun _symbol -> _chtype))])
+                  (delay #| at this point ncureses has not initailized yet |#
+                    (make-hash (map (lambda [acs] (cons acs (acsmap acs)))
+                                    (list 'ULCORNER 'LLCORNER 'URCORNER 'LRCORNER 'RTEE 'LTEE 'BTEE 'TTEE 'HLINE 'VLINE
+                                          'S1 'S3 'S7 'S9 'DIAMOND 'CKBOARD 'DEGREE 'BULLET 'BOARD 'LANTERN 'BLOCK 'STERLING
+                                          'LARROW 'RARROW 'DARROW 'UARROW 'PLUS 'PLMINUS 'LEQUAL 'GEQUAL 'PI 'NEQUAL))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                         WARNING: ncurses uses YX-Coordinate System                          ;;;
@@ -112,10 +120,16 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses newwin (_fun [nrows : _int] [ncols : _int] [y : _int] [x : _int] -> _window*) #:wrap (allocator delwin))
 (define-ncurses newpad (_fun [nrows : _int] [ncols : _int] -> _window*) #:wrap (allocator delwin))
-(define-ncurses mvwvline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\|] [maxlong : _int] -> _ok/err))
-(define-ncurses mvwhline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = #\-] [maxlong : _int] -> _ok/err))
+
+(define-ncurses mvwvline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = (acs_map 'VLINE)] [maxlong : _int] -> _ok/err))
+(define-ncurses mvwhline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = (acs_map 'HLINE)] [maxlong : _int] -> _ok/err))
+(define-ncurses wborder (_fun _window* ; please use (wattr_on) and friends to highlight border lines.
+                              [_chtype = (acs_map 'VLINE)] [_chtype = (acs_map 'VLINE)] [_chtype = (acs_map 'HLINE)] [_chtype = (acs_map 'HLINE)]
+                              [_chtype = (acs_map 'ULCORNER)] [_chtype = (acs_map 'URCORNER)] [_chtype = (acs_map 'LLCORNER)] [_chtype = (acs_map 'LRCORNER)]
+                              -> _ok/err))
 
 (define-ncurses wresize (_fun _window* [rows : _int] [cols : _int] -> _ok/err))
+(define-ncurses wsetscrreg (_fun _window* [top : _int] [bot : _int] -> _ok/err))
 (define-ncurses getcury (_fun _window* -> _int))
 (define-ncurses getcurx (_fun _window* -> _int))
 (define-ncurses getbegy (_fun _window* -> _int))
@@ -289,6 +303,12 @@
     (mvwaddwstr stdwin y x (apply format fmt content))
     (wstandend stdwin)))
 
+(define whiborder
+  (lambda [stdwin vim-hiname]
+    (wstandset stdwin vim-hiname)
+    (wborder stdwin)
+    (wstandend stdwin)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module+ test
   (define statusbar (make-parameter #false))
@@ -307,8 +327,9 @@
     (unless (and (stdscr) (statusbar) (has_colors) (start_color) (use_default_colors) (curs_set 0)
                  (raw) (noecho) (timeout -1) (keypad #true))
       (error "A thunk of initializing failed!"))
-    
-    (load-vim-highlight! (build-path (digimon-stone) "colors.vim"))
+
+    (define colors.vim "colors.vim")
+    (load-vim-highlight! (build-path (digimon-stone) colors.vim))
     (define-values [units fields] (values (+ 24 (apply max (map (compose1 string-length symbol->string) (hash-keys vim-highlight)))) 3))
     (define-values [cols rows] (values (* fields units) (ceiling (/ (hash-count vim-highlight) fields))))
     (define colorscheme (newpad rows cols))
@@ -318,16 +339,29 @@
     (wstandend colorscheme)
     
     (let display-colors ()
-      (define-values [maxy y] (let ([maxy (getmaxy (stdscr))]) (values maxy (max (quotient (- maxy rows) 2) 0))))
-      (define-values [maxx x] (let ([maxx (getmaxx (stdscr))]) (values maxx (max (quotient (- maxx cols) 2) 0))))
+      (define-values [maxy mby y] (let ([maxy (getmaxy (stdscr))]) (values maxy (min maxy (+ rows 2)) (max (quotient (- maxy rows 2) 2) 0))))
+      (define-values [maxx mbx x] (let ([maxx (getmaxx (stdscr))]) (values maxx (min maxx (+ cols 2)) (max (quotient (- maxx cols 2) 2) 0))))
+      (define-values [title title-offset] (values (format " stone/~a " colors.vim) 2))
+      (define stdclr (newwin mby mbx y x))
+      (when (false? colorscheme) (error "Unable to create color area border!"))
+      (wstandset stdclr 'VertSplit)
+      (wborder stdclr)
+      (unless (< mbx (+ title-offset (string-length title) 2))
+        (wmove stdclr 0 2)
+        (mvwaddch stdclr 0 title-offset (acs_map 'RTEE))
+        (mvwaddch stdclr 0 (+ title-offset (string-length title) 1) (acs_map 'LTEE))
+        (mvwaddhistr stdclr 0 (add1 title-offset) 'TabLineFill "~a" title))
       (mvwaddhistr (statusbar) 0 0 'StatusLine (~a "Press any key to Exit!" #:width maxx))
       (wnoutrefresh (stdscr))
+      (wnoutrefresh stdclr)
+      (pnoutrefresh colorscheme 0 0 (add1 y) (add1 x) (min (+ rows y 1) (sub1 maxy)) (min (+ cols x 1) (sub1 maxx)))
       (wnoutrefresh (statusbar))
-      (pnoutrefresh colorscheme 0 0 y x (min (+ y rows) maxy) (min (+ x cols) maxx))
       (doupdate)
       
       (when (char=? (getch) #\u019A)
+        (delwin stdclr)
         (wclear (stdscr))
+        (wclear (statusbar))
         (display-colors)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
