@@ -2,7 +2,7 @@
 
 (provide (except-out (all-defined-out) OK ERR) c-extern)
 
-(require racket/draw)
+(require (for-syntax racket/syntax))
 
 @require{posix.rkt}
 
@@ -60,6 +60,12 @@
               (lambda [r] (exact-round (* r 1000/255))) 
               (lambda [c] (exact-round (* c 255/1000)))))
 
+(define _keycode
+  (make-ctype _int #false
+              (lambda [c] (with-handlers ([exn? (const #false)])
+                            ((curryr hash-ref c (thunk (integer->char c)))
+                             (hasheq #x0003 'SIGINT #x001C 'SIGQUIT #x019A 'SIGWINCH))))))
+
 (define acs-map (let ([acsmap (c-extern 'initailizer_element_should_be_constant #:ctype (_fun _symbol -> _chtype))])
                   (delay #| at this point ncureses has not initailized yet |#
                     (make-hash (map (lambda [acs] (cons acs (acsmap acs)))
@@ -75,6 +81,22 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                         WARNING: ncurses uses YX-Coordinate System                          ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define-syntax (define-ncurses-winapi stx)
+  (syntax-case stx [_fun ->]
+    [[_ id (_fun _ctypes ... -> _return)]
+     (with-syntax ([wid (format-id #'id "w~a" (syntax-e #'id))])
+       #'(begin (define-ncurses id (_fun _ctypes ... -> _return))
+                (define-ncurses wid (_fun [stdwin : _window*] _ctypes ... -> _return))))]))
+
+(define-syntax (define-ncurses-winapi/mv stx)
+  (syntax-case stx [_fun ->]
+    [[_ id (_fun _ctypes ... -> _return)]
+     (with-syntax ([mvid (format-id #'id "mv~a" (syntax-e #'id))]
+                   [mvwid (format-id #'id "mvw~a" (syntax-e #'id))])
+       #'(begin (define-ncurses-winapi id (_fun _ctypes ... -> _return))
+                (define-ncurses mvid (_fun [y : _int] [x : _int] _ctypes ... -> _return))
+                (define-ncurses mvwid (_fun [stdwin : _window*] [y : _int] [x : _int] _ctypes ... -> _return))))]))
 
 ;;; Initialization
 (define-ncurses ripoffline ; this can be invoked up to 5 times
@@ -98,7 +120,6 @@
 (define-ncurses cbreak (_fun -> _ok/err))
 (define-ncurses noecho (_fun -> _ok/err))
 (define-ncurses start_color (_fun -> _ok/err))
-(define-ncurses timeout (_fun _int -> _ok/err))
 (define-ncurses flushinp (_fun -> _ok/err -> #true))
 (define-ncurses qiflush (_fun -> _ok/err)) ; Break, SIGINT, SIGQUIT
 (define-ncurses intrflush (_fun [null : _window* = #false] _bool -> _ok/err)) ; SIGINT, SIGQUIT, SIGTSTP
@@ -125,16 +146,14 @@
 (define-ncurses newwin (_fun [nrows : _int] [ncols : _int] [y : _int] [x : _int] -> _window*) #:wrap (allocator delwin))
 (define-ncurses newpad (_fun [nrows : _int] [ncols : _int] -> _window*) #:wrap (allocator delwin))
 
-(define-ncurses mvwvline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = (acs_map 'VLINE)] [maxlong : _int] -> _ok/err))
-(define-ncurses mvwhline (_fun _window* [beginy : _int] [beginx : _int] [sym : _chtype = (acs_map 'HLINE)] [maxlong : _int] -> _ok/err))
-(define-ncurses wborder (_fun _window* ; please use (wattr_on) and friends to highlight border lines.
-                              [_chtype = (acs_map 'VLINE)] [_chtype = (acs_map 'VLINE)] [_chtype = (acs_map 'HLINE)] [_chtype = (acs_map 'HLINE)]
-                              [_chtype = (acs_map 'ULCORNER)] [_chtype = (acs_map 'URCORNER)] [_chtype = (acs_map 'LLCORNER)] [_chtype = (acs_map 'LRCORNER)]
-                              -> _ok/err))
+(define-ncurses-winapi border (_fun ; please use (wattr_on) and friends to highlight border lines.
+                               [_chtype = (acs_map 'VLINE)] [_chtype = (acs_map 'VLINE)] [_chtype = (acs_map 'HLINE)] [_chtype = (acs_map 'HLINE)]
+                               [_chtype = (acs_map 'ULCORNER)] [_chtype = (acs_map 'URCORNER)] [_chtype = (acs_map 'LLCORNER)] [_chtype = (acs_map 'LRCORNER)]
+                               -> _ok/err))
+(define-ncurses-winapi/mv vline (_fun [sym : _chtype = (acs_map 'VLINE)] [maxlong : _int] -> _ok/err))
+(define-ncurses-winapi/mv hline (_fun [sym : _chtype = (acs_map 'HLINE)] [maxlong : _int] -> _ok/err))
 
 (define-ncurses mvwin (_fun _window* [y : _int] [x : _int] -> _ok/err))
-(define-ncurses wresize (_fun _window* [rows : _int] [cols : _int] -> _ok/err))
-(define-ncurses wsetscrreg (_fun _window* [top : _int] [bot : _int] -> _ok/err))
 (define-ncurses getcury (_fun _window* -> _int))
 (define-ncurses getcurx (_fun _window* -> _int))
 (define-ncurses getbegy (_fun _window* -> _int))
@@ -143,30 +162,21 @@
 (define-ncurses getmaxx (_fun _window* -> _int))
 
 ;;; TODO: add support to winchstr, winstr and friends which can get content from buffer.
-(define-ncurses getch (_fun -> [key : _int] -> (and (>= key 0) (integer->char key))))
-(define-ncurses winch (_fun _window* -> _chtype))
-(define-ncurses mvwinch (_fun _window* _int _int -> _chtype))
+(define-ncurses-winapi timeout (_fun _int -> _ok/err))
+(define-ncurses-winapi/mv getch (_fun -> _keycode))
+(define-ncurses-winapi/mv inch (_fun -> _chtype))
 
-(define-ncurses wmove (_fun _window* _int _int -> _ok/err))
-(define-ncurses wscrl (_fun _window* _int -> _ok/err))
-(define-ncurses wrefresh (_fun _window* -> _ok/err))
-(define-ncurses wnoutrefresh (_fun _window* -> _ok/err))
-(define-ncurses doupdate (_fun -> _ok/err))
-
-(define-ncurses wclear (_fun _window* -> _ok/err)) ;;; it just calls (werase)
-(define-ncurses wclrtobot (_fun _window* -> _ok/err))
-(define-ncurses wclrtoeol (_fun _window* -> _ok/err))
-(define-ncurses winsdelln (_fun _window* _int -> _ok/err))
-(define-ncurses wdelch (_fun _window* -> _ok/err))
-(define-ncurses mvwdelch (_fun _window* _int _int -> _ok/err))
-(define-ncurses wdeleteln (_fun _window* -> _ok/err))
-(define-ncurses winsch (_fun _window* -> _ok/err))
-(define-ncurses mvwinsch (_fun _window* _int _int -> _ok/err))
-(define-ncurses winsertln (_fun _window* -> _ok/err))
-(define-ncurses waddch (_fun _window* _chtype -> _ok/err))
-(define-ncurses mvwaddch (_fun _window* _int _int _chtype -> _ok/err))
-(define-ncurses waddwstr (_fun _window* _string/ucs-4 -> _ok/err))
-(define-ncurses mvwaddwstr (_fun _window* _int _int _string/ucs-4 -> _ok/err))
+(define-ncurses-winapi clear (_fun -> _ok/err)) ;;; it just calls (*erase)
+(define-ncurses-winapi clrtobot (_fun -> _ok/err))
+(define-ncurses-winapi clrtoeol (_fun -> _ok/err))
+(define-ncurses-winapi insdelln (_fun _int -> _ok/err))
+(define-ncurses-winapi deleteln (_fun -> _ok/err))
+(define-ncurses-winapi insertln (_fun -> _ok/err))
+(define-ncurses-winapi/mv insch (_fun -> _ok/err))
+(define-ncurses-winapi/mv delch (_fun -> _ok/err))
+(define-ncurses-winapi/mv addch (_fun _chtype -> _ok/err))
+(define-ncurses-winapi/mv addstr (_fun _string -> _ok/err))
+(define-ncurses-winapi/mv addwstr (_fun _string/ucs-4 -> _ok/err))
 
 (define-ncurses putwin (_fun _path -> _ok/err))
 (define-ncurses getwin (_fun _path -> _ok/err))
@@ -184,34 +194,33 @@
                                    [screeny : _int] [screenx : _int] [screeny+height : _int] [screenx+width : _int]
                                    -> _ok/err))
 
+(define-ncurses-winapi move (_fun _int _int -> _ok/err))
+(define-ncurses-winapi scrl (_fun _int -> _ok/err))
+(define-ncurses-winapi refresh (_fun -> _ok/err))
+(define-ncurses-winapi setscrreg (_fun [top : _int] [bot : _int] -> _ok/err))
+(define-ncurses wresize (_fun _window* [rows : _int] [cols : _int] -> _ok/err))
+(define-ncurses wnoutrefresh (_fun _window* -> _ok/err))
+(define-ncurses doupdate (_fun -> _ok/err))
+
 ;;; Color and Attribute functions
 (define-ncurses has_colors (_fun -> _bool))
 (define-ncurses use_default_colors (_fun -> _ok/err))
 (define-ncurses assume_default_colors (_fun _color/term _color/term -> _ok/err))
-(define-ncurses wbkgd (_fun _window* _chtype -> _void))
-(define-ncurses wbkgdset (_fun _window* _chtype -> _void))
-
-(define-ncurses mvwchgat
-  (_fun [win : _window*]
-        [line : _int]
-        [col : _int]
-        [howmany : _int]
-        [attrs : _attr]
-        [pair_index : _short]
-        [opts : _pointer = #false]
-        -> _ok/err))
+(define-ncurses-winapi bkgd (_fun _chtype -> _void))
+(define-ncurses-winapi bkgdset (_fun _chtype -> _void))
+(define-ncurses-winapi/mv chgat (_fun [howmany : _int] [attrs : _attr] [pair_index : _short] [opts : _pointer = #false] -> _ok/err))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; In order to reduce the complexity, I prefer (wattr_on) rather than (wattron)  ;;;
 ;;;  since (wattron) and friends require OR COLOR_PAIR and ATTRIBUTES.            ;;;
 ;;; All of them work well with (wstandend).                                       ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-ncurses wattr_on (_fun _window* _attr [opts : _pointer = #false] -> _ok/err -> #true))
-(define-ncurses wattr_set (_fun _window* _attr _color/term [opts : _pointer = #false] -> _ok/err -> #true))
-(define-ncurses wcolor_set (_fun _window* _color/term [opts : _pointer = #false] -> _ok/err -> #true))
-(define-ncurses wattr_off (_fun _window* _attr [opts : _pointer = #false] -> _ok/err -> #true))
-(define-ncurses wstandout (_fun _window* -> _ok/err -> #true))
-(define-ncurses wstandend (_fun _window* -> _ok/err -> #true))
+(define-ncurses-winapi attr_on (_fun _attr [opts : _pointer = #false] -> _ok/err))
+(define-ncurses-winapi attr_set (_fun _attr _color/term [opts : _pointer = #false] -> _ok/err))
+(define-ncurses-winapi color_set (_fun _color/term [opts : _pointer = #false] -> _ok/err))
+(define-ncurses-winapi attr_off (_fun _attr [opts : _pointer = #false] -> _ok/err))
+(define-ncurses-winapi standout (_fun -> _ok/err))
+(define-ncurses-winapi standend (_fun -> _ok/err))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; This one is a curse, even we have 256 * 256 pair slots, however we cannot use ;;;
@@ -259,7 +268,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define load-vim-highlight! ;;; this function should invoked after (initscr)
-  (lambda [colors.vim]
+  (lambda [colors.vim #:exn-handler [uncaught-exn void]]
     (define token->symbol (compose1 string->symbol string-downcase))
     (define token->number (compose1 (curry min 256) string->number))
     (define token->symlist (lambda [t] (remove* (list 'none) (map token->symbol (string-split t #px"(=|,)+")))))
@@ -281,37 +290,37 @@
                      [(pregexp #px"ctermbg=(\\d+)" (list _ nbg)) (vector-set! hi 3 (token->number nbg))]
                      [(pregexp #px"ctermbg=(\\D+)" (list _ bg)) (vector-set! hi 3 (token->symbol bg))]
                      [_ (void '(skip gui settings))]))
-                 (with-handlers ([void void])
+                 (with-handlers ([exn? uncaught-exn])
                    (unless (false? color?) (init_pair ipair (vector-ref hi 2) (vector-ref hi 3)))
                    (hash-set! vim-highlight (string->symbol (last head)) (apply highlight (vector->list hi))))))))))
 
-(define wstandset
+(define hiattrset
   (lambda [stdwin vim-hiname]
     (match (hash-ref vim-highlight vim-hiname (const #false))
       [(? false?) (wattr_set stdwin null 0)]
       [hi (wattr_set stdwin (highlight-cterm hi) (highlight-index hi))])))
 
-(define wbkgdhiset
+(define hibkgdset
   (lambda [stdwin vim-hiname]
     (match (hash-ref vim-highlight vim-hiname (const #false))
       [(? false?) (wbkgdset stdwin (chtype #\nul null 0))]
       [hi (wbkgdset stdwin (chtype #\nul (highlight-cterm hi) (highlight-index hi)))])))
 
-(define waddhistr
+(define hiaddstr
   (lambda [stdwin vim-hiname fmt . content]
-    (wstandset stdwin vim-hiname)
+    (hiattrset stdwin vim-hiname)
     (waddwstr stdwin (apply format fmt content))
     (wstandend stdwin)))
 
-(define mvwaddhistr
+(define mvhiaddstr
   (lambda [stdwin y x vim-hiname fmt . content]
-    (wstandset stdwin vim-hiname)
+    (hiattrset stdwin vim-hiname)
     (mvwaddwstr stdwin y x (apply format fmt content))
     (wstandend stdwin)))
 
-(define whiborder
+(define hiborder
   (lambda [stdwin vim-hiname]
-    (wstandset stdwin vim-hiname)
+    (hiattrset stdwin vim-hiname)
     (wborder stdwin)
     (wstandend stdwin)))
 
@@ -323,13 +332,24 @@
   (void (initscr)
         (plumber-add-flush! (current-plumber) (lambda [this] (plumber-flush-handle-remove! this) (endwin))))
 
-  (define (uncaught-exn e)
-    (for ([line (in-list (call-with-input-string (exn-message e) port->lines))])
-      (waddwstr (stdscr) (~a (string-trim line) #\newline #:max-width (getmaxx (stdscr)))))
-    (wrefresh (stdscr))
-    (void (getch)))
-
-  (with-handlers ([exn:fail? uncaught-exn])
+  (define (uncaught-exn errobj)
+    (define messages (call-with-input-string (exn-message errobj) port->lines))
+    (clear)
+    (addstr (format "»» name: ~a~n" (object-name errobj)))
+    (unless (null? messages)
+      (define msghead " message: ")
+      (define msgspace (~a #:min-width (sub1 (string-length msghead))))
+      (addstr (format "»»~a~a~n" msghead (car messages)))
+      (for-each (lambda [msg] (addstr (format "»»»~a~a~n" msgspace msg))) (cdr messages)))
+    (for ([stack (in-list (continuation-mark-set->context (exn-continuation-marks errobj)))])
+      (when (cdr stack)
+        (define srcinfo (srcloc->string (cdr stack)))
+        (unless (or (false? srcinfo) (regexp-match? #px"^/" srcinfo))
+          (addstr (format "»»»» ~a: ~a~n" srcinfo (or (car stack) 'λ))))))
+    (refresh)
+    (getch))
+  
+  (with-handlers ([exn:fail? (compose1 void uncaught-exn)])
     (unless (and (stdscr) (statusbar) (has_colors) (start_color) (use_default_colors) (curs_set 0)
                  (raw) (noecho) (timeout -1) (keypad #true))
       (error "A thunk of initializing failed!")))
@@ -337,7 +357,7 @@
   (define :highlight
     (lambda [colors.vim hints]
       (with-handlers ([exn:fail? uncaught-exn])
-        (load-vim-highlight! colors.vim)
+        (load-vim-highlight! colors.vim #:exn-handler uncaught-exn)
         (define-values [units fields] (values (+ 24 (apply max 0 (map (compose1 string-length symbol->string) (hash-keys vim-highlight)))) 3))
         (define-values [cols rows] (values (* fields units) (max (ceiling (/ (hash-count vim-highlight) fields)) 1)))
         (define stdclr (newwin 0 0 0 0)) ; full screen window
@@ -345,7 +365,7 @@
         (when (false? colorscheme) (error "Unable to create color area!"))
         (for ([name (in-list (sort (hash-keys vim-highlight) symbol<?))])
           (define group (hash-ref vim-highlight name))
-          (waddhistr colorscheme name (~a name #\[ (highlight-ctermfg group) #\, (highlight-ctermbg group) #\] #:width units)))
+          (hiaddstr colorscheme name (~a name #\[ (highlight-ctermfg group) #\, (highlight-ctermbg group) #\] #:width units)))
         (wstandend colorscheme)
     
         (let display-colors ()
@@ -357,14 +377,14 @@
           (when (false? colorscheme) (error "Unable to create color area border!"))
           (wclear (stdscr))
           (wclear (statusbar))
-          (wstandset stdclr 'VertSplit)
+          (hiattrset stdclr 'VertSplit)
           (wborder stdclr)
           (unless (< mbx (+ title-offset (string-length title) 2))
             (wmove stdclr 0 2)
             (mvwaddch stdclr 0 title-offset (acs_map 'RTEE))
             (mvwaddch stdclr 0 (+ title-offset (string-length title) 1) (acs_map 'LTEE))
-            (mvwaddhistr stdclr 0 (add1 title-offset) 'TabLineFill "~a" title))
-          (mvwaddhistr (statusbar) 0 0 'StatusLine (~a hints #:width maxx))
+            (mvhiaddstr stdclr 0 (add1 title-offset) 'TabLineFill "~a" title))
+          (mvhiaddstr (statusbar) 0 0 'StatusLine (~a hints #:width maxx))
           (wnoutrefresh (stdscr))
           (wnoutrefresh stdclr)
           (pnoutrefresh colorscheme 0 0 (add1 y) (add1 x) (min (+ rows y 1) (sub1 maxy)) (min (+ cols x 1) (sub1 maxx)))
@@ -372,7 +392,7 @@
           (doupdate)
 
           (let ([ch (getch)])
-            (if (char=? ch #\u019A)
+            (if (eq? ch 'SIGWINCH)
                 (display-colors)
                 (for-each delwin (list stdclr colorscheme)))
             ch)))))

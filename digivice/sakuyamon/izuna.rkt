@@ -150,7 +150,7 @@
       (define syslogs (box null))
       (define monitor (newwin 0 0 0 0))
       (define statusbar (newwin 1 0 0 0))
-      (wbkgdhiset statusbar 'StatusLineNC)
+      (hibkgdset statusbar 'StatusLineNC)
 
       (scrollok monitor #true)
 
@@ -201,7 +201,7 @@
       (define-values [host-cols rsyslog-rows] (values (exact-round (* columns 0.16)) (exact-round (* rows 0.16))))
       (define-values [request-cols request-rows] (values (- columns host-cols 1) (- rows rsyslog-rows 1)))
       (for-each (lambda [stdwin] (and (wclear (stdwin)) (wnoutrefresh (stdwin)))) (list stdscr titlebar cmdlinebar))
-      (mvwaddhistr (titlebar) 0 0 'TabLineFill (~a (current-digimon) #\space (last (quote-module-path)) #:width columns))
+      (mvhiaddstr (titlebar) 0 0 'TabLineFill (~a (current-digimon) #\space (last (quote-module-path)) #:width columns))
       (for ([pname (in-list (list 'host%      'request%        'rsyslog%))]
             [scrny (in-list (list 0           0                request-rows))]
             [scrnx (in-list (list 0           (add1 host-cols) (add1 host-cols)))]
@@ -209,9 +209,9 @@
             [scrnc (in-list (list host-cols   request-cols     request-cols))])
         (define p% (hash-ref! monitors pname (lambda [] (make-object infinite-pad%))))
         (send p% resize scrny scrnx scrnr scrnc))
-      (wstandset (stdscr) 'VertSplit)
-      (mvwvline (stdscr) 0 host-cols (- rows 1))
-      (mvwaddch (stdscr) (sub1 rows) host-cols (acs_map 'DARROW #:extra_attrs (list 'underline)))
+      (hiattrset (stdscr) 'VertSplit)
+      (mvvline 0 host-cols (- rows 1))
+      (mvaddch (sub1 rows) host-cols (acs_map 'DARROW #:extra_attrs (list 'underline)))
       (wstandend (stdscr))
       (wnoutrefresh (stdscr))
       (wnoutrefresh (titlebar))
@@ -221,7 +221,7 @@
     (lambda [higroup fmt . contents]
       (define stdwin (cmdlinebar))
       (wclear stdwin)
-      (apply mvwaddhistr stdwin 0 0 higroup fmt contents)
+      (apply mvhiaddstr stdwin 0 0 higroup fmt contents)
       (wrefresh stdwin)))
   
   (define digivice
@@ -251,8 +251,8 @@
               [(? false?) (void "No key is pressed!")]
               [(list color 'fold msg) (send (hash-ref monitors 'rsyslog%) append! msg)]
               [(list color msg) (send (hash-ref monitors 'request%) append! msg)]
-              [(or #\u0003 #| SIGINT |# #\u001C #| SIGQUIT |#) (place-channel-put izunad 'exn:break:terminate)]
-              [(or #\u019A #| terminal size changed |#) (on-resized)]
+              [(or 'SIGINT 'SIGQUIT) (place-channel-put izunad 'exn:break:terminate)]
+              [(or 'SIGWINCH) (on-resized)]
               [(? char? c) (hiecho 'Ignore "Key pressed: ~s[~a]" c (char->integer c))]
               [(vector group message) (hiecho group message)]
               [reason (call/ec (lambda [collapse] (raise (exn:break (~a reason) (current-continuation-marks) collapse))))]))
