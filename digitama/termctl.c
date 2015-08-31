@@ -10,53 +10,50 @@
 #include <ncurses.h>
 #endif
 
-/* `chtype`'s basetype is integer whose sign bit is useless */
-typedef chtype chtype_t;
-
 /* return code */
 const int OKAY = OK;
 const int ERROR = ERR;
 
 /* `chtype` masks */
-const chtype_t ATTRIBUTES = A_ATTRIBUTES;
-const chtype_t CHARTEXT = A_CHARTEXT;
-const chtype_t COLORPAIR = A_COLOR;
+const attr_t ATTRIBUTES = A_ATTRIBUTES;
+const attr_t CHARTEXT = A_CHARTEXT;
+const attr_t COLORPAIR = A_COLOR;
 
-chtype_t color_pair(short n) {
+attr_t color_pair(short n) {
     return COLOR_PAIR(n);
 }
 
-short pair_number(chtype_t c) {
+short pair_number(attr_t c) {
     return PAIR_NUMBER(c);
 }
 
 /* `chtype` attributes, ordered from low-bit to high-bit */
-const chtype_t NORMAL = A_NORMAL;
-const chtype_t NONE = A_NORMAL;           /* vim compatible */
-const chtype_t STANDOUT = A_STANDOUT;
-const chtype_t UNDERLINE = A_UNDERLINE;
-const chtype_t UNDERCURL = A_UNDERLINE;   /* vim compatible */
-const chtype_t REVERSE = A_REVERSE;
-const chtype_t INVERSE = A_REVERSE;       /* vim compatible */
-const chtype_t BLINK = A_BLINK;
-const chtype_t DIM = A_DIM;
-const chtype_t BOLD = A_BOLD;
-const chtype_t ALTCHARSET = A_ALTCHARSET;
-const chtype_t INVIS = A_INVIS;           /* invisible, subject to change */
-const chtype_t PROTECT = A_PROTECT;       /* subject to change */
-const chtype_t HORIZONTAL = A_HORIZONTAL;
-const chtype_t LEFT = A_LEFT;
-const chtype_t LOW = A_LOW;
-const chtype_t RIGHT = A_RIGHT;
-const chtype_t TOP = A_TOP;
-const chtype_t VERTICAL = A_VERTICAL;
+const attr_t NORMAL = A_NORMAL;
+const attr_t NONE = A_NORMAL;           /* vim compatible */
+const attr_t STANDOUT = A_STANDOUT;
+const attr_t UNDERLINE = A_UNDERLINE;
+const attr_t UNDERCURL = A_UNDERLINE;   /* vim compatible */
+const attr_t REVERSE = A_REVERSE;
+const attr_t INVERSE = A_REVERSE;       /* vim compatible */
+const attr_t BLINK = A_BLINK;
+const attr_t DIM = A_DIM;
+const attr_t BOLD = A_BOLD;
+const attr_t ALTCHARSET = A_ALTCHARSET;
+const attr_t INVIS = A_INVIS;           /* invisible, subject to change */
+const attr_t PROTECT = A_PROTECT;       /* subject to change */
+const attr_t HORIZONTAL = A_HORIZONTAL;
+const attr_t LEFT = A_LEFT;
+const attr_t LOW = A_LOW;
+const attr_t RIGHT = A_RIGHT;
+const attr_t TOP = A_TOP;
+const attr_t VERTICAL = A_VERTICAL;
 
 /**
  * Human readable names for the most commonly used characters.
  * "Upper", "right", etc. are chosen to be consistent with the vt100 manual.
  */
 
-chtype_t initailizer_element_should_be_constant(const char *key) {
+attr_t initailizer_element_should_be_constant(const char *key) {
     size_t key_maxlen;
 
     key_maxlen = 9;
