@@ -238,7 +238,7 @@
                                      (when (has_colors)
                                        (start_color)
                                        (use_default_colors)
-                                       (load-vim-highlight! (build-path (digimon-stone) "colors.vim")))
+                                       (:colorscheme! (build-path (digimon-stone) "colors.vim")))
                                      (digivice-main izunad (place-channel-put/get izunad 'Okay))))
                             (thunk (endwin)))))))
 
