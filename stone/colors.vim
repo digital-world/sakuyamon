@@ -10,6 +10,45 @@ if exists("syntax_on")
 endif
 let g:colors_name="gyoudmon"
 
+"""" User Interface
+" The normal Text, should be set before others
+highlight Normal cterm=none ctermfg=none ctermbg=none
+" The characters appear only when line wraps happen: '@' '-'
+highlight NonText cterm=bold ctermfg=black ctermfg=16 
+" The placeholder characters substituted for concealed text
+highlight Conceal ctermfg=black
+" Directory names or the items' label in the list
+highlight Directory ctermfg=42 
+" The error message on the command line
+highlight ErrorMsg cterm=bold ctermfg=darkred ctermbg=234 
+" The mode message: -- INSERT -- ...
+highlight ModeMsg cterm=none ctermfg=red ctermfg=196 
+" The message is given with the '-- More --'
+highlight MoreMsg ctermfg=darkgreen 
+" The warning message
+highlight WarningMsg ctermfg=yellow ctermfg=226 
+" The prompt message of command: 'y/q' ...
+highlight Question ctermfg=green ctermfg=46 
+" The status line of current window
+highlight StatusLine cterm=underline ctermfg=242 
+" The status line of non-current window
+highlight StatusLineNC cterm=underline ctermfg=236 
+" The line number
+highlight LineNr ctermfg=214 
+" The current match in 'wildmenu' completion
+highlight WildMenu ctermfg=black ctermfg=16 ctermbg=darkcyan 
+" Any titles for output from ':autocmd' or ':set all'
+highlight Title ctermfg=green ctermfg=46 
+" The meta and special keyboard keys or
+" the text used to show the unprintable characters 
+highlight SpecialKey ctermfg=darkcyan 
+" The column sparating vertically split window 
+highlight VertSplit cterm=none ctermfg=238 
+" The visual mode selection
+highlight Visual cterm=reverse ctermfg=none ctermbg=none
+" The visual mode selection 'NOT OWNED BY VIM'
+highlight VisualNOS cterm=bold,underline
+
 """ Code style
 "" Single-element Groups
 " Any comments
@@ -139,45 +178,6 @@ highlight TabLine ctermfg=red ctermfg=196
 highlight TabLineFill ctermfg=grey ctermfg=244 ctermbg=blue ctermbg=21 
 " Active table page label
 highlight TabLineSel ctermfg=blue ctermfg=21 
-
-"" User Interface
-" The normal Text
-highlight Normal term=none ctermfg=none ctermbg=none
-" The characters appear only when line wraps happen: '@' '-'
-highlight NonText cterm=bold ctermfg=black ctermfg=16 
-" The placeholder characters substituted for concealed text
-highlight Conceal ctermfg=black
-" Directory names or the items' label in the list
-highlight Directory ctermfg=42 
-" The error message on the command line
-highlight ErrorMsg cterm=bold ctermfg=darkred ctermbg=234 
-" The mode message: -- INSERT -- ...
-highlight ModeMsg cterm=none ctermfg=red ctermfg=196 
-" The message is given with the '-- More --'
-highlight MoreMsg ctermfg=darkgreen 
-" The warning message
-highlight WarningMsg ctermfg=yellow ctermfg=226 
-" The prompt message of command: 'y/q' ...
-highlight Question ctermfg=green ctermfg=46 
-" The status line of current window
-highlight StatusLine cterm=underline ctermfg=242 
-" The status line of non-current window
-highlight StatusLineNC cterm=underline ctermfg=236 
-" The line number
-highlight LineNr ctermfg=214 
-" The current match in 'wildmenu' completion
-highlight WildMenu ctermfg=black ctermfg=16 ctermbg=darkcyan 
-" Any titles for output from ':autocmd' or ':set all'
-highlight Title ctermfg=green ctermfg=46 
-" The meta and special keyboard keys or
-" the text used to show the unprintable characters 
-highlight SpecialKey ctermfg=darkcyan 
-" The column sparating vertically split window 
-highlight VertSplit cterm=none ctermfg=238 
-" The visual mode selection
-highlight Visual cterm=reverse ctermfg=none ctermbg=none
-" The visual mode selection 'NOT OWNED BY VIM'
-highlight VisualNOS cterm=bold,underline
 
 "" User Action
 " The last searched pattern or 

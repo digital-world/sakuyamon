@@ -150,7 +150,7 @@
       (define syslogs (box null))
       (define monitor (newwin 0 0 0 0))
       (define statusbar (newwin 1 0 0 0))
-      (hibkgdset statusbar 'StatusLineNC)
+      (wbkgdset statusbar 'StatusLineNC)
 
       (scrollok monitor #true)
 
@@ -197,11 +197,12 @@
          +---------------+----------------------------------------+
          | commandline%                                           |
         \+--------------------------------------------------------+/|#
-      (define-values [columns rows] (values (c-extern 'COLS) (c-extern 'LINES)))
+      (define-values [columns rows] (values (c-extern 'COLS _int) (c-extern 'LINES _int)))
       (define-values [host-cols rsyslog-rows] (values (exact-round (* columns 0.16)) (exact-round (* rows 0.16))))
       (define-values [request-cols request-rows] (values (- columns host-cols 1) (- rows rsyslog-rows 1)))
       (for-each (lambda [stdwin] (and (wclear (stdwin)) (wnoutrefresh (stdwin)))) (list stdscr titlebar cmdlinebar))
-      (mvhiaddstr (titlebar) 0 0 'TabLineFill (~a (current-digimon) #\space (last (quote-module-path)) #:width columns))
+      (wattr_set (titlebar) 'TabLineFill 'TabLineFill)
+      (mvwaddstr (titlebar) 0 0 (~a (current-digimon) #\space (last (quote-module-path)) #:width columns))
       (for ([pname (in-list (list 'host%      'request%        'rsyslog%))]
             [scrny (in-list (list 0           0                request-rows))]
             [scrnx (in-list (list 0           (add1 host-cols) (add1 host-cols)))]
@@ -209,19 +210,19 @@
             [scrnc (in-list (list host-cols   request-cols     request-cols))])
         (define p% (hash-ref! monitors pname (lambda [] (make-object infinite-pad%))))
         (send p% resize scrny scrnx scrnr scrnc))
-      (hiattrset (stdscr) 'VertSplit)
+      (wattr_set (stdscr) 'VertSplit 'VertSplit)
       (mvvline 0 host-cols (- rows 1))
       (mvaddch (sub1 rows) host-cols (acs_map 'DARROW #:extra_attrs (list 'underline)))
       (wstandend (stdscr))
-      (wnoutrefresh (stdscr))
-      (wnoutrefresh (titlebar))
+      (for-each wnoutrefresh (list (stdscr) (titlebar)))
       (doupdate)))
 
   (define hiecho
     (lambda [higroup fmt . contents]
       (define stdwin (cmdlinebar))
       (wclear stdwin)
-      (apply mvhiaddstr stdwin 0 0 higroup fmt contents)
+      (wattr_set stdwin higroup higroup)
+      (mvwaddstr stdwin 0 0 (apply format fmt contents))
       (wrefresh stdwin)))
   
   (define digivice

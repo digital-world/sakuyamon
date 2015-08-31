@@ -1,59 +1,70 @@
 #lang at-exp racket
 
-(provide (except-out (all-defined-out) OK ERR) c-extern)
+(provide (except-out (all-defined-out) OK ERR))
+(provide (all-from-out "posix.rkt"))
 
 (require (for-syntax racket/syntax))
 
 @require{posix.rkt}
-
-(struct chtype (char attributes color-pair) #:prefab)
 
 (define-ffi-definer define-ncurses (ffi-lib "libncurses" #:global? #true))
 (define-ffi-definer define-termctl
   (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths)) "native" (system-library-subpath #false) "termctl")
            #:global? #true))
 
-(define OK (c-extern 'OKAY))
-(define ERR (c-extern 'ERROR))
+(define OK (c-extern 'OKAY _int))
+(define ERR (c-extern 'ERROR _int))
 
 (define _window* (_cpointer/null 'WINDOW*))
 (define _ok/err (make-ctype _int #false (lambda [c] (not (eq? c ERR)))))
 (define stdscr (make-parameter #false))
 
-(define _attr
-  ((lambda [a] (_bitmask a _uint))
-   (foldl (lambda [a As] (list* (string->symbol (string-downcase (symbol->string a))) '= (c-extern a #:ctype _uint) As))
-          null (list 'NORMAL 'STANDOUT 'UNDERLINE 'UNDERCURL 'REVERSE 'INVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT
-                     'HORIZONTAL 'LEFT 'LOW 'RIGHT 'TOP 'VERTICAL 'ALTCHARSET))))
+(define _attr ; you may work with vim highlight groups (attributes only) when FFIing to C
+  (let ([_cterm ((lambda [a] (_bitmask a _int))
+                 (foldl (lambda [a As] (list* (string->symbol (string-downcase (symbol->string a))) '= (c-extern a _uint) As))
+                        null (list 'NORMAL 'STANDOUT 'UNDERLINE 'UNDERCURL 'REVERSE 'INVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT
+                                   'HORIZONTAL 'LEFT 'LOW 'RIGHT 'TOP 'VERTICAL 'ALTCHARSET)))])
+    (make-ctype (ctype-basetype _cterm)
+                (lambda [r] ((ctype-scheme->c _cterm) (if (symbol? r) (highlight-cterm (hash-ref vim-highlight r (const defgroup))) r)))
+                (ctype-c->scheme _cterm))))
 
-(define _chtype
-  (let ([attrmask (c-extern 'ATTRIBUTES #:ctype _long)]
-        [charmask (c-extern 'CHARTEXT #:ctype _long)]
-        [cpairmask (c-extern 'COLORPAIR #:ctype _long)]
-        [color_pair (c-extern 'color_pair #:ctype (_fun _short -> _long))]
-        [pair_number (c-extern 'pair_number #:ctype (_fun _long -> _short))]
-        [integer->attrs (ctype-c->scheme _attr)]
-        [attrs->integer (ctype-scheme->c _attr)])
-    (make-ctype _long
-                (lambda [r] (cond [(char? r) (bitwise-and (char->integer r) charmask)]
-                                  [else (bitwise-ior (bitwise-and (char->integer (chtype-char r)) charmask)
-                                                     (attrs->integer (chtype-attributes r))
-                                                     (color_pair (chtype-color-pair r)))]))
+(define _color-pair ; you may work with vim highlight groups (color-pair index only) when FFIing to C
+  (make-ctype _short
+              (lambda [r] (if (symbol? r) (highlight-index (hash-ref vim-highlight r (const defgroup))) r))
+              values))
+
+(define _chtype ; you may work with vim highlight groups when FFIing to C
+  (let ([attrmask (c-extern 'ATTRIBUTES _int)]
+        [charmask (c-extern 'CHARTEXT _int)]
+        [cpairmask (c-extern 'COLORPAIR _int)]
+        [color_pair (c-extern 'color_pair (_fun _short -> _int))]
+        [pair_number (c-extern 'pair_number (_fun _int -> _short))])
+    (make-ctype (ctype-basetype _attr)
+                (lambda [r] (let ([chtype->integer (lambda [ch_t] (bitwise-ior (bitwise-and (char->integer (chtype-char ch_t)) charmask)
+                                                                               ((ctype-scheme->c _attr) (chtype-attributes ch_t))
+                                                                               (color_pair (chtype-color-pair ch_t))))])
+                              (cond [(chtype? r) (chtype->integer r)]
+                                    [(char? r) (bitwise-and (char->integer r) charmask)]
+                                    [(integer? r) (bitwise-and r charmask)]
+                                    [(and (symbol? r) (hash-ref vim-highlight r (const defgroup)))
+                                     => (lambda [hi] (chtype->integer (chtype #\nul (highlight-cterm hi) (highlight-index hi))))]
+                                    [else r])))
                 (lambda [c] (chtype (integer->char (bitwise-and c charmask))
-                                    (integer->attrs (bitwise-and c attrmask))
+                                    ((ctype-c->scheme _attr) (bitwise-and c attrmask))
                                     (pair_number (bitwise-and c cpairmask)))))))
 
-(define _color/term
-  (let* ([_named-color ((lambda [c] (_enum c _short #:unknown values))
-                        (foldl (lambda [c Cs] (list* c '= (hash-ref vim-colors (symbol->string c)) Cs)) (list 'none '= -1)
-                               ;;; racket->c can map multi names to one value, while c->racket uses the last name
-                               ;;; names in aliases will not be the value of c->racket
-                               (let ([aliases (list 'lightred 'lightgreen 'lightyellow 'lightblue 'lightmagenta 'lightcyan
-                                                    'darkgray 'lightgray 'lightgrey 'gray 'brown)])
-                                 (reverse (append aliases (remove* aliases (map string->symbol (hash-keys vim-colors))))))))])
+(define _color-256
+  (let ([_named-color ((lambda [c] (_enum c _short #:unknown values))
+                       (foldl (lambda [c Cs] (list* c '= (hash-ref vim-colors (symbol->string c)) Cs)) (list 'none '= -1)
+                              ;;; racket->c can map multi names to one value, while c->racket uses the last name
+                              ;;; names in aliases will not be the value of c->racket
+                              (let ([aliases (list 'lightred 'lightgreen 'lightyellow 'lightblue 'lightmagenta 'lightcyan
+                                                   'darkgray 'lightgray 'lightgrey 'gray 'brown)])
+                                (reverse (append aliases (remove* aliases (map string->symbol (hash-keys vim-colors))))))))])
     (make-ctype _short
-                (lambda [r] (if (integer? r) r ((ctype-scheme->c _named-color) r)))
-                (ctype-c->scheme _named-color))))
+                (lambda [r] (let ([name (case r [(fg foreground) (unbox normal-foreground)] [(bg background) (unbox normal-background)] [else r])])
+                              (if (integer? name) name ((ctype-scheme->c _named-color) name))))
+                (lambda [c] (if (<= -1 c 15) ((ctype-c->scheme _named-color) c) c)))))
 
 (define _rgb/component
   (make-ctype _short ;;; r/255 = c/1000 <==> 1000r = 255c
@@ -66,7 +77,7 @@
                             ((curryr hash-ref c (thunk (integer->char c)))
                              (hasheq #x0003 'SIGINT #x001C 'SIGQUIT #x019A 'SIGWINCH))))))
 
-(define acs-map (let ([acsmap (c-extern 'initailizer_element_should_be_constant #:ctype (_fun _symbol -> _chtype))])
+(define acs-map (let ([acsmap (c-extern 'initailizer_element_should_be_constant (_fun _symbol -> _chtype))])
                   (delay #| at this point ncureses has not initailized yet |#
                     (make-hash (map (lambda [acs] (cons acs (acsmap acs)))
                                     (list 'ULCORNER 'LLCORNER 'URCORNER 'LRCORNER 'RTEE 'LTEE 'BTEE 'TTEE 'HLINE 'VLINE
@@ -75,28 +86,29 @@
 
 (define acs_map
   (lambda [key #:extra_attrs [attrs null]]
-    (define altchar (hash-ref (force acs-map) key (const (chtype #\nul null 0))))
-    (chtype (chtype-char altchar) (append (chtype-attributes altchar) attrs) 0)))
+    (define altchar (hash-ref (force acs-map) key (const defchar)))
+    (define extra (if (symbol? attrs) (highlight-cterm (hash-ref vim-highlight attrs (const defgroup))) attrs))
+    (chtype (chtype-char altchar) (append (chtype-attributes altchar) extra) 0)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                         WARNING: ncurses uses YX-Coordinate System                          ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define-syntax (define-ncurses-winapi stx)
-  (syntax-case stx [_fun ->]
-    [[_ id (_fun _ctypes ... -> _return)]
+  (syntax-case stx [_fun]
+    [[_ id (_fun IDL-spec ...)]
      (with-syntax ([wid (format-id #'id "w~a" (syntax-e #'id))])
-       #'(begin (define-ncurses id (_fun _ctypes ... -> _return))
-                (define-ncurses wid (_fun [stdwin : _window*] _ctypes ... -> _return))))]))
+       #'(begin (define-ncurses id (_fun IDL-spec ...))
+                (define-ncurses wid (_fun [stdwin : _window*] IDL-spec ...))))]))
 
 (define-syntax (define-ncurses-winapi/mv stx)
-  (syntax-case stx [_fun ->]
-    [[_ id (_fun _ctypes ... -> _return)]
+  (syntax-case stx [_fun]
+    [[_ id (_fun IDL-spec ...)]
      (with-syntax ([mvid (format-id #'id "mv~a" (syntax-e #'id))]
                    [mvwid (format-id #'id "mvw~a" (syntax-e #'id))])
-       #'(begin (define-ncurses-winapi id (_fun _ctypes ... -> _return))
-                (define-ncurses mvid (_fun [y : _int] [x : _int] _ctypes ... -> _return))
-                (define-ncurses mvwid (_fun [stdwin : _window*] [y : _int] [x : _int] _ctypes ... -> _return))))]))
+       #'(begin (define-ncurses-winapi id (_fun IDL-spec ...))
+                (define-ncurses mvid (_fun [y : _int] [x : _int] IDL-spec ...))
+                (define-ncurses mvwid (_fun [stdwin : _window*] [y : _int] [x : _int] IDL-spec ...))))]))
 
 ;;; Initialization
 (define-ncurses ripoffline ; this can be invoked up to 5 times
@@ -143,8 +155,10 @@
 ;;;  scrolling is unavaliable (as well as pads);                                  ;;;
 ;;;  its size cannot be changed manually.                                         ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-ncurses newwin (_fun [nrows : _int] [ncols : _int] [y : _int] [x : _int] -> _window*) #:wrap (allocator delwin))
 (define-ncurses newpad (_fun [nrows : _int] [ncols : _int] -> _window*) #:wrap (allocator delwin))
+(define-ncurses newwin (_fun [nrows : _int] [ncols : _int] [y : _int] [x : _int]
+                             -> [stdwin : _window*]
+                             -> (and stdwin (wbkgdset stdwin defchar) stdwin)) #:wrap (allocator delwin))
 
 (define-ncurses-winapi border (_fun ; please use (wattr_on) and friends to highlight border lines.
                                [_chtype = (acs_map 'VLINE)] [_chtype = (acs_map 'VLINE)] [_chtype = (acs_map 'HLINE)] [_chtype = (acs_map 'HLINE)]
@@ -204,11 +218,15 @@
 
 ;;; Color and Attribute functions
 (define-ncurses has_colors (_fun -> _bool))
-(define-ncurses use_default_colors (_fun -> _ok/err))
-(define-ncurses assume_default_colors (_fun _color/term _color/term -> _ok/err))
+(define-ncurses use_default_colors (_fun -> [$? : _ok/err]
+                                         -> (and $? (set-box! normal-foreground 'none) (set-box! normal-background 'none) $?)))
+(define-ncurses assume_default_colors (_fun [fg : _color-256] [bg : _color-256]
+                                            -> [$? : _ok/err]
+                                            -> (and $? (set-box! normal-foreground fg) (set-box! normal-background bg) $?)))
+
 (define-ncurses-winapi bkgd (_fun _chtype -> _void))
 (define-ncurses-winapi bkgdset (_fun _chtype -> _void))
-(define-ncurses-winapi/mv chgat (_fun [howmany : _int] [attrs : _attr] [pair_index : _short] [opts : _pointer = #false] -> _ok/err))
+(define-ncurses-winapi/mv chgat (_fun [howmany : _int] [attrs : _attr] [pair_index : _color-pair] [opts : _pointer = #false] -> _ok/err))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; In order to reduce the complexity, I prefer (wattr_on) rather than (wattron)  ;;;
@@ -216,9 +234,10 @@
 ;;; All of them work well with (wstandend).                                       ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses-winapi attr_on (_fun _attr [opts : _pointer = #false] -> _ok/err))
-(define-ncurses-winapi attr_set (_fun _attr _color/term [opts : _pointer = #false] -> _ok/err))
-(define-ncurses-winapi color_set (_fun _color/term [opts : _pointer = #false] -> _ok/err))
+(define-ncurses-winapi attr_set (_fun _attr _color-pair [opts : _pointer = #false] -> _ok/err))
+(define-ncurses-winapi attr_get (_fun [As : (_ptr o _attr)] [cp : (_ptr o _color-pair)] [opts : _pointer = #false] -> _ok/err -> (values As cp)))
 (define-ncurses-winapi attr_off (_fun _attr [opts : _pointer = #false] -> _ok/err))
+(define-ncurses-winapi color_set (_fun _color-pair [opts : _pointer = #false] -> _ok/err))
 (define-ncurses-winapi standout (_fun -> _ok/err))
 (define-ncurses-winapi standend (_fun -> _ok/err))
 
@@ -228,16 +247,17 @@
 ;;; No. is combined with attribute and color, the actual storage is only 8bit.    ;;;
 ;;; It's your duty to manage the palette.                                         ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-ncurses init_pair (_fun _short _color/term _color/term -> _ok/err))
-(define-ncurses pair_content (_fun [pair : _short] [fg : (_ptr o _color/term)] [bg : (_ptr o _color/term)]
-                                   -> [ status : _ok/err] -> (and status (cons fg bg))))
+(define-ncurses init_pair (_fun _short _color-256 _color-256 -> _ok/err))
+(define-ncurses pair_content (_fun [pair : _short] [fg : (_ptr o _color-256)] [bg : (_ptr o _color-256)]
+                                   -> [$? : _ok/err]
+                                   -> (and $? (cons fg bg))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; This one is not recommended because ncurses cannot restore the correct color  ;;;
 ;;; value after (endwin). All changed colors keep taking effects until you        ;;;
 ;;; restart your terminal.                                                        ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-ncurses init_color (_fun _color/term _rgb/component _rgb/component _rgb/component -> _ok/err))
+(define-ncurses init_color (_fun _color-256 _rgb/component _rgb/component _rgb/component -> _ok/err))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; This one isn't reliable, ncurses just gets palette information from terminfo. ;;;
@@ -245,9 +265,10 @@
 ;;; Again, if colors are changed by application, it might pollute the terminal.   ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses color_content
-  (_fun [color : _color/term]
+  (_fun [color : _color-256]
         [r/1000 : (_ptr o _rgb/component)] [g/1000 : (_ptr o _rgb/component)] [b/1000 : (_ptr o _rgb/component)]
-        -> [status : _ok/err] -> (and status (list r/1000 g/1000 b/1000))))
+        -> [$? : _ok/err]
+        -> (and $? (list r/1000 g/1000 b/1000))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; So let this one always return false.                                          ;;;
@@ -269,19 +290,21 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define load-vim-highlight! ;;; this function should invoked after (initscr)
   (lambda [colors.vim #:exn-handler [uncaught-exn void]]
-    (define token->symbol (compose1 string->symbol string-downcase))
-    (define token->number (compose1 (curry min 256) string->number))
-    (define token->symlist (lambda [t] (remove* (list 'none) (map token->symbol (string-split t #px"(=|,)+")))))
-    (define color? (has_colors))
+    #| What's different from vim is that the Normal group is always used as default setting |#
     (when (file-exists? colors.vim)
+      (define token->symbol (compose1 string->symbol string-downcase))
+      (define token->number (compose1 (curry min 256) string->number))
+      (define token->symlist (lambda [t] (remove* (list 'none) (map token->symbol (string-split t #px"(=|,)+")))))
       (hash-clear! vim-highlight)
+      (use_default_colors)
       (with-input-from-file colors.vim
         (thunk (for ([line (in-port read-line)]
                      #:when (< (hash-count vim-highlight) (sub1 256))
                      #:when (regexp-match? #px"c?term([fb]g)?=" line))
                  (define-values [attrs head] (partition (curry regexp-match #px"=") (string-split line)))
                  (define ipair (add1 (hash-count vim-highlight)))
-                 (define hi (vector ipair null 'none 'none))
+                 (define hi (vector ipair null (unbox normal-foreground) (unbox normal-background)))
+                 (define groupname (string->symbol (last head)))
                  (for ([token (in-list attrs)])
                    (match token
                      [(pregexp #px"c?term=(.+)" (list _ attrs)) (vector-set! hi 1 (token->symlist attrs))]
@@ -291,38 +314,9 @@
                      [(pregexp #px"ctermbg=(\\D+)" (list _ bg)) (vector-set! hi 3 (token->symbol bg))]
                      [_ (void '(skip gui settings))]))
                  (with-handlers ([exn? uncaught-exn])
-                   (unless (false? color?) (init_pair ipair (vector-ref hi 2) (vector-ref hi 3)))
-                   (hash-set! vim-highlight (string->symbol (last head)) (apply highlight (vector->list hi))))))))))
-
-(define hiattrset
-  (lambda [stdwin vim-hiname]
-    (match (hash-ref vim-highlight vim-hiname (const #false))
-      [(? false?) (wattr_set stdwin null 0)]
-      [hi (wattr_set stdwin (highlight-cterm hi) (highlight-index hi))])))
-
-(define hibkgdset
-  (lambda [stdwin vim-hiname]
-    (match (hash-ref vim-highlight vim-hiname (const #false))
-      [(? false?) (wbkgdset stdwin (chtype #\nul null 0))]
-      [hi (wbkgdset stdwin (chtype #\nul (highlight-cterm hi) (highlight-index hi)))])))
-
-(define hiaddstr
-  (lambda [stdwin vim-hiname fmt . content]
-    (hiattrset stdwin vim-hiname)
-    (waddwstr stdwin (apply format fmt content))
-    (wstandend stdwin)))
-
-(define mvhiaddstr
-  (lambda [stdwin y x vim-hiname fmt . content]
-    (hiattrset stdwin vim-hiname)
-    (mvwaddwstr stdwin y x (apply format fmt content))
-    (wstandend stdwin)))
-
-(define hiborder
-  (lambda [stdwin vim-hiname]
-    (hiattrset stdwin vim-hiname)
-    (wborder stdwin)
-    (wstandend stdwin)))
+                   (cond [(symbol=? groupname 'Normal) (assume_default_colors (vector-ref hi 2) (vector-ref hi 3))]
+                         [else (void (init_pair ipair (vector-ref hi 2) (vector-ref hi 3))
+                                     (hash-set! vim-highlight groupname (apply highlight (vector->list hi))))]))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module+ main
@@ -364,8 +358,9 @@
         (define colorscheme (newpad rows cols))
         (when (false? colorscheme) (error "Unable to create color area!"))
         (for ([name (in-list (sort (hash-keys vim-highlight) symbol<?))])
-          (define group (hash-ref vim-highlight name))
-          (hiaddstr colorscheme name (~a name #\[ (highlight-ctermfg group) #\, (highlight-ctermbg group) #\] #:width units)))
+          (wattr_set colorscheme name name)
+          (define-values [attr colorpair] (wattr_get colorscheme))
+          (waddstr colorscheme (~a name (pair_content colorpair) #:width units)))
         (wstandend colorscheme)
     
         (let display-colors ()
@@ -375,20 +370,19 @@
           (wresize stdclr mby mbx)
           (mvwin stdclr y x)
           (when (false? colorscheme) (error "Unable to create color area border!"))
-          (wclear (stdscr))
-          (wclear (statusbar))
-          (hiattrset stdclr 'VertSplit)
+          (for-each wclear (list (stdscr) (statusbar)))
+          (wattr_set stdclr 'VertSplit 'VertSplit)
           (wborder stdclr)
           (unless (< mbx (+ title-offset (string-length title) 2))
             (wmove stdclr 0 2)
             (mvwaddch stdclr 0 title-offset (acs_map 'RTEE))
             (mvwaddch stdclr 0 (+ title-offset (string-length title) 1) (acs_map 'LTEE))
-            (mvhiaddstr stdclr 0 (add1 title-offset) 'TabLineFill "~a" title))
-          (mvhiaddstr (statusbar) 0 0 'StatusLine (~a hints #:width maxx))
-          (wnoutrefresh (stdscr))
-          (wnoutrefresh stdclr)
+            (wattr_set stdclr 'TabLineFile 'TabLineFile)
+            (mvwaddstr stdclr 0 (add1 title-offset) title))
+          (wattr_set (statusbar) 'StatusLine 'StatusLine)
+          (mvwaddstr (statusbar) 0 0 (~a hints #:width maxx))
+          (for-each wnoutrefresh (list (stdscr) stdclr (statusbar)))
           (pnoutrefresh colorscheme 0 0 (add1 y) (add1 x) (min (+ rows y 1) (sub1 maxy)) (min (+ cols x 1) (sub1 maxx)))
-          (wnoutrefresh (statusbar))
           (doupdate)
 
           (let ([ch (getch)])
@@ -408,7 +402,13 @@
 (module digitama racket
   (provide (all-defined-out))
 
+  (struct chtype (char attributes color-pair) #:prefab)
+  (define defchar (chtype #\nul null 0))
+  
   (struct highlight (index cterm ctermfg ctermbg) #:prefab)
-  (define vim-highlight (make-hash)))
+  (define vim-highlight (make-hasheq))
+  (define defgroup (highlight 0 null 'foreground 'background))
+  (define normal-foreground (box 'none))
+  (define normal-background (box 'none)))
 
 (require (submod "." digitama))

@@ -10,50 +10,53 @@
 #include <ncurses.h>
 #endif
 
+/* `chtype`'s basetype is integer whose sign bit is useless */
+typedef chtype chtype_t;
+
 /* return code */
 const int OKAY = OK;
 const int ERROR = ERR;
 
 /* `chtype` masks */
-const uintptr_t ATTRIBUTES = A_ATTRIBUTES;
-const uintptr_t CHARTEXT = A_CHARTEXT;
-const uintptr_t COLORPAIR = A_COLOR;
+const chtype_t ATTRIBUTES = A_ATTRIBUTES;
+const chtype_t CHARTEXT = A_CHARTEXT;
+const chtype_t COLORPAIR = A_COLOR;
 
-unsigned long color_pair(short n) {
+chtype_t color_pair(short n) {
     return COLOR_PAIR(n);
 }
 
-short pair_number(unsigned long c) {
+short pair_number(chtype_t c) {
     return PAIR_NUMBER(c);
 }
 
 /* `chtype` attributes, ordered from low-bit to high-bit */
-const uintptr_t NORMAL = A_NORMAL;
-const uintptr_t NONE = A_NORMAL;           /* vim compatible */
-const uintptr_t STANDOUT = A_STANDOUT;
-const uintptr_t UNDERLINE = A_UNDERLINE;
-const uintptr_t UNDERCURL = A_UNDERLINE;   /* vim compatible */
-const uintptr_t REVERSE = A_REVERSE;
-const uintptr_t INVERSE = A_REVERSE;       /* vim compatible */
-const uintptr_t BLINK = A_BLINK;
-const uintptr_t DIM = A_DIM;
-const uintptr_t BOLD = A_BOLD;
-const uintptr_t ALTCHARSET = A_ALTCHARSET;
-const uintptr_t INVIS = A_INVIS;           /* invisible, subject to change */
-const uintptr_t PROTECT = A_PROTECT;       /* subject to change */
-const uintptr_t HORIZONTAL = A_HORIZONTAL;
-const uintptr_t LEFT = A_LEFT;
-const uintptr_t LOW = A_LOW;
-const uintptr_t RIGHT = A_RIGHT;
-const uintptr_t TOP = A_TOP;
-const uintptr_t VERTICAL = A_VERTICAL;
+const chtype_t NORMAL = A_NORMAL;
+const chtype_t NONE = A_NORMAL;           /* vim compatible */
+const chtype_t STANDOUT = A_STANDOUT;
+const chtype_t UNDERLINE = A_UNDERLINE;
+const chtype_t UNDERCURL = A_UNDERLINE;   /* vim compatible */
+const chtype_t REVERSE = A_REVERSE;
+const chtype_t INVERSE = A_REVERSE;       /* vim compatible */
+const chtype_t BLINK = A_BLINK;
+const chtype_t DIM = A_DIM;
+const chtype_t BOLD = A_BOLD;
+const chtype_t ALTCHARSET = A_ALTCHARSET;
+const chtype_t INVIS = A_INVIS;           /* invisible, subject to change */
+const chtype_t PROTECT = A_PROTECT;       /* subject to change */
+const chtype_t HORIZONTAL = A_HORIZONTAL;
+const chtype_t LEFT = A_LEFT;
+const chtype_t LOW = A_LOW;
+const chtype_t RIGHT = A_RIGHT;
+const chtype_t TOP = A_TOP;
+const chtype_t VERTICAL = A_VERTICAL;
 
 /**
  * Human readable names for the most commonly used characters.
  * "Upper", "right", etc. are chosen to be consistent with the vt100 manual.
  */
 
-chtype initailizer_element_should_be_constant(const char *key) {
+chtype_t initailizer_element_should_be_constant(const char *key) {
     size_t key_maxlen;
 
     key_maxlen = 9;
@@ -91,7 +94,7 @@ chtype initailizer_element_should_be_constant(const char *key) {
     if (strncmp(key, "NEQUAL", key_maxlen) == 0) return ACS_NEQUAL;     /* not equal */
     if (strncmp(key, "STERLING", key_maxlen) == 0) return ACS_STERLING; /* UK pound sign */
 
-    return 0L;
+    return 0;
 }
 
 /* 
