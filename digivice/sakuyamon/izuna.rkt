@@ -201,7 +201,7 @@
       (define-values [host-cols rsyslog-rows] (values (exact-round (* columns 0.16)) (exact-round (* rows 0.16))))
       (define-values [request-cols request-rows] (values (- columns host-cols 1) (- rows rsyslog-rows 1)))
       (for-each (lambda [stdwin] (and (wclear (stdwin)) (wnoutrefresh (stdwin)))) (list stdscr titlebar cmdlinebar))
-      (wattr_set (titlebar) 'TabLineFill 'TabLineFill)
+      (wattrset (titlebar) 'TabLineFill)
       (mvwaddstr (titlebar) 0 0 (~a (current-digimon) #\space (last (quote-module-path)) #:width columns))
       (for ([pname (in-list (list 'host%      'request%        'rsyslog%))]
             [scrny (in-list (list 0           0                request-rows))]
@@ -210,7 +210,7 @@
             [scrnc (in-list (list host-cols   request-cols     request-cols))])
         (define p% (hash-ref! monitors pname (lambda [] (make-object infinite-pad%))))
         (send p% resize scrny scrnx scrnr scrnc))
-      (wattr_set (stdscr) 'VertSplit 'VertSplit)
+      (wattrset (stdscr) 'VertSplit)
       (mvvline 0 host-cols (- rows 1))
       (mvaddch (sub1 rows) host-cols (acs_map 'DARROW #:extra_attrs (list 'underline)))
       (wstandend (stdscr))
@@ -221,14 +221,14 @@
     (lambda [higroup fmt . contents]
       (define stdwin (cmdlinebar))
       (wclear stdwin)
-      (wattr_set stdwin higroup higroup)
+      (wattrset stdwin higroup)
       (mvwaddstr stdwin 0 0 (apply format fmt contents))
       (wrefresh stdwin)))
   
   (define digivice
     (lambda [izunad]
       (call-as-normal-termination
-       (thunk (dynamic-wind (thunk (and (ripoffline 1 titlebar)
+       (thunk (dynamic-wind (thunk (and (ripoffline +1 titlebar)
                                         (ripoffline -1 cmdlinebar)
                                         (initscr)))
                             (thunk (with-handlers ([exn:fail? (lambda [e] (place-channel-put izunad (exn-message e)))])

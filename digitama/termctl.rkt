@@ -228,11 +228,9 @@
 (define-ncurses-winapi bkgdset (_fun _chtype -> _void))
 (define-ncurses-winapi/mv chgat (_fun [howmany : _int] [attrs : _attr] [pair_index : _color-pair] [opts : _pointer = #false] -> _ok/err))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; In order to reduce the complexity, I prefer (wattr_on) rather than (wattron)  ;;;
-;;;  since (wattron) and friends require OR COLOR_PAIR and ATTRIBUTES.            ;;;
-;;; All of them work well with (wstandend).                                       ;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define-ncurses-winapi attron (_fun _chtype -> _ok/err))
+(define-ncurses-winapi attrset (_fun _chtype -> _ok/err))
+(define-ncurses-winapi attroff (_fun _chtype -> _ok/err))
 (define-ncurses-winapi attr_on (_fun _attr [opts : _pointer = #false] -> _ok/err))
 (define-ncurses-winapi attr_set (_fun _attr _color-pair [opts : _pointer = #false] -> _ok/err))
 (define-ncurses-winapi attr_get (_fun [As : (_ptr o _attr)] [cp : (_ptr o _color-pair)] [opts : _pointer = #false] -> _ok/err -> (values As cp)))
@@ -358,7 +356,7 @@
         (define colorscheme (newpad rows cols))
         (when (false? colorscheme) (error "Unable to create color area!"))
         (for ([name (in-list (sort (hash-keys vim-highlight) symbol<?))])
-          (wattr_set colorscheme name name)
+          (wattrset colorscheme name)
           (define-values [attr colorpair] (wattr_get colorscheme))
           (waddstr colorscheme (~a name (pair_content colorpair) #:width units)))
         (wstandend colorscheme)
@@ -371,15 +369,15 @@
           (mvwin stdclr y x)
           (when (false? colorscheme) (error "Unable to create color area border!"))
           (for-each wclear (list (stdscr) (statusbar)))
-          (wattr_set stdclr 'VertSplit 'VertSplit)
+          (wattrset stdclr 'VertSplit)
           (wborder stdclr)
           (unless (< mbx (+ title-offset (string-length title) 2))
             (wmove stdclr 0 2)
             (mvwaddch stdclr 0 title-offset (acs_map 'RTEE))
             (mvwaddch stdclr 0 (+ title-offset (string-length title) 1) (acs_map 'LTEE))
-            (wattr_set stdclr 'TabLineFile 'TabLineFile)
+            (wattrset stdclr 'TabLineFile)
             (mvwaddstr stdclr 0 (add1 title-offset) title))
-          (wattr_set (statusbar) 'StatusLine 'StatusLine)
+          (wattrset (statusbar) 'StatusLine)
           (mvwaddstr (statusbar) 0 0 (~a hints #:width maxx))
           (for-each wnoutrefresh (list (stdscr) stdclr (statusbar)))
           (pnoutrefresh colorscheme 0 0 (add1 y) (add1 x) (min (+ rows y 1) (sub1 maxy)) (min (+ cols x 1) (sub1 maxx)))
