@@ -1,21 +1,23 @@
 #lang at-exp racket
 
-(provide (all-defined-out) ctype-c->scheme ctype-scheme->c)
+(provide (all-defined-out) ctype-basetype ctype-c->scheme ctype-scheme->c)
 (provide (all-from-out "digicore.rkt"))
 (provide (all-from-out ffi/unsafe))
 (provide (all-from-out ffi/unsafe/define))
+(provide (all-from-out ffi/unsafe/alloc))
 
 @require{digicore.rkt}
 
 (require ffi/unsafe)
 (require ffi/unsafe/define)
-(require (only-in '#%foreign ctype-c->scheme ctype-scheme->c))
+(require ffi/unsafe/alloc)
+(require (only-in '#%foreign ctype-basetype ctype-c->scheme ctype-scheme->c))
 
 (struct exn:foreign exn:fail (errno))
 
 (define c-extern
-  (lambda [variable #:ctype [ctype #false] #:lib [lib #false]]
-    (get-ffi-obj variable lib (or ctype _int))))
+  (lambda [variable ctype #:lib [lib #false]]
+    (get-ffi-obj variable lib ctype)))
 
 (define raise-foreign-error
   (lambda [src errno #:strerror [error->string strerror]]
@@ -45,29 +47,29 @@
 (define-posix setuid
   (_fun #:save-errno 'posix
         _uint32
-        -> [status : _int]
-        -> (unless (zero? status)
+        -> [$? : _int]
+        -> (unless (zero? $?)
              (raise-foreign-error 'setuid (saved-errno)))))
 
 (define-posix setgid
   (_fun #:save-errno 'posix
         _uint32
-        -> [status : _int]
-        -> (unless (zero? status)
+        -> [$? : _int]
+        -> (unless (zero? $?)
              (raise-foreign-error 'setgid (saved-errno)))))
 
 (define-posix seteuid
   (_fun #:save-errno 'posix
         _uint32
-        -> [status : _int]
-        -> (unless (zero? status)
+        -> [$? : _int]
+        -> (unless (zero? $?)
              (raise-foreign-error 'seteuid (saved-errno)))))
 
 (define-posix setegid
   (_fun #:save-errno 'posix
         _uint32
-        -> [status : _int]
-        -> (unless (zero? status)
+        -> [$? : _int]
+        -> (unless (zero? $?)
              (raise-foreign-error 'setegid (saved-errno)))))
 
 (define-ffi-definer define-digitama
@@ -79,25 +81,25 @@
         [username : _bytes]
         [uid : (_ptr o _uint32)]
         [gid : (_ptr o _uint32)]
-        -> [errno : _int]
-        -> (cond [(zero? errno) (values uid gid)]
-                 [else (raise-foreign-error 'fetch_tamer_ids errno)])))
+        -> [$? : _int]
+        -> (cond [(zero? $?) (values uid gid)]
+                 [else (raise-foreign-error 'fetch_tamer_ids $?)])))
 
 (define-digitama fetch_tamer_name
   (_fun #:save-errno 'posix
         [uid : _uint32]
         [username : (_ptr o _bytes)]
-        -> [errno : _int]
-        -> (cond [(zero? errno) username]
-                 [else (raise-foreign-error 'fetch_tamer_name errno)])))
+        -> [$? : _int]
+        -> (cond [(zero? $?) username]
+                 [else (raise-foreign-error 'fetch_tamer_name $?)])))
 
 (define-digitama fetch_tamer_group
   (_fun #:save-errno 'posix
         [gid : _uint32]
         [groupname : (_ptr o _bytes)]
-        -> [errno : _int]
-        -> (cond [(zero? errno) groupname]
-                 [else (raise-foreign-error 'fetch_group_name errno)])))
+        -> [$? : _int]
+        -> (cond [(zero? $?) groupname]
+                 [else (raise-foreign-error 'fetch_group_name $?)])))
 
 ;;; syslog.
 (define _facility
@@ -143,6 +145,7 @@
         -> _void))
 
 (module* typed/ffi typed/racket
+  ;;; Meanwhile Typed Racket does not support _pointer well
   (require/typed/provide (submod "..")
                          [#:struct (exn:foreign exn) ([errno : Integer])]
                          [strerror (-> Natural String)]

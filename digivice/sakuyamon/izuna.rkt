@@ -7,7 +7,7 @@
 (module+ sakuyamon
   (require/typed racket/generator
                  [sequence->repeated-generator (All [a] (-> (Sequenceof a) (-> a)))])
-  
+
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/geolocation.rkt")
   
@@ -77,32 +77,31 @@
             [else (place-channel-put digivice (list 245 (format "Unexpected Message from ~a: ~a(~s)~n" scepter-host message message)))])
       (flush-output (current-output-port))))
   
-  (define monitor-main : (-> String * Any)
-    (lambda hostnames
-      (define digivice : Place (dynamic-place `(submod ,(#%file) izuna) 'digivice))
-      (when (sync digivice (wrap-evt (place-dead-evt digivice) (lambda [e] #false)))
-        (for-each build-tunnel hostnames)
-        (define on-signal : (-> exn Void)
-          (lambda [signal]
-            (for-each (lambda [[foxpipe : Place]] (place-break foxpipe 'terminate)) (hash-values foxpipes))
-            (let wait-foxpipe ()
-              (define who (apply sync (hash-map foxpipes (lambda [[host : String] [foxpipe : Place]]
-                                                           (wrap-evt (place-dead-evt foxpipe) (const host))))))
-              (hash-remove! foxpipes who)
-              (place-channel-put digivice (list 'blue (format "~a: Foxpipe has collapsed~n" who)))
-              (unless (zero? (hash-count foxpipes)) (wait-foxpipe)))
-            (place-break digivice 'terminate)))
-        (with-handlers ([exn:break? on-signal])
-          (let poll-channel ()
-            (match (apply sync/enable-break digivice (hash-values foxpipes))
-              [(cons host (vector message)) (print-message digivice (cast host String) message)]
-              [(cons host (? flonum? s)) (place-channel-put (cast (hash-ref foxpipes host) Place) (format "idled ~as" s))]
-              [(list host 'fail message) (place-channel-put digivice (list 'red (format "~a: ~a~n" host message)))]
-              [(list host (? string? figureprint) ...) (place-channel-put digivice (list 'cyan (format "~a: RSA: ~a~n" host figureprint)))]
-              [(list host 'notify (? string? fmt) argl ...) (place-channel-put digivice  (list 'blue (format "~a: ~a~n" host (apply format fmt argl))))]
-              [(or 'exn:break:terminate #false #|sent by digivice|#)
-               (call/ec (lambda [[collapse : Procedure]] (raise (exn:break "terminate break" (current-continuation-marks) collapse))))])
-            (poll-channel))))
+  (define monitor-main : (-> Place String * Any)
+    (lambda [digivice . hostnames]
+      (place-channel-put digivice hostnames)
+      (for-each build-tunnel hostnames)
+      (define on-signal : (-> exn Void)
+        (lambda [signal]
+          (place-channel-put digivice (vector 'MoreMsg "Terminating Foxpipes"))
+          (for-each (lambda [[foxpipe : Place]] (place-break foxpipe 'terminate)) (hash-values foxpipes))
+          (let wait-foxpipe ()
+            (define who (apply sync (hash-map foxpipes (lambda [[host : String] [foxpipe : Place]] (wrap-evt (place-dead-evt foxpipe) (const host))))))
+            (hash-remove! foxpipes who)
+            (place-channel-put digivice (vector 'Comment (format "Foxpipe@~a has collapsed." who)))
+            (unless (zero? (hash-count foxpipes)) (wait-foxpipe)))
+          (place-channel-put digivice (exn-message signal)) #| TODO: why (place-break) does not terminate digivice |#))
+      (with-handlers ([exn:break? on-signal]) ;;; System Signal also be caught here rather then at place
+        (let poll-channel ()
+          (match (apply sync/enable-break digivice (wrap-evt (place-dead-evt digivice) (lambda [e] 'exn:break:terminate)) (hash-values foxpipes))
+            [(cons host (vector message)) (print-message digivice (cast host String) message)]
+            [(cons host (? flonum? s)) (place-channel-put (cast (hash-ref foxpipes host) Place) (format "idled ~as" s))]
+            [(list host 'fail message) (place-channel-put digivice (list 'red (format "~a: ~a~n" host message)))]
+            [(list host (? string? figureprint) ...) (place-channel-put digivice (list 'cyan (format "~a: RSA: ~a~n" host figureprint)))]
+            [(list host 'notify (? string? fmt) argl ...) (place-channel-put digivice  (list 'blue (format "~a: ~a~n" host (apply format fmt argl))))]
+            ['exn:break:terminate #|sent by digivice or digivice is dead |#
+             (call/ec (lambda [[collapse : Procedure]] (raise (exn:break "digivice has shutdown" (current-continuation-marks) collapse))))])
+          (poll-channel)))
       (place-wait digivice)))
   
   (call-as-normal-termination
@@ -115,8 +114,14 @@
                [once-each
                 [{"-p"} ,(λ [[flag : String] [port : String]] (sakuyamon-scepter-port (cast (string->number port) Index)))
                         {"Use an alternative service <port>." "port"}]])
-             (lambda [!flag hostname . other-hosts] (apply monitor-main (cons hostname other-hosts)))
-             '{"hostname" "2nd hostname"}
+             (lambda [!flag hostname . other-hosts]
+               (define digivice : Place (dynamic-place `(submod ,(#%file) izuna) 'digivice))
+               (define handshake : Any (sync digivice (wrap-evt (place-dead-evt digivice) (lambda [e] "Digivice is broken!"))))
+               (when (string? handshake)
+                 (place-wait digivice)
+                 (error handshake))
+               (apply monitor-main digivice (cons hostname other-hosts)))
+             (list "hostname" "2nd hostname")
              (lambda [[-h : String]]
                (display (string-replace -h #px"  -- : .+?-h --'\\s*" ""))
                (exit 0)))))))
@@ -124,63 +129,135 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Meanwhile Typed Racket does not support CPonter well, So leave the "Typed C" to FFI itself. ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 (module* izuna racket
   (provide (all-defined-out))
 
-  (require racket/draw)
-
+  (require syntax/location)
+  
+  (require (submod ".."))
   (require "../../digitama/digicore.rkt")
   (require "../../digitama/termctl.rkt")
 
-  (define window%
-    (class object% (super-new)
-      (init-field x y width height)
+  (define titlebar (make-parameter #false))
+  (define cmdlinebar (make-parameter #false))
+  (define monitors (make-hash))
 
-      (define border (newwin height width y x))
-      (define screen (newpad border ))
-      (wborder border #\| #\| #\- #\- #\+ #\+ #\+ #\+)))
+  (define infinite-pad%
+    (class object% (super-new)
+      (match-define (list curpos screen-y screen-x screen-rows screen-cols)
+        (map box (list #false #false #false #false #false)))
+      
+      (define syslogs (box null))
+      (define monitor (newwin 0 0 0 0))
+      (define statusbar (newwin 1 0 0 0))
+      (wbkgdset statusbar 'StatusLineNC)
+
+      (scrollok monitor #true)
+
+      (define/public append!
+        (lambda [record]
+          (set-box! syslogs (cons record (unbox syslogs)))
+          (waddwstr monitor (~a record #:max-width (getmaxx monitor)))
+          (refresh #:update? #true)))
+      
+      (define/public set-status
+        (lambda [#:color-pair [colorpair #false] #:offset [offset 0] #:max-width [mxw +inf.0] . contents]
+          (unless (false? colorpair) (wcolor_set statusbar colorpair))
+          (mvwaddwstr statusbar 0 offset (apply ~a contents #:max-width mxw))
+          (unless (false? colorpair) (wcolor_set statusbar 0))
+          (wrefresh statusbar)))
+      
+      (define/public resize
+        (lambda [y x rows+status cols]
+          (wresize monitor (sub1 rows+status) cols)
+          (mvwin monitor y x)
+          (wresize statusbar 1 cols)
+          (mvwin statusbar (+ y rows+status) x)
+          (mvwaddwstr statusbar 0 0 (~a (format "[~a, ~a, ~a, ~a]" y x rows+status cols) #:width cols))
+          (refresh #:update? #false)))
+
+      (define/public refresh
+        (lambda [#:update? [update? #true]]
+          (define smart-refresh (if update? wrefresh wnoutrefresh))
+          (smart-refresh monitor)
+          (smart-refresh statusbar)))))
+  
+  (define on-resized
+    (lambda []
+      #|/+---------------+----------------------------------------+\
+         | host%         | request%                               |
+         |               |                                        |
+         |               |                                        |
+         |               |                                        |
+         |               |                                        |
+         |               +----------------------------------------+
+         |               | rsyslog%                               |
+         |               |                                        |
+         |               |                                        |
+         +---------------+----------------------------------------+
+         | commandline%                                           |
+        \+--------------------------------------------------------+/|#
+      (define-values [columns rows] (values (c-extern 'COLS _int) (c-extern 'LINES _int)))
+      (define-values [host-cols rsyslog-rows] (values (exact-round (* columns 0.16)) (exact-round (* rows 0.16))))
+      (define-values [request-cols request-rows] (values (- columns host-cols 1) (- rows rsyslog-rows 1)))
+      (for-each (lambda [stdwin] (and (wclear (stdwin)) (wnoutrefresh (stdwin)))) (list stdscr titlebar cmdlinebar))
+      (wattrset (titlebar) 'TabLineFill)
+      (mvwaddstr (titlebar) 0 0 (~a (current-digimon) #\space (last (quote-module-path)) #:width columns))
+      (for ([pname (in-list (list 'host%      'request%        'rsyslog%))]
+            [scrny (in-list (list 0           0                request-rows))]
+            [scrnx (in-list (list 0           (add1 host-cols) (add1 host-cols)))]
+            [scrnr (in-list (list (sub1 rows) request-rows     rsyslog-rows))]
+            [scrnc (in-list (list host-cols   request-cols     request-cols))])
+        (define p% (hash-ref! monitors pname (lambda [] (make-object infinite-pad%))))
+        (send p% resize scrny scrnx scrnr scrnc))
+      (wattrset (stdscr) 'VertSplit)
+      (mvvline 0 host-cols (- rows 1))
+      (mvaddch (sub1 rows) host-cols (acs_map 'DARROW #:extra_attrs (list 'underline)))
+      (wstandend (stdscr))
+      (for-each wnoutrefresh (list (stdscr) (titlebar)))
+      (doupdate)))
+
+  (define hiecho
+    (lambda [higroup fmt . contents]
+      (define stdwin (cmdlinebar))
+      (wclear stdwin)
+      (wattrset stdwin higroup)
+      (mvwaddstr stdwin 0 0 (apply format fmt contents))
+      (wrefresh stdwin)))
   
   (define digivice
     (lambda [izunad]
-      (define stdscr (initscr))
-      ((curry plumber-add-flush! (current-plumber))
-       (lambda [this]
-         (plumber-flush-handle-remove! this)
-         (endwin)
-         (place-channel-put izunad #false)))
-
       (call-as-normal-termination
-       (thunk (with-handlers ([exn:fail? (lambda [ef] (and (endwin) (raise ef)))])
-                (when (and stdscr (raw) (noecho) (wtimeout stdscr 0) (keypad stdscr #true)
-                           (idlok stdscr #true) (scrollok stdscr #true))
-                  (place-channel-put izunad 'Okay)
-                  (wborder stdscr #\| #\| #\- #\- #\+ #\+ #\+ #\+)
-                  (define-values [width height] (values (getmaxx stdscr) (getmaxy stdscr)))
-                  (when (has_colors)
-                    (start_color)
-                    (use_default_colors)
-                    (let ([C (c-extern 'COLORS)])
-                      (for ([c (in-range C)])
-                        (init_pair c c 'none)
-                        (init_pair (+ c C) 'none c))))
+       (thunk (dynamic-wind (thunk (and (ripoffline +1 titlebar)
+                                        (ripoffline -1 cmdlinebar)
+                                        (initscr)))
+                            (thunk (with-handlers ([exn:fail? (lambda [e] (place-channel-put izunad (exn-message e)))])
+                                     (unless (and (titlebar) (cmdlinebar) (stdscr) (curs_set 0)
+                                                  (raw) (noecho) (timeout 0) (intrflush #true) (keypad #true))
+                                       (error "NCurses is unavailable!"))
+                                     (when (has_colors)
+                                       (start_color)
+                                       (use_default_colors)
+                                       (:colorscheme! (build-path (digimon-stone) "colors.vim")))
+                                     (digivice-main izunad (place-channel-put/get izunad 'Okay))))
+                            (thunk (endwin)))))))
 
-                  (with-handlers ([exn:break? exit])
-                    (let recv-match-render-loop ()
-                      (match (or (getch) (sync/timeout/enable-break 0.26149 #| Number Thoery: Meissel–Mertens Constant |# izunad))
-                        [#\003 #| Ctrl+C |# (place-channel-put izunad 'exn:break:terminate)]
-                        [(? false?) (void "No key is pressed!")]
-                        [(? char? c) (void (mvwaddwstr stdscr (getcury stdscr) 3 (format "Pressed key: ~a ~a!~n" c (char->integer c)))
-                                           (wrefresh stdscr))]
-                        [(list color 'fold msg) (wcolor_set stdscr (color-number color))
-                                                (wmove stdscr (getcury stdscr) (max (getcurx stdscr) 1))
-                                                (whline stdscr  #\= (string-length (~a msg)))
-                                                (wrefresh stdscr)]
-                        [(list color msg) (wcolor_set stdscr (color-number color))
-                                          (mvwaddwstr stdscr (getcury stdscr) 1 (~a msg))
-                                          (wrefresh stdscr)
-                                          (wstandend stdscr)])
-                      (recv-match-render-loop))))))))))
+  (define digivice-main
+    (lambda [izunad hostnames]
+      (on-resized)
+      (with-handlers ([exn:break? (lambda [e] (exit (hiecho 'ErrorMsg "Exit: ~a" (exn-message e))))])
+        (let recv-match-render-loop ()
+          (with-handlers ([exn:fail? (lambda [e] (hiecho 'ErrorMsg "~a" (exn-message e)))])
+            (match (or (getch) (sync/timeout/enable-break 0.26149 #| Number Thoery: Meissel–Mertens Constant |# izunad))
+              [(? false?) (void "No key is pressed!")]
+              [(list color 'fold msg) (send (hash-ref monitors 'rsyslog%) append! msg)]
+              [(list color msg) (send (hash-ref monitors 'request%) append! msg)]
+              [(or 'SIGINT 'SIGQUIT) (place-channel-put izunad 'exn:break:terminate)]
+              [(or 'SIGWINCH) (on-resized)]
+              [(? char? c) (hiecho 'Ignore "Key pressed: ~s[~a]" c (char->integer c))]
+              [(vector group message) (hiecho group message)]
+              [reason (call/ec (lambda [collapse] (raise (exn:break (~a reason) (current-continuation-marks) collapse))))]))
+          (recv-match-render-loop))))))
 
 (module* foxpipe racket
   (provide (all-defined-out))

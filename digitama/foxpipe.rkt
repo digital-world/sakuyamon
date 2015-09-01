@@ -54,7 +54,7 @@
   (_fun [session : _foxpipe_session*]
         [errmsg : (_ptr o _bytes)]
         [size : (_ptr o _int)]
-        -> [errno : _int]
+        -> _int
         -> errmsg)
   #:c-id foxpipe_last_error)
 
@@ -76,16 +76,16 @@
         [publickey : _file]
         [privatekey : _file]
         [passphrase : _string]
-        -> [status : _int]
-        -> (cond [(zero? status) status]
+        -> [$? : _int]
+        -> (cond [(zero? $?) $?]
                  [else (raise-foxpipe-error 'foxpipe_authenticate session)])))
 
 (define-foxpipe foxpipe_collapse
   (_fun [session : _foxpipe_session*]
         [reason : _disconnect_reason = 'SSH_DISCONNECT_BY_APPLICATION]
         [description : _string]
-        -> [status : _int]
-        -> (cond [(zero? status) status]
+        -> [$? : _int]
+        -> (cond [(zero? $?) $?]
                  [else (raise-foxpipe-error 'foxpipe_collapse session)])))
 
 (define-foxpipe foxpipe_direct_channel
@@ -94,6 +94,6 @@
         [service-seen-by-sshd : _uint]
         [/dev/sshin : (_ptr o _racket)]
         [/dev/sshout : (_ptr o _racket)]
-        -> [status : _int]
-        -> (cond [(negative? status) (raise-foxpipe-error 'foxpipe_direct_channel session)]
+        -> [$? : _int]
+        -> (cond [(negative? $?) (raise-foxpipe-error 'foxpipe_direct_channel session)]
                  [else (values /dev/sshin /dev/sshout)])))
