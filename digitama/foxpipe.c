@@ -4,7 +4,7 @@
  */
 
 #include <scheme.h>
-#include <libssh2.h>
+#include <libssh2.h> /* ld: (ssh2) */
 
 typedef struct foxpipe_session {
     LIBSSH2_SESSION *sshclient;

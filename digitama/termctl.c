@@ -5,7 +5,7 @@
 #define _XOPEN_SOURCE_EXTENDED
 #if defined(__sun) && defined(__SVR4)
 #define _POSIX_C_SOURCE 199506L
-#include <ncurses/ncurses.h>
+#include <ncurses/ncurses.h> /* ld: (ncurses) */
 #else
 #include <ncurses.h>
 #endif
