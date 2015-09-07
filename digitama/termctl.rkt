@@ -8,6 +8,7 @@
 @require{posix.rkt}
 
 (define-ffi-definer define-ncurses (ffi-lib "libncurses" #:global? #true))
+(define-ffi-definer define-panel (ffi-lib "libpanel" #:global? #true))
 (define-ffi-definer define-termctl
   (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths)) "native" (system-library-subpath #false) "termctl")
            #:global? #true))
@@ -16,6 +17,7 @@
 (define ERR (c-extern 'ERROR _int))
 
 (define _window* (_cpointer/null 'WINDOW*))
+(define _panel* (_cpointer/null 'PANEL*))
 (define _ok/err (make-ctype _int #false (lambda [c] (not (eq? c ERR)))))
 (define stdscr (make-parameter #false))
 
@@ -78,7 +80,7 @@
                                           'LARROW 'RARROW 'DARROW 'UARROW 'PLUS 'PLMINUS 'LEQUAL 'GEQUAL 'PI 'NEQUAL))))))
 
 (define acs_map
-  (lambda [key #:extra_attrs [attrs null]] ; if working with vim highlight, then only cterm will be used. 
+  (lambda [key #:extra-attrs [attrs null]] ; if working with vim highlight, then only cterm will be used. 
     (define altchar (hash-ref (force acs-map) key make-defchtype))
     (chtype (chtype-char altchar) (append (chtype-cterm altchar) attrs) 0)))
 
@@ -172,7 +174,7 @@
 (define-ncurses-winapi/mv getch (_fun -> _keycode))
 (define-ncurses-winapi/mv inch (_fun -> _chtype))
 
-(define-ncurses-winapi clear (_fun -> _ok/err)) ;;; it just calls (*erase)
+(define-ncurses-winapi clear (_fun -> _ok/err)) ;;; it just calls (*erase), also do (*move 0 0)
 (define-ncurses-winapi clrtobot (_fun -> _ok/err))
 (define-ncurses-winapi clrtoeol (_fun -> _ok/err))
 (define-ncurses-winapi insdelln (_fun _int -> _ok/err))
@@ -263,6 +265,23 @@
 ;;; So let this one always return false.                                          ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses can_change_color (_fun -> _bool -> #false))
+
+;;; Panels
+(define-panel del_panel (_fun _panel* -> _ok/err) #:wrap (deallocator))
+(define-panel new_panel (_fun _window* -> _panel*) #:wrap (allocator del_panel))
+(define-panel update_panels (_fun -> _void)) ; followed by (doupdate).
+(define-panel top_panel (_fun _panel* -> _ok/err))
+(define-panel bottom_panel (_fun _panel* -> _ok/err))
+(define-panel show_panel (_fun _panel* -> _ok/err))
+(define-panel hide_panel (_fun _panel* -> _ok/err))
+(define-panel panel_hidden (_fun _panel* -> _bool))
+(define-panel move_panel (_fun _panel* _int _int -> _ok/err))
+(define-panel panel_above (_fun _panel* -> _panel*))
+(define-panel panel_below (_fun _panel* -> _panel*))
+(define-panel set_panel_userptr (_fun _panel* _racket -> _ok/err))
+(define-panel panel_userptr (_fun _panel* -> _racket))
+(define-panel panel_window (_fun _panel* -> _window*))
+(define-panel replace_panel (_fun _panel* _window* -> _window*))
 
 ;;; Miscellaneous
 (define-ncurses curs_set (_fun _int -> _int))
