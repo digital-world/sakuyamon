@@ -28,7 +28,6 @@
   (define print-message : (-> Place-Channel String Any Void)
     (lambda [digivice scepter-host message]
       (cond [(char? message) (place-channel-put digivice (cons scepter-host message)) #| TODO: Mac's beating heart might be received as a strange char |#]
-            [(list? message) (for ([msg (in-list message)]) (print-message digivice scepter-host msg)) #| single-line message is also (list)ed. |#]
             [(not (string? message)) (place-channel-put digivice (cons 'ErrorMsg (format "Unexpected Message from ~a: ~s~n" scepter-host message)))]
             [else (match (string->syslog message)
                     [(? false?) (place-channel-put digivice (cons 'WarningMsg (format "Invalid Syslog Message from ~a: ~a~n" scepter-host message)))]
