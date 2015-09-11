@@ -25,21 +25,16 @@
                                        'service-seen-by-sshd (sakuyamon-scepter-port)))
       (hash-set! foxpipes scepter-host foxpipe)))
   
-  (define px.filter : (Listof Regexp)
-    (list #px"\\S+\\[\\d+\\]:\\s*$" #| empty-messaged log such as Safari[xxx] |#
-          #px"taskgated\\[\\d+\\]:" #| all especially "no system signature for unsigned ..." |#))
-
-  (define filter-syslog : (-> Syslog Syslog)
-    (lambda [record]
-      record))
-  
   (define print-message : (-> Place-Channel String Any Void)
     (lambda [digivice scepter-host message]
       (cond [(char? message) (place-channel-put digivice (cons scepter-host message)) #| TODO: Mac's beating heart might be received as a strange char |#]
             [(list? message) (for ([msg (in-list message)]) (print-message digivice scepter-host msg)) #| single-line message is also (list)ed. |#]
-            [(and (string? message) (string->syslog message)) => (lambda [[record : Syslog]] (place-channel-put digivice (cons scepter-host record)))]
-            [else (place-channel-put digivice (cons 'ErrorMsg (format "Unexpected Message from ~a: ~a(~s)~n" scepter-host message message)))])
-      (flush-output (current-output-port))))
+            [(not (string? message)) (place-channel-put digivice (cons 'ErrorMsg (format "Unexpected Message from ~a: ~s~n" scepter-host message)))]
+            [else (match (string->syslog message)
+                    [(? false?) (place-channel-put digivice (cons 'WarningMsg (format "Invalid Syslog Message from ~a: ~a~n" scepter-host message)))]
+                    [(syslog _ _ _ _ _ _ #false) (place-channel-put digivice (cons 'Ignore (format "Empty Message from ~a: ~a~n" scepter-host message)))]
+                    [(syslog _ _ _ _ "taskgated" _ unsigned-signature) (place-channel-put digivice (cons 'Folded (~a unsigned-signature)))]
+                    [(and (struct syslog _) record) (place-channel-put digivice (cons scepter-host record))])])))
   
   (define monitor-main : (-> Place String * Any)
     (lambda [digivice . hostnames]
@@ -114,23 +109,22 @@
       (field [monitor (newwin 0 0 0 0)])
       (field [statusbar (newwin 1 0 0 0)])
 
-      (define/public [set-status #:color-pair [colorpair #false] #:offset [offset 0] #:max-width [mxw +inf.0] . contents]
+      (define/public (set-status #:color-pair [colorpair #false] #:offset [offset 0] #:max-width [mxw +inf.0] . contents)
         (unless (false? colorpair) (wcolor_set statusbar colorpair))
         (mvwaddwstr statusbar 0 offset (apply ~a contents #:max-width mxw))
         (unless (false? colorpair) (wcolor_set statusbar 0))
         (wrefresh statusbar))
       
-      (define/public [resize y x rows+status cols]
-        (wresize monitor (sub1 rows+status) cols)
+      (define/public (resize y x lines cols)
+        (wresize monitor lines cols)
         (mvwin monitor y x)
         (wresize statusbar 1 cols)
-        (mvwin statusbar (+ y rows+status) x)
+        (mvwin statusbar (+ y lines) x)
         (wbkgdset statusbar 'StatusLineNC)
-        (wborder monitor)
-        (mvwaddwstr statusbar 0 0 (~a (format "[~a, ~a, ~a, ~a]" y x rows+status cols) #:width cols))
+        (mvwaddwstr statusbar 0 0 (~a (format "[~a, ~a, ~a, ~a]" y x lines cols) #:width cols))
         (refresh #:update? #false))
 
-      (define/public [refresh #:update? [update? #true]]
+      (define/public (refresh #:update? [update? #true])
         (define smart-refresh (if update? wrefresh wnoutrefresh))
         (smart-refresh monitor)
         (smart-refresh statusbar))))
@@ -143,7 +137,7 @@
       (define figure-print (box #false))
       (define hosts (make-hash))
 
-      (define/public [add-host! sceptor-host figureprint]
+      (define/public (add-host! sceptor-host figureprint)
         (set-box! figure-print figureprint)
         (dict-ref! hosts sceptor-host make-hash)
         (let check-next ([idx (dict-iterate-first hosts)] [y 0])
@@ -152,7 +146,7 @@
                 [else (check-next (dict-iterate-next hosts idx) (+ (dict-count (dict-iterate-value hosts idx)) y 1))]))
         (refresh #:update? #true))
 
-      (define/private [add-host hostname y]
+      (define/private (add-host hostname y)
         (wmove monitor y 0)
         (winsertln monitor)
         (wattrset monitor 'NameSpace)
@@ -162,42 +156,46 @@
     (class window% (super-new)
       (inherit-field monitor statusbar)
       (inherit set-status resize refresh)
+
+      (scrollok monitor #true)
       
       (define contents (box null))
 
-      (scrollok monitor #true)
+      (define/public (add-record! scepter-host record)
+        (set-box! contents (cons (cons scepter-host record) (unbox contents)))
+        (waddwstr monitor (~syslog scepter-host record))
+        (refresh #:update? #true))
 
-      (define/public append!
-        (lambda [scepter-host record]
-          (set-box! contents (cons (cons scepter-host record) (unbox contents)))
-          (waddwstr monitor (~a record #\space #:max-width (getmaxx monitor)))
-          (refresh #:update? #true)))))
+      (define/private (~syslog scepter-host record)
+        (~a record #\newline #:max-width (getmaxx monitor)))))
 
   (define rsyslog%
     (class window% (super-new)
       (inherit-field monitor statusbar)
       (inherit set-status resize refresh)
+
+      (scrollok monitor #true)
       
       (define contents (box null))
 
-      (scrollok monitor #true)
+      (define/public (add-record! scepter-host record)
+        (set-box! contents (cons (cons scepter-host record) (unbox contents)))
+        (waddwstr monitor (~syslog scepter-host record))
+        (refresh #:update? #true))
 
-      (define/public append!
-        (lambda [scepter-host record]
-          (set-box! contents (cons (cons scepter-host record) (unbox contents)))
-          (waddwstr monitor (~a record #\space #:max-width (getmaxx monitor)))
-          (refresh #:update? #true)))))
+      (define/private (~syslog scepter-host record)
+        (~a record #\newline #:max-width (getmaxx monitor)))))
 
   (define on-resized
     (lambda []
       (define-values [columns rows] (values (c-extern 'COLS _int) (c-extern 'LINES _int)))
       (define-values [host-cols rsyslog-rows] (values (exact-round (* columns 0.16)) (exact-round (* rows 0.16))))
-      (define-values [request-cols request-rows] (values (- columns host-cols 1) (- rows rsyslog-rows 1)))
+      (define-values [request-cols request-rows] (values (- columns host-cols 1) (- rows rsyslog-rows 1 1)))
       (for-each (lambda [stdwin] (and (wclear (stdwin)) (wnoutrefresh (stdwin)))) (list stdscr titlebar cmdlinebar))
       (wattrset (titlebar) 'TabLineFill)
       (mvwaddstr (titlebar) 0 0 (~a (current-digimon) #\space (last (quote-module-path)) #:width columns))
       (for ([wtype (in-list (list host%       request%         rsyslog%))]              ; /+-----------+----------------------------------------+\
-            [scrny (in-list (list 0           0                request-rows))]          ;  | host%     | request%                               |
+            [scrny (in-list (list 0           0                (add1 request-rows)))]   ;  | host%     | request%                               |
             [scrnx (in-list (list 0           (add1 host-cols) (add1 host-cols)))]      ;  |           |                                        |
             [scrnr (in-list (list (sub1 rows) request-rows     rsyslog-rows))]          ;  |           |                                        |
             [scrnc (in-list (list host-cols   request-cols     request-cols))])         ;  |           |                                        |
@@ -245,7 +243,8 @@
             (match (or (getch) (sync/timeout/enable-break 0.26149 #| Number Thoery: Meissel–Mertens Constant |# izunad))
               [(? false?) (void "No key is pressed!")]
               [(cons scepter-host (? char? beating-heart)) (hiecho 'SpecialChar "~a: ~a" scepter-host beating-heart)]
-              [(cons scepter-host (and (struct syslog _) record)) (send (hash-ref windows 'request%) append! scepter-host record)]
+              [(cons host (and (syslog _ _ _ _ _ _ (struct syslog-request _)) record)) (send (hash-ref windows 'request%) add-record! host record)]
+              [(cons host (and (struct syslog _) record)) (send (hash-ref windows 'rsyslog%) add-record! host record)]
               [(or 'SIGINT 'SIGQUIT) (place-channel-put izunad 'exn:break:terminate)]
               [(or 'SIGWINCH) (on-resized)]
               [(? char? c) (hiecho 'Ignore "Key pressed: ~s[~a]" c (char->integer c))]
