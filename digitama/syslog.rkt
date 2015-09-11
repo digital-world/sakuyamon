@@ -54,12 +54,13 @@
 (require "geolocation.rkt")
 
 (struct Syslog-Message () #:prefab)
+(struct syslog-request Syslog-Message () #:prefab)
 
 (struct syslog (facility severity timestamp loghost sender #| also known as TAG |# pid message) #:prefab)
 
 (define string->syslog
   (lambda [log-text]
-    (define template (pregexp (format "^<(~a)>\\s*(~a)\\s+(~a)\\s+(~a)\\[(~a)\\]:?\\s+(~a)?\\s*(~a)$"
+    (define template (pregexp (format "^<(~a)>\\s*(~a)\\s+(~a)\\s+(~a)\\[(~a)\\]:?\\s*(~a)?\\s*(~a)?$"
                                       "\\d{1,3}" #| prival |#
                                       "[^:]+[^ ]+" #| timestamp |#
                                       "[^ ]+" #| hostname |#
@@ -72,8 +73,6 @@
       (cond [(false? geo) ip]
             [(false? (geolocation-city geo)) (format "~a[~a/~a]" ip (geolocation-continent geo) (geolocation-country geo))]
             [else (format "~a[~a ~a]" ip (geolocation-country geo) (geolocation-city geo))]))
-    (define (string->syslog-message ffmsg)
-      (regexp-replace* #px"\\d{1,3}(\\.\\d{1,3}){3}" ffmsg ~geolocation))
     (match (regexp-match template log-text)
       [(? false?) #false]
       [(list _ prival timestamp hostname appname procid _ ffmsg)
@@ -84,7 +83,9 @@
                  hostname
                  appname
                  (string->number (format "~a" procid))
-                 (string->syslog-message ffmsg)))])))
+                 (match ffmsg
+                   [(? false?) #false]
+                   [else (regexp-replace* #px"\\d{1,3}(\\.\\d{1,3}){3}" ffmsg ~geolocation)])))])))
 
 (module* typed typed/racket
   (provide (all-defined-out))
@@ -94,11 +95,12 @@
 
   (require/typed/provide (submod "..")
                          [#:struct Syslog-Message ()]
+                         [#:struct (syslog-request Syslog-Message) ()]
                          [#:struct syslog ([facility : Symbol]
                                            [severity : Symbol]
                                            [timestamp : String]
                                            [loghost : String]
                                            [sender : String]
                                            [pid : (Option Index)]
-                                           [message : (U String Syslog-Message)])]
+                                           [message : (U False String Syslog-Message)])]
                          [string->syslog (-> String Maybe-Syslog)]))
