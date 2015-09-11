@@ -156,7 +156,6 @@
     (class window% (super-new)
       (inherit-field monitor statusbar)
       (inherit set-status resize refresh)
-
       (scrollok monitor #true)
       
       (define contents (box null))
@@ -173,18 +172,34 @@
     (class window% (super-new)
       (inherit-field monitor statusbar)
       (inherit set-status resize refresh)
-
       (scrollok monitor #true)
       
       (define contents (box null))
+      (define clr-map (hash 'emerg    'ErrorMsg   #| system is unusable |#
+                            'alert    'ErrorMsg   #| action must be taken immediately |#
+                            'fatal    'ErrorMsg   #| critical conditions |#
+                            'error    'ErrorMsg   #| error conditions |#
+                            'warning  'WarningMsg #| warning conditions |#
+                            'notice   'MoreMsg    #| normal but significant condition |#
+                            'info     'String     #| informational |#
+                            'debug    'Debug      #| debug-level messages |#))
 
       (define/public (add-record! scepter-host record)
         (set-box! contents (cons (cons scepter-host record) (unbox contents)))
+        (wattrset monitor (hash-ref clr-map (syslog-severity record) (const 'DiffChange)))
         (waddwstr monitor (~syslog scepter-host record))
         (refresh #:update? #true))
 
       (define/private (~syslog scepter-host record)
-        (~a record #\newline #:max-width (getmaxx monitor)))))
+        (~a #:max-width (getmaxx monitor)
+            (format "<~a.~a>~a ~a ~a[~a]: ~a~n"
+                    (syslog-facility record)
+                    (syslog-severity record)
+                    (syslog-timestamp record)
+                    scepter-host
+                    (syslog-sender record)
+                    (syslog-pid record)
+                    (syslog-message record))))))
 
   (define on-resized
     (lambda []
