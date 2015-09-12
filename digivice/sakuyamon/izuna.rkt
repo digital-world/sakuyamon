@@ -19,7 +19,7 @@
   
   (define build-tunnel : (-> String Void)
     (lambda [scepter-host]
-      (define foxpipe : Place (dynamic-place `(submod ,(#%file) foxpipe) 'realize))
+      (define foxpipe : Place (dynamic-place (cast `(submod ,(#%file) foxpipe) Module-Path) 'realize))
       (place-channel-put foxpipe (hash 'sshd-host scepter-host
                                        'host-seen-by-sshd "localhost"
                                        'service-seen-by-sshd (sakuyamon-scepter-port)))
@@ -73,7 +73,7 @@
                 [{"-p"} ,(λ [[flag : String] [port : String]] (sakuyamon-scepter-port (cast (string->number port) Index)))
                         {"Use an alternative service <port>." "port"}]])
              (lambda [!flag hostname . other-hosts]
-               (define digivice : Place (dynamic-place `(submod ,(#%file) izuna) 'digivice))
+               (define digivice : Place (dynamic-place (cast `(submod ,(#%file) izuna) Module-Path) 'digivice))
                (define handshake : Any (sync digivice (wrap-evt (place-dead-evt digivice) (lambda [e] "Digivice is broken!"))))
                (when (string? handshake)
                  (place-wait digivice)
@@ -165,7 +165,15 @@
         (refresh #:update? #true))
 
       (define/private (~syslog scepter-host record)
-        (~a record #\newline #:max-width (getmaxx monitor)))))
+        (~a #:max-width (getmaxx monitor)
+            (format "<~a.~a>~a ~a ~a[~a]: ~a~n"
+                    (syslog-facility record)
+                    (syslog-severity record)
+                    (syslog-timestamp record)
+                    scepter-host
+                    (syslog-sender record)
+                    (syslog-pid record)
+                    (syslog-message record))))))
 
   (define rsyslog%
     (class window% (super-new)
