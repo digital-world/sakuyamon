@@ -7,7 +7,7 @@ int foxpipe;
 
 dtrace:::BEGIN
 {
-    printf("sakuyamon Kudagitsune (via ssh direct channel)\n");
+    printf("sakuyamon foxpipe (via ssh direct channel)\n");
     port = 514;
     sshd[-1] = 1;
 }
