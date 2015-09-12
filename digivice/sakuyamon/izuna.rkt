@@ -25,39 +25,39 @@
                                        'service-seen-by-sshd (sakuyamon-scepter-port)))
       (hash-set! foxpipes scepter-host foxpipe)))
   
-  (define print-message : (-> Place-Channel String Any Void)
-    (lambda [digivice scepter-host message]
-      (cond [(char? message) (place-channel-put digivice (cons scepter-host message)) #| TODO: Mac's beating heart might be received as a strange char |#]
-            [(not (string? message)) (place-channel-put digivice (cons 'ErrorMsg (format "Unexpected Message from ~a: ~s~n" scepter-host message)))]
-            [else (match (string->syslog message)
-                    [(? false?) (place-channel-put digivice (cons 'WarningMsg (format "Invalid Syslog Message from ~a: ~a~n" scepter-host message)))]
-                    [(syslog _ _ _ _ _ _ #false) (place-channel-put digivice (cons 'Ignore (format "Empty Message from ~a: ~a~n" scepter-host message)))]
-                    [(syslog _ _ _ _ "taskgated" _ unsigned-signature) (place-channel-put digivice (cons 'Folded (~a unsigned-signature)))]
-                    [(and (struct syslog _) record) (place-channel-put digivice (cons scepter-host record))])])))
+  (define filter-syslog : (-> String Syslog (U (Pairof Symbol String) (Pairof String Syslog)))
+    (lambda [scepter-host record]
+      (match record
+        [(syslog _ _ _ _ appname pid #false) (cons 'Ignore (format "Empty Message from ~a[~a]@~a~n" appname pid scepter-host))]
+        [(syslog _ _ _ _ "taskgated" _ unsigned-signature) (cons 'Folded (~a unsigned-signature))]
+        [(struct syslog _) (cons scepter-host record)])))
   
-  (define monitor-main : (-> Place String * Any)
-    (lambda [digivice . hostnames]
+  (define monitor-main : (-> Place (Listof String) Any)
+    (lambda [digivice hostnames]
       (place-channel-put digivice hostnames)
       (for-each build-tunnel hostnames)
+      (define rich-echo (curry place-channel-put digivice))
       (define (on-signal [signal : exn]) : Void
-        (place-channel-put digivice (cons 'MoreMsg "Terminating Foxpipes"))
+        (rich-echo (cons 'MoreMsg "Terminating Foxpipes"))
         (for-each (lambda [[foxpipe : Place]] (place-break foxpipe 'terminate)) (hash-values foxpipes))
         (let wait-foxpipe ()
           (define who (apply sync (hash-map foxpipes (lambda [[host : String] [foxpipe : Place]] (wrap-evt (place-dead-evt foxpipe) (const host))))))
           (hash-remove! foxpipes who)
-          (place-channel-put digivice (cons 'Comment (format "Foxpipe@~a has collapsed." who)))
+          (rich-echo (cons 'Comment (format "Foxpipe@~a has collapsed." who)))
           (unless (zero? (hash-count foxpipes)) (wait-foxpipe)))
         (place-channel-put digivice (exn-message signal)) #| TODO: why (place-break) does not terminate digivice |#)
       (with-handlers ([exn:break? on-signal]) ;;; System Signal also be caught here rather then at place
-        (let poll-channel ()
-          (with-handlers ([exn:fail? (lambda [[e : exn]] (place-channel-put digivice (cons 'ErrorMsg (exn-message e))))])
+        (let poll-channel () #| TODO: Mac's heart beat might be received as a strange char |#
+          (with-handlers ([exn:fail? (lambda [[e : exn]] (rich-echo (cons 'ErrorMsg (string-join (string-split (exn-message e))))))])
             (match (apply sync/enable-break digivice (wrap-evt (place-dead-evt digivice) (lambda [e] 'exn:break:terminate)) (hash-values foxpipes))
-              [(cons host (vector message)) (print-message digivice (cast host String) message)]
+              [(cons host (vector (? char? heart-beat))) (rich-echo (cons host heart-beat))]
+              [(cons host (vector (? string? message))) (rich-echo (filter-syslog (cast host String) (string->syslog message)))]
+              [(cons host (vector message)) (rich-echo (cons 'WarningMsg (format "Unexpected Message from ~a: ~s" host message)))]
               [(cons host (? flonum? s)) (place-channel-put (cast (hash-ref foxpipes host) Place) (format "idled ~as" s))]
-              [(list host (? string? figureprint) ...) (place-channel-put digivice (cons host figureprint))]
-              [(list host 'notify (? string? fmt) argl ...) (place-channel-put digivice (cons 'MoreMsg (format "~a: ~a~n" host (apply format fmt argl))))]
-              [(list host 'fail message) (place-channel-put digivice (cons 'WarningMsg (format "~a: ~a~n" host message)))]
-              ['exn:break:terminate #|sent by digivice or digivice is dead |#
+              [(list host (? string? figureprint) ...) (rich-echo (cons host figureprint))]
+              [(list 'notify (? string? fmt) argl ...) (rich-echo (cons 'host% (apply format fmt argl)))]
+              [(list 'fail (? string? fmt) argl ...) (rich-echo (cons 'WarningMsg (apply format fmt argl)))]
+              ['exn:break:terminate #| sent by digivice or digivice is dead |#
                (call/ec (lambda [[collapse : Procedure]] (raise (exn:break "digivice has shutdown" (current-continuation-marks) collapse))))]))
           (poll-channel)))
       (place-wait digivice)))
@@ -78,7 +78,7 @@
                (when (string? handshake)
                  (place-wait digivice)
                  (error handshake))
-               (apply monitor-main digivice (cons hostname other-hosts)))
+               (monitor-main digivice (cons hostname other-hosts)))
              (list "hostname" "2nd hostname")
              (lambda [[-h : String]]
                (display (string-replace -h #px"  -- : .+?-h --'\\s*" ""))
@@ -95,7 +95,6 @@
   (require syntax/location)
   
   (require (submod ".."))
-  (require "../../digitama/digicore.rkt")
   (require "../../digitama/termctl.rkt")
   (require "../../digitama/syslog.rkt")
 
@@ -103,24 +102,39 @@
   (define cmdlinebar (make-parameter #false))
   (define windows (make-hash))
 
+  (define color-links (hasheq 'emerg      'ErrorMsg   #| system is unusable |#
+                              'alert      'ErrorMsg   #| action must be taken immediately |#
+                              'fatal      'ErrorMsg   #| critical conditions |#
+                              'error      'ErrorMsg   #| error conditions |#
+                              'warning    'WarningMsg #| warning conditions |#
+                              'notice     'MoreMsg    #| normal but significant condition |#
+                              'info       'String     #| informational |#
+                              'debug      'Debug      #| debug-level messages |#
+                              'timestamp  'LineNr
+                              'method     'Operator
+                              'client     'Tag
+                              'host       'StorageClass
+                              'uri        'Underlined
+                              'referer    'Underlined
+                              'user-agent 'Structure))
+
   (define window%
     (class object% (super-new)
       (field [monitor (newwin 0 0 0 0)])
       (field [statusbar (newwin 1 0 0 0)])
 
-      (define/public (set-status #:color-pair [colorpair #false] #:offset [offset 0] #:max-width [mxw +inf.0] . contents)
-        (unless (false? colorpair) (wcolor_set statusbar colorpair))
-        (mvwaddwstr statusbar 0 offset (apply ~a contents #:max-width mxw))
-        (unless (false? colorpair) (wcolor_set statusbar 0))
-        (wrefresh statusbar))
+      (define/public (set-status #:update? [update? #true] #:color-pair [color #false] #:offset [x 0] #:width [width (getmaxx statusbar)] . contents)
+        (unless (empty? contents) (mvwaddwstr statusbar 0 x (apply ~a contents #:width width)))
+        (unless (false? color) (mvwchgat statusbar 0 x width 'StatusLineNC color))
+        (when update? (wrefresh statusbar)))
       
       (define/public (resize y x lines cols)
         (wresize monitor lines cols)
         (mvwin monitor y x)
         (wresize statusbar 1 cols)
         (mvwin statusbar (+ y lines) x)
-        (wbkgdset statusbar 'StatusLineNC)
-        (mvwaddwstr statusbar 0 0 (~a (format "[~a, ~a, ~a, ~a]" y x lines cols) #:width cols))
+        (wbkgdset statusbar 'StatusLine)
+        (set-status (object-name this) #:update? #false)
         (refresh #:update? #false))
 
       (define/public (refresh #:update? [update? #true])
@@ -143,8 +157,13 @@
           (cond [(false? idx) (add-host sceptor-host y)]
                 [(string=? (dict-iterate-key hosts idx) sceptor-host) (check-next #false y)]
                 [else (check-next (dict-iterate-next hosts idx) (+ (dict-count (dict-iterate-value hosts idx)) y 1))]))
+        (beat-heart sceptor-host)
         (refresh #:update? #true))
 
+      (define/public (beat-heart scepter-host)
+        (set-status scepter-host #:update? #false)
+        (set-status #:offset (random (string-length scepter-host)) #:width 1 #:color-pair 'SpecialChar))
+      
       (define/private (add-host hostname y)
         (wmove monitor y 0)
         (winsertln monitor)
@@ -158,22 +177,25 @@
       (scrollok monitor #true)
       
       (define contents (box null))
+      (define fields (list 'timestamp 'method 'host 'uri 'client 'user-agent 'referer))
 
       (define/public (add-record! scepter-host record)
         (set-box! contents (cons (cons scepter-host record) (unbox contents)))
-        (waddwstr monitor (~syslog scepter-host record))
+        (display-request scepter-host (syslog-message record))
         (refresh #:update? #true))
 
-      (define/private (~syslog scepter-host record)
-        (~a #:max-width (getmaxx monitor)
-            (format "<~a.~a>~a ~a ~a[~a]: ~a~n"
-                    (syslog-facility record)
-                    (syslog-severity record)
-                    (syslog-timestamp record)
-                    scepter-host
-                    (syslog-sender record)
-                    (syslog-pid record)
-                    (syslog-message record))))))
+      (define/private (display-request scepter-host req)
+        (unless (empty? (cdr (unbox contents))) (waddch monitor #\newline))
+        (for ([field (in-list fields)])
+          (wattrset monitor (hash-ref color-links field))
+          (waddstr monitor (request-ref req field))
+          (wstandend monitor)
+          (waddch monitor #\space)))
+
+      (define/private (request-ref req key)
+        (case key
+          [(timestamp) (log:request-timestamp req)]
+          [else (hash-ref (log:request-headers req) key (const #false))]))))
 
   (define rsyslog%
     (class window% (super-new)
@@ -182,24 +204,17 @@
       (scrollok monitor #true)
       
       (define contents (box null))
-      (define clr-map (hash 'emerg    'ErrorMsg   #| system is unusable |#
-                            'alert    'ErrorMsg   #| action must be taken immediately |#
-                            'fatal    'ErrorMsg   #| critical conditions |#
-                            'error    'ErrorMsg   #| error conditions |#
-                            'warning  'WarningMsg #| warning conditions |#
-                            'notice   'MoreMsg    #| normal but significant condition |#
-                            'info     'String     #| informational |#
-                            'debug    'Debug      #| debug-level messages |#))
-
+      
       (define/public (add-record! scepter-host record)
         (set-box! contents (cons (cons scepter-host record) (unbox contents)))
-        (wattrset monitor (hash-ref clr-map (syslog-severity record) (const 'DiffChange)))
+        (wattrset monitor (hash-ref color-links (syslog-severity record)))
         (waddwstr monitor (~syslog scepter-host record))
         (refresh #:update? #true))
 
       (define/private (~syslog scepter-host record)
         (~a #:max-width (getmaxx monitor)
-            (format "<~a.~a>~a ~a ~a[~a]: ~a~n"
+            (format "~a<~a.~a>~a ~a ~a[~a]: ~a"
+                    (if (empty? (cdr (unbox contents))) "" #\newline)
                     (syslog-facility record)
                     (syslog-severity record)
                     (syslog-timestamp record)
@@ -211,7 +226,7 @@
   (define on-resized
     (lambda []
       (define-values [columns rows] (values (c-extern 'COLS _int) (c-extern 'LINES _int)))
-      (define-values [host-cols rsyslog-rows] (values (exact-round (* columns 0.16)) (exact-round (* rows 0.16))))
+      (define-values [host-cols rsyslog-rows] (values (exact-round (* columns 0.16)) (exact-round (* rows 0.24))))
       (define-values [request-cols request-rows] (values (- columns host-cols 1) (- rows rsyslog-rows 1 1)))
       (for-each (lambda [stdwin] (and (wclear (stdwin)) (wnoutrefresh (stdwin)))) (list stdscr titlebar cmdlinebar))
       (wattrset (titlebar) 'TabLineFill)
@@ -264,13 +279,14 @@
           (with-handlers ([exn:fail? (lambda [e] (hiecho 'ErrorMsg "~a" (string-join (string-split (exn-message e)))))])
             (match (or (getch) (sync/timeout/enable-break 0.26149 #| Number Thoery: Meissel–Mertens Constant |# izunad))
               [(? false?) (void "No key is pressed!")]
-              [(cons scepter-host (? char? beating-heart)) (hiecho 'SpecialChar "~a: ~a" scepter-host beating-heart)]
-              [(cons host (and (syslog _ _ _ _ _ _ (struct syslog-request _)) record)) (send (hash-ref windows 'request%) add-record! host record)]
+              [(cons host (? char?)) (send (hash-ref windows 'host%) beat-heart host)]
+              [(cons host (and (syslog _ _ _ _ _ _ (struct log:request _)) record)) (send (hash-ref windows 'request%) add-record! host record)]
               [(cons host (and (struct syslog _) record)) (send (hash-ref windows 'rsyslog%) add-record! host record)]
               [(or 'SIGINT 'SIGQUIT) (place-channel-put izunad 'exn:break:terminate)]
               [(or 'SIGWINCH) (on-resized)]
               [(? char? c) (hiecho 'Ignore "Key pressed: ~s[~a]" c (char->integer c))]
-              [(cons (? string? sceptor-host) figureprint) (send (hash-ref windows 'host%) add-host! sceptor-host figureprint)]
+              [(cons 'host% notify) (send (hash-ref windows 'host%) set-status notify)]
+              [(cons (? string? host) figureprint) (send (hash-ref windows 'host%) add-host! host figureprint)]
               [(cons (? symbol? group) message) (hiecho group message)]
               [reason (call/ec (lambda [collapse] (raise (exn:break (~a reason) (current-continuation-marks) collapse))))]))
           (recv-match-render-loop))))))
@@ -303,7 +319,7 @@
           (define terminate/sendback-if-failed
             (lambda [maybe-exn]
               (when (exn:fail? maybe-exn)
-                (place-channel-put izunac (list sshd-host 'fail (exn-message maybe-exn))))
+                (place-channel-put izunac (list 'fail "~a: ~a" sshd-host (exn-message maybe-exn))))
               (with-handlers ([exn? void])
                 (when (ssh-session) ;;; libssh2 treats long reason as an error
                   (define reason (if (exn? maybe-exn) (exn-message maybe-exn) (~a maybe-exn)))
@@ -314,7 +330,7 @@
                     [else (catch-send-clear-loop (+ (sin (current-inexact-milliseconds)) 1.0))])))
           (with-handlers ([exn? terminate/sendback-if-failed])
             (sync/enable-break (alarm-evt (+ (current-inexact-milliseconds) (* (abs delay) 1000))))
-            (place-channel-put izunac (list sshd-host 'notify "Connecting to sshd:~a." 22))
+            (place-channel-put izunac (list 'notify "Connecting to ~a:~a." sshd-host 22))
             (define session (foxpipe_construct sshd-host 22))
             (ssh-session session)
             (define figureprint (foxpipe_handshake session 'LIBSSH2_HOSTKEY_HASH_SHA1))

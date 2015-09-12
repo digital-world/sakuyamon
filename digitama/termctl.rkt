@@ -43,7 +43,7 @@
                                     ((ctype-c->scheme _cterm) (bitwise-and c attrmask))
                                     (pair_number (bitwise-and c cpairmask)))))))
 
-(define _color-pair ; if working with vim highlight, the only color-pair index will be used.
+(define _color-pair ; if working with vim highlight, only color-pair index will be used.
   (make-ctype _short
               (lambda [r] (if (symbol? r) (chtype-ctermfg.bg (hash-ref :highlight r make-defchtype)) r))
               values))

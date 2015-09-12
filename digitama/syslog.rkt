@@ -49,12 +49,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (provide (all-defined-out))
+(provide (struct-out Syslog-Message))
+(provide (struct-out log:request))
 
 (require "posix.rkt")
 (require "geolocation.rkt")
-
-(struct Syslog-Message () #:prefab)
-(struct syslog-request Syslog-Message () #:prefab)
 
 (struct syslog (facility severity timestamp loghost sender #| also known as TAG |# pid message) #:prefab)
 
@@ -74,7 +73,7 @@
             [(false? (geolocation-city geo)) (format "~a[~a/~a]" ip (geolocation-continent geo) (geolocation-country geo))]
             [else (format "~a[~a ~a]" ip (geolocation-country geo) (geolocation-city geo))]))
     (match (regexp-match template log-text)
-      [(? false?) #false]
+      [(? false?) (error 'string->syslog "Invalid Syslog Message: ~a" log-text)]
       [(list _ prival timestamp hostname appname procid _ ffmsg)
        (let-values ([[facility severity] (quotient/remainder (string->number prival) 8)])
          (syslog ((ctype-c->scheme _facility) (arithmetic-shift facility 3))
@@ -85,22 +84,51 @@
                  (string->number (format "~a" procid))
                  (match ffmsg
                    [(? false?) #false]
+                   [(pregexp #px"\\s*request:\\s*(.+)" (list _ hstr)) (string->request hstr)]
                    [else (regexp-replace* #px"\\d{1,3}(\\.\\d{1,3}){3}" ffmsg ~geolocation)])))])))
 
 (module* typed typed/racket
   (provide (all-defined-out))
   
   (define-type Syslog syslog)
-  (define-type Maybe-Syslog (Option Syslog))
 
   (require/typed/provide (submod "..")
                          [#:struct Syslog-Message ()]
-                         [#:struct (syslog-request Syslog-Message) ()]
-                         [#:struct syslog ([facility : Symbol]
-                                           [severity : Symbol]
-                                           [timestamp : String]
-                                           [loghost : String]
-                                           [sender : String]
-                                           [pid : (Option Index)]
-                                           [message : (U False String Syslog-Message)])]
-                         [string->syslog (-> String Maybe-Syslog)]))
+                         [#:struct (log:request Syslog-Message)
+                          ([timestamp : (Option String)]
+                           [method : (Option String)]
+                           [uri : (Option String)]
+                           [client : (Option String)]
+                           [host : (Option String)]
+                           [user-agent : (Option String)]
+                           [referer : (Option String)]
+                           [headers : (HashTable Symbol (U String Bytes))])]
+                         [#:struct syslog
+                          ([facility : Symbol]
+                           [severity : Symbol]
+                           [timestamp : String]
+                           [loghost : String]
+                           [sender : String]
+                           [pid : (Option Index)]
+                           [message : (U False String Syslog-Message)])]
+                         [string->syslog (-> String Syslog)]))
+
+(module digitama racket
+  (provide (all-defined-out))
+
+  (struct Syslog-Message () #:prefab)
+  (struct log:request Syslog-Message (timestamp method uri client host user-agent referer headers) #:prefab)
+
+  (define (string->request hstr)
+    (define headers (for/hash ([(key val) (in-hash (read (open-input-string hstr)))])
+                      (values key (if (bytes? val) (bytes->string/utf-8 val) val))))
+    (log:request (hash-ref headers 'logging-timestamp (const #false))
+                 (hash-ref headers 'method (const #false))
+                 (hash-ref headers 'uri (const #false))
+                 (hash-ref headers 'client (const #false))
+                 (hash-ref headers 'host (const #false))
+                 (hash-ref headers 'user-agent (const #false))
+                 (hash-ref headers 'referer (const #false))
+                 headers)))
+
+(require (submod "." digitama))
