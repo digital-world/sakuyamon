@@ -301,7 +301,7 @@ foxpipe_session_t *foxpipe_construct(Scheme_Object *tcp_connect, Scheme_Object *
         sshclient = libssh2_session_init();
 
         if (sshclient != NULL) {
-            session = (foxpipe_session_t *)scheme_malloc_atomic(sizeof(foxpipe_session_t));
+            session = (foxpipe_session_t *)scheme_malloc(sizeof(foxpipe_session_t));
             session->sshclient = sshclient;
             session->dev_tcpin = dev_tcpin;
             session->dev_tcpout = dev_tcpout;
@@ -360,12 +360,12 @@ intptr_t foxpipe_direct_channel(foxpipe_session_t *session, const char* host_see
 
     libssh2_session_set_blocking(session->sshclient, 1); /* also disable the breaking */
     channel = libssh2_channel_direct_tcpip_ex(session->sshclient, host_seen_by_sshd, service, host_seen_by_sshd, 22);
+    libssh2_session_set_blocking(session->sshclient, 0);
 
     if (channel != NULL) {
         foxpipe_channel_t *object;
 
-        libssh2_session_set_blocking(session->sshclient, 0);
-        object = (foxpipe_channel_t*)scheme_malloc_atomic(sizeof(foxpipe_channel_t));
+        object = (foxpipe_channel_t*)scheme_malloc(sizeof(foxpipe_channel_t));
         object->session = session;
         object->channel = channel;
         object->read_offset = 0;
