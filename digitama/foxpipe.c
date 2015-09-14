@@ -335,10 +335,21 @@ intptr_t foxpipe_authenticate(foxpipe_session_t *session, const char *wargrey, c
     return libssh2_userauth_publickey_fromfile(session->sshclient, wargrey, rsa_pub, id_rsa, passphrase);
 }
 
-intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason, const char *description) {
+intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, const char *description) {
+    size_t msize;
+    char *reason;
+    
+    msize = 256; /* the longest description that would make libssh2 happy */
+    reason = description;
+    if (strlen(description) > msize) {
+        reason = (char *)scheme_malloc_atomic(msize + 1);
+        strncpy(reason, description, msize);
+        reason[msize] = '\0';
+    }
+
     /* TODO: Errors should be handled */
 
-    libssh2_session_disconnect_ex(session->sshclient, reason, description, "");
+    libssh2_session_disconnect_ex(session->sshclient, reason_code, reason, "");
     libssh2_session_free(session->sshclient);
 
     scheme_close_input_port((Scheme_Object *)session->dev_tcpin);

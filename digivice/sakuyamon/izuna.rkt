@@ -19,12 +19,12 @@
 
   (define string->syslog
     (lambda [log-text]
-      (define template (pregexp (format "^<(~a)>\\s*(~a)\\s+(~a)\\s+(~a)\\[?(~a)?\\]?:?\\s*(~a)?\\s*(~a)?$"
+      (define template (pregexp (format "^<(~a)>\\s*(~a)\\s+(~a)\\s+(~a)(~a)?:?\\s*(~a)?\\s*(~a)?$"
                                         "\\d{1,3}" #| prival |#
                                         "[^:]+[^ ]+" #| timestamp |#
                                         "[^ ]+" #| hostname |#
                                         "[^[]+" #| appname |#
-                                        "\\d+"  #| procid |#
+                                        "\\[\\d+\\]"  #| procid |#
                                         "\\[[^]]+\\]" #| structured data, just ignored |#
                                         ".+" #| free-from message |#)))
       (define (~geolocation ip . whocares)
@@ -41,7 +41,7 @@
                    timestamp
                    hostname
                    appname
-                   (and (string? procid) (string->number procid))
+                   (and (string? procid) (string->number (string-trim procid #px"[[\\]]")))
                    (match ffmsg
                      [(? false?) #false]
                      [(pregexp #px"\\s*request:\\s*(.+)" (list _ hstr)) (string->request hstr)]
@@ -159,7 +159,7 @@
                         [(h uptime) (quotient/remainder uptime 3600)]
                         [(m uptime) (quotient/remainder uptime 60)])
             (values d h m uptime)))
-        (set-status "UP" #\space d "d" #\space h #\: m #\: s #\space
+        (set-status "up" #\space d "d" #\space h #\: m #\: s #\space
                     (~r #:precision '(= 3) (/ (current-memory-use) 1024.0 1024.0)) "MB"))
       
       (define/private (add-host hostname y)
@@ -255,7 +255,7 @@
   (define on-foxpipe-rsyslog
     (lambda [scepter-host record]
       (match record
-        [(syslog _ _ _ _ appname pid #false) (rich-echo 'Ignore "Empty Message from ~a[~a]@~a~n" appname pid scepter-host)]
+        [(syslog _ _ _ _ app pid #false) (rich-echo 'Ignore "Recieved an empty message from ~a[~a]@~a~n" app pid scepter-host)]
         [(syslog _ _ _ _ "taskgated" _ unsigned-signature) (rich-echo 'Folded "~a" unsigned-signature)]
         [(syslog _ _ _ _ _ _ (struct log:request _)) (send (stdreq) add-record! scepter-host record)]
         [(struct syslog _) (send (stdlog) add-record! scepter-host record)])))
@@ -286,11 +286,11 @@
               [(? false?) (on-system-idle)]
               [(cons host (vector (? char? heart-beat))) (send (stdhost) set-status host)]
               [(cons host (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
-              [(cons host (vector message)) (rich-echo (rich-echo 'WarningMsg "Unexpected Message from ~a: ~s" host message))]
+              [(cons host (vector message)) (rich-echo (rich-echo 'WarningMsg "Recieved an unexpected message from ~a: ~s" host message))]
               [(cons host (? flonum? s)) (place-channel-put (hash-ref foxpipes host) (format "idled ~as" s))]
               [(list host (? string? figureprint) ...) (send (stdhost) add-host! host figureprint)]
-              [(list 'notify (? string? fmt) argl ...) (send (stdhost) set-status (apply format fmt argl))]
-              [(list 'fail (? string? fmt) argl ...) (rich-echo 'WarningMsg fmt argl)]
+              [(list host 'fail (? string? fmt) argl ...) (rich-echo 'WarningMsg "~a: ~a" host (apply format fmt argl))]
+              [(list host 'notify (? string? fmt) argl ...) (send (stdhost) set-status host ": " (apply format fmt argl))]
               [(? char? c) (rich-echo 'Ignore "Key pressed: ~s[~a]" c (char->integer c))]
               [(or 'SIGQUIT) (let/ec collapse (raise (exn:break:terminate "user terminate" (current-continuation-marks) collapse)))]
               [(or 'SIGINT) (let/ec collapse (raise (exn:break "user break" (current-continuation-marks) collapse)))]
@@ -366,18 +366,18 @@
           (define terminate/sendback-if-failed
             (lambda [maybe-exn]
               (when (exn:fail? maybe-exn)
-                (place-channel-put izunac (list 'fail "~a: ~a" sshd-host (exn-message maybe-exn))))
+                (place-channel-put izunac (list sshd-host 'fail (exn-message maybe-exn))))
               (with-handlers ([exn? void])
                 (when (ssh-session) ;;; libssh2 treats long reason as an error
                   (define reason (if (exn? maybe-exn) (exn-message maybe-exn) (~a maybe-exn)))
                   (custodian-shutdown-all channel-custodian) ;;; This also releases libssh2_channel
-                  (foxpipe_collapse (ssh-session) (substring reason 0 (min (string-length reason) 256))))
+                  (foxpipe_collapse (ssh-session) reason))
                 (collect-garbage))
               (cond [(exn:break:terminate? maybe-exn) (libssh2_exit)]
                     [else (catch-send-clear-loop (+ (sin (current-inexact-milliseconds)) 1.0))])))
           (with-handlers ([exn? terminate/sendback-if-failed])
             (sync/enable-break (alarm-evt (+ (current-inexact-milliseconds) (* (abs delay) 1000))))
-            (place-channel-put izunac (list 'notify "Connecting to ~a:~a." sshd-host 22))
+            (place-channel-put izunac (list sshd-host 'notify "constructing ssh channel."))
             (define session (foxpipe_construct sshd-host 22))
             (ssh-session session)
             (define figureprint (foxpipe_handshake session 'LIBSSH2_HOSTKEY_HASH_SHA1))
@@ -391,9 +391,9 @@
                   [(? false?)
                    (let ([reason (place-channel-put/get izunac (cons sshd-host timeout))])
                      (unless (false? reason)
-                       (error 'ssh-channel "foxpipe has to collapse: ~a!" reason)))]
+                       (error 'foxpipe "foxpipe has to collapse: ~a!" reason)))]
                   [(? input-port?)
                    (match (read /dev/sshdin)
-                     [(? eof-object?) (error 'ssh-channel "remote server disconnected!")]
+                     [(? eof-object?) (error 'foxpipe "remote server disconnected!")]
                      [msgvector (place-channel-put izunac (cons sshd-host msgvector))])])
                 (recv-match-send-loop)))))))))
