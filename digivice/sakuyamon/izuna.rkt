@@ -89,7 +89,8 @@
   (define sakuyamon-scepter-port (make-parameter (sakuyamon-foxpipe-port)))
   (define sakuyamon-colors.vim (make-parameter (build-path (digimon-stone) "colors.vim")))
   (define sakuyamon-action (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
-  
+
+  (define sakuyamon-launch-time (current-seconds))
   (define mtime-colors.vim (box +inf.0))
 
   (define color-links
@@ -151,13 +152,15 @@
                 [else (check-next (dict-iterate-next hosts idx) (+ (dict-count (dict-iterate-value hosts idx)) y 1))]))
         (refresh #:update? #true))
       
-      (define/public (show-memory-usage)
-        (define mb (~r #:precision '(= 3) (/ (current-memory-use) 1024.0 1024.0)))
-        (set-status mb "MB"))
-      
-      (define/public (beat-heart scepter-host)
-        (set-status scepter-host #:update? #false)
-        (set-status #:offset (random (string-length scepter-host)) #:width 1 #:color-pair 'SpecialChar))
+      (define/public (show-system-status)
+        (define-values (d h m s)
+          (let*-values ([(uptime) (- (current-seconds) sakuyamon-launch-time)]
+                        [(d uptime) (quotient/remainder uptime 86400)]
+                        [(h uptime) (quotient/remainder uptime 3600)]
+                        [(m uptime) (quotient/remainder uptime 60)])
+            (values d h m uptime)))
+        (set-status "UP" #\space d "d" #\space h #\: m #\: s #\space
+                    (~r #:precision '(= 3) (/ (current-memory-use) 1024.0 1024.0)) "MB"))
       
       (define/private (add-host hostname y)
         (wmove monitor y 0)
@@ -209,14 +212,14 @@
       
       (define/private (~syslog scepter-host record)
         (~a #:max-width (getmaxx monitor)
-            (format "~a~a~a ~a ~a[~a]: ~a"
+            (format "~a~a ~a ~a ~a[~a]: ~a"
                     (if (empty? (cdr (unbox contents))) "" #\newline)
-                    (~a (syslog-facility record) #:width 8 #:limit-marker " ")
+                    (~a (syslog-facility record) #:width 8)
                     (syslog-timestamp record)
                     scepter-host
                     (syslog-sender record)
                     (syslog-pid record)
-                    (syslog-message record))))))
+                    (string-replace (~a (syslog-message record)) (string #\newline) " "))))))
 
   (define rich-echo
     (lambda [higroup fmt . contents]
@@ -264,7 +267,7 @@
           (:colorscheme! (sakuyamon-colors.vim))
           (set-box! mtime-colors.vim mtime)
           (on-digivice-resized)))
-      (send (stdhost) show-memory-usage)))
+      (send (stdhost) show-system-status)))
   
   (define digivice-izuna-monitor-main
     (lambda [foxpipes]

@@ -104,16 +104,16 @@
 ;;; syslog.
 (define _facility
   (_enum (list 'kernel        '= (arithmetic-shift 00 3) #| kernel messages |#
-               'user-level    '= (arithmetic-shift 01 3) #| random user-level messages |#
+               'user          '= (arithmetic-shift 01 3) #| random user-level messages |#
                'mail          '= (arithmetic-shift 02 3) #| mail system |#
                'daemon        '= (arithmetic-shift 03 3) #| system daemons |#
-               'authorization '= (arithmetic-shift 04 3) #| security/authorization messages |#
+               'auth          '= (arithmetic-shift 04 3) #| security/authorization messages |#
                'syslog        '= (arithmetic-shift 05 3) #| messages generated internally by syslogd |#
                'lp	           '= (arithmetic-shift 06 3) #| line printer subsystem |#
                'news          '= (arithmetic-shift 07 3) #| netnews subsystem |#
                'uucp          '= (arithmetic-shift 08 3) #| uucp subsystem |#
                'altcron       '= (arithmetic-shift 09 3) #| BSD cron/at subsystem |#
-               'auth_private  '= (arithmetic-shift 10 3) #| BSD security/authorization messages |#
+               'authpriv      '= (arithmetic-shift 10 3) #| BSD security/authorization messages |#
                'ftp	   '= (arithmetic-shift 11 3) #| file transfer subsystem |#
                'ntp	   '= (arithmetic-shift 12 3) #| network time subsystem |#
                'audit         '= (arithmetic-shift 13 3) #| audit subsystem |#
