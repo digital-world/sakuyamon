@@ -87,24 +87,22 @@
   ; \+----------------------------------------------------+/
   
   (define sakuyamon-scepter-port (make-parameter (sakuyamon-foxpipe-port)))
-  (define sakuyamon-colorscheme (make-parameter (build-path (digimon-stone) "colors.vim")))
+  (define sakuyamon-colors.vim (make-parameter (build-path (digimon-stone) "colors.vim")))
   (define sakuyamon-action (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
   
-  (define color-links (hasheq 'emerg      'ErrorMsg   #| system is unusable |#
-                              'alert      'ErrorMsg   #| action must be taken immediately |#
-                              'fatal      'ErrorMsg   #| critical conditions |#
-                              'error      'ErrorMsg   #| error conditions |#
-                              'warning    'WarningMsg #| warning conditions |#
-                              'notice     'MoreMsg    #| normal but significant condition |#
-                              'info       'String     #| informational |#
-                              'debug      'Debug      #| debug-level messages |#
-                              'timestamp  'LineNr
-                              'method     'Operator
-                              'client     'Tag
-                              'host       'StorageClass
-                              'uri        'Underlined
-                              'referer    'Underlined
-                              'user-agent 'Structure))
+  (define mtime-colors.vim (box +inf.0))
+
+  (define color-links
+    (let* ([colors.rktl (build-path (digimon-stone) "colors.rktl")]
+           [mtime (box -inf.0)]
+           [links (box (make-hash))])
+      (lambda []
+        (define last-mtime (file-or-directory-modify-seconds colors.rktl #false (const #false)))
+        (when (and (integer? last-mtime) (< (unbox mtime) last-mtime))
+          (set-box! mtime last-mtime)
+          (set-box! links (with-handlers ([exn? (lambda [e] (unbox links))])
+                            (eval (with-input-from-file colors.rktl read)))))
+        (unbox links))))
   
   (define titlebar (make-parameter #false))
   (define cmdlinebar (make-parameter #false))
@@ -182,9 +180,10 @@
         (refresh #:update? #true))
       
       (define/private (display-request scepter-host req)
+        (define hilinks (color-links))
         (unless (empty? (cdr (unbox contents))) (waddch monitor #\newline))
         (for ([field (in-list fields)])
-          (wattrset monitor (hash-ref color-links field))
+          (wattrset monitor (hash-ref hilinks field (const (list 0))))
           (waddstr monitor (request-ref req field))
           (wstandend monitor)
           (waddch monitor #\space)))
@@ -204,7 +203,7 @@
       
       (define/public (add-record! scepter-host record)
         (set-box! contents (cons (cons scepter-host record) (unbox contents)))
-        (wattrset monitor (hash-ref color-links (syslog-severity record)))
+        (wattrset monitor (hash-ref (color-links) (syslog-severity record) (const (list 0))))
         (waddwstr monitor (~syslog scepter-host record))
         (refresh #:update? #true))
       
@@ -233,7 +232,7 @@
       (define-values [host-cols rsyslog-rows] (values (exact-round (* columns 0.16)) (exact-round (* rows 0.24))))
       (define-values [request-cols request-rows] (values (- columns host-cols 1) (- rows rsyslog-rows)))
       (for-each (lambda [stdwin] (and (wclear (stdwin)) (wnoutrefresh (stdwin)))) (list stdscr titlebar cmdlinebar))
-      (wattrset (titlebar) 'TabLineFill)
+      (wattrset (titlebar) 'Title)
       (mvwaddstr (titlebar) 0 0 (~a (current-digimon) #\space sakuyamon-action #\[ (getpid) #\] #:width columns))
       (for ([win% (in-list (list host%       request%         rsyslog%))]
             [winp (in-list (list stdhost     stdreq           stdlog))]
@@ -260,6 +259,11 @@
   
   (define on-system-idle
     (lambda []
+      (let ([mtime (file-or-directory-modify-seconds (sakuyamon-colors.vim) #false (const 0))])
+        (when (< (unbox mtime-colors.vim) mtime)
+          (:colorscheme! (sakuyamon-colors.vim))
+          (set-box! mtime-colors.vim mtime)
+          (on-digivice-resized)))
       (send (stdhost) show-memory-usage)))
   
   (define digivice-izuna-monitor-main
@@ -297,7 +301,7 @@
              (current-command-line-arguments)
              `([usage-help ,(format "~a~n" desc)]
                [once-each
-                [["-c"] ,(lambda [flag cs.vim] (when (file-exists? cs.vim) (sakuyamon-colorscheme cs.vim)))
+                [["-c"] ,(lambda [flag cs.vim] (when (file-exists? cs.vim) (sakuyamon-colors.vim cs.vim)))
                         ["Use an alternative color scheme <colors.vim>." "colors.vim"]]
                 [["-p"] ,(lambda [flag port] (sakuyamon-scepter-port (string->number port)))
                         ["Use an alternative service <port>." "port"]]])
@@ -312,7 +316,8 @@
                                       (when (has_colors)
                                         (start_color)
                                         (use_default_colors)
-                                        (:colorscheme! (sakuyamon-colorscheme)))
+                                        (:colorscheme! (sakuyamon-colors.vim))
+                                        (set-box! mtime-colors.vim (file-or-directory-modify-seconds (sakuyamon-colors.vim))))
                                       (on-digivice-resized)
                                       ((curry digivice-izuna-monitor-main)
                                        (for/hash ([scepter-host (in-list (cons hostname other-hosts))])

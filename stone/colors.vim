@@ -38,7 +38,7 @@ highlight LineNr ctermfg=214
 " The current match in 'wildmenu' completion
 highlight WildMenu ctermfg=black ctermfg=16 ctermbg=darkcyan 
 " Any titles for output from ':autocmd' or ':set all'
-highlight Title ctermfg=green ctermfg=46 
+highlight Title ctermfg=grey ctermbg=blue
 " The meta and special keyboard keys or
 " the text used to show the unprintable characters 
 highlight SpecialKey ctermfg=darkcyan 
@@ -58,7 +58,7 @@ highlight Underlined cterm=underline ctermfg=27
 " Any left blank and hidden
 highlight Ignore cterm=bold ctermfg=235 ctermbg=black ctermbg=16
 " Any erroneous costruct
-highlight Error cterm=bold ctermfg=darkred ctermbg=234 
+highlight Error cterm=bold,reverse ctermfg=darkred ctermbg=234 
 " Any tasks which need extra attention that marked in the comment
 highlight Todo cterm=bold ctermfg=yellow ctermfg=226 ctermbg=none 
 
@@ -132,9 +132,9 @@ highlight Tag ctermfg=208
 " The character that needs attention: * ? ...
 highlight Delimiter ctermfg=218
 " The special things within the comment
-highlight SpecialComment ctermfg=238 
+highlight SpecialComment ctermfg=grey 
 " Any debugging statement
-highlight Debug ctermfg=220
+highlight Debug ctermfg=darkgrey
 
 """ Miscellaneous
 "" Cursor
