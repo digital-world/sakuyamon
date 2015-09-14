@@ -16,8 +16,25 @@ typedef struct foxpipe_session {
 typedef struct foxpipe_channel {
     foxpipe_session_t *session;
     LIBSSH2_CHANNEL *channel;
-    char read_ready[1];
+    char read_buffer[LIBSSH2_PACKET_MAXCOMP];
+    size_t read_offset;
+    size_t read_total;
 } foxpipe_channel_t;
+
+static intptr_t channel_fill_buffer(foxpipe_channel_t *foxpipe) {
+    intptr_t read;
+    size_t size;
+
+    size = sizeof(foxpipe->read_buffer) / sizeof(char);
+    read = libssh2_channel_read(foxpipe->channel, foxpipe->read_buffer, size);
+
+    if (read > 0) {
+        foxpipe->read_total = read;
+        foxpipe->read_offset = 0;
+    }
+
+    return read;
+}
 
 static void channel_close_within_custodian(foxpipe_channel_t *foxpipe) {
     /**
@@ -25,20 +42,19 @@ static void channel_close_within_custodian(foxpipe_channel_t *foxpipe) {
      * Racket code is free to leave the channel to the custodian.
      */
 
-    if (foxpipe->read_ready[0] != '\127') {
+    if (foxpipe->read_total != -1) {
         libssh2_channel_close(foxpipe->channel);
-        foxpipe->read_ready[0] = '\127'; 
+        foxpipe->read_total = -1; 
     } else {
         libssh2_channel_wait_closed(foxpipe->channel);
         libssh2_channel_free(foxpipe->channel);
     }
 }
 
-static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t offset, intptr_t size, int nonblock, Scheme_Object *unless) {
-    LIBSSH2_SESSION *session;
-    LIBSSH2_CHANNEL *channel;
-    intptr_t read, status;
-    char *onebuffer, *offed_buffer;
+static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t offset, intptr_t size, intptr_t nonblock, Scheme_Object *unless) {
+    foxpipe_channel_t *foxpipe;
+    intptr_t read, rest, delta;
+    char *src, *dest;
 
     /**
      * TODO:
@@ -72,10 +88,8 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
      * Finally, in blocking mode, it must return after immediately reading data, without allowing a Racket thread swap.
      */
 
-    session = ((foxpipe_channel_t *)(in->port_data))->session->sshclient;
-    channel = ((foxpipe_channel_t *)(in->port_data))->channel;
-    onebuffer = ((foxpipe_channel_t *)(in->port_data))->read_ready;
-    offed_buffer = buffer + offset; /* As deep in RVM here, the boundary is already checked. */
+    foxpipe = (foxpipe_channel_t *)(in->port_data);
+    dest = buffer + offset; /* As deep in RVM here, the boundary is already checked. */
     read = 0;
 
     if (scheme_unless_ready(unless)) {
@@ -83,42 +97,40 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
         return SCHEME_UNLESS_READY;
     }
 
-    if (size > 0) {
-        if (libssh2_channel_eof(channel) == 1) {
-            if ((*onebuffer) != '\0') {
-                (*offed_buffer) = (*onebuffer);
-                (*onebuffer) = '\0';
-                read = 1;
-                goto job_done;
+    while (size > 0) {
+        rest = foxpipe->read_total - foxpipe->read_offset;
+
+        if (rest <= 0) {
+            if (libssh2_channel_eof(foxpipe->channel) == 1) {
+                goto job_failed;
+            } else {
+                rest = channel_fill_buffer(foxpipe);
+                if (rest <= 0) {
+                    goto job_done;
+                }
             }
-
-            return EOF;
         }
-
-        if ((*onebuffer) != '\0') {
-            (*offed_buffer) = (*onebuffer);
-            (*onebuffer) = '\0';
-            offed_buffer += 1;
-            read += 1;
-            size -= 1;
-        }
-
-        status = libssh2_channel_read(channel, offed_buffer, size);
-        if (status >= 0) {
-            read += status;
-        }
+        
+        src = foxpipe->read_buffer + foxpipe->read_offset;
+        delta = (size <= rest) ? size : rest;
+        memcpy(dest, src, delta);
+        foxpipe->read_offset += delta;
+        dest += delta;
+        read += delta;
+        size -= delta;
     }
 
 job_done:
     return read;
+
+job_failed:
+    return EOF;
 }
 
-static int channel_read_ready(Scheme_Input_Port *p) {
+static intptr_t channel_read_ready(Scheme_Input_Port *p) {
     foxpipe_channel_t *foxpipe;
     LIBSSH2_SESSION *session;
-    LIBSSH2_CHANNEL *channel;
-    int read;
-    char *onebuffer;
+    intptr_t read;
 
     /**
      * Returns 1 when a non-blocking (read-bytes) will return bytes or an EOF.
@@ -126,8 +138,6 @@ static int channel_read_ready(Scheme_Input_Port *p) {
 
     foxpipe = (foxpipe_channel_t *)(p->port_data);
     session = foxpipe->session->sshclient;
-    channel = foxpipe->channel;
-    onebuffer = foxpipe->read_ready;
 
     /**
      * This implementation is correct since all channels in a session are
@@ -136,11 +146,11 @@ static int channel_read_ready(Scheme_Input_Port *p) {
      * to this channel.
      */
 
-    if ((*onebuffer) == '\0') {
-        scheme_fd_to_semaphore(foxpipe->session->sockfd, MZFD_CREATE_READ, 1);
-        read = libssh2_channel_read(channel, onebuffer, 1);
+    if (foxpipe->read_offset < foxpipe->read_total) {
+        read = foxpipe->read_total - foxpipe->read_offset;
     } else {
-        read = 1;
+        scheme_fd_to_semaphore(foxpipe->session->sockfd, MZFD_CREATE_READ, 1);
+        read = channel_fill_buffer(foxpipe);
     }
 
     return (read == LIBSSH2_ERROR_EAGAIN) ? 0 : 1;
@@ -179,11 +189,11 @@ static void channel_in_close(Scheme_Input_Port *p) {
     channel_close_within_custodian(channel);
 }
 
-static intptr_t channel_write_bytes(Scheme_Output_Port *out, const char *buffer, intptr_t offset, intptr_t size, int rarely_block, int enable_break) {
+static intptr_t channel_write_bytes(Scheme_Output_Port *out, const char *buffer, intptr_t offset, intptr_t size, intptr_t rarely_block, intptr_t enable_break) {
     LIBSSH2_SESSION *session;
     LIBSSH2_CHANNEL *channel;
     char *offed_buffer;
-    int sent;
+    intptr_t sent;
 
     /**
      * TODO:
@@ -215,7 +225,7 @@ job_done:
     return sent;
 }
 
-static int channel_write_ready(Scheme_Output_Port *p) {
+static intptr_t channel_write_ready(Scheme_Output_Port *p) {
     LIBSSH2_CHANNEL *channel;
 
     /**
@@ -305,7 +315,7 @@ foxpipe_session_t *foxpipe_construct(Scheme_Object *tcp_connect, Scheme_Object *
     return session;
 }
 
-const char *foxpipe_handshake(foxpipe_session_t *session, int MD5_or_SHA1) {
+const char *foxpipe_handshake(foxpipe_session_t *session, intptr_t MD5_or_SHA1) {
     intptr_t status;
     const char *figureprint;
 
@@ -319,12 +329,12 @@ const char *foxpipe_handshake(foxpipe_session_t *session, int MD5_or_SHA1) {
     return figureprint;
 }
 
-int foxpipe_authenticate(foxpipe_session_t *session, const char *wargrey, const char *rsa_pub, const char *id_rsa, const char *passphrase) {
+intptr_t foxpipe_authenticate(foxpipe_session_t *session, const char *wargrey, const char *rsa_pub, const char *id_rsa, const char *passphrase) {
     /* TODO: Authorize based on userauth_list */
     return libssh2_userauth_publickey_fromfile(session->sshclient, wargrey, rsa_pub, id_rsa, passphrase);
 }
 
-int foxpipe_collapse(foxpipe_session_t *session, int reason, const char *description) {
+intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason, const char *description) {
     /* TODO: It's better to handle the errors */
 
     libssh2_session_disconnect_ex(session->sshclient, reason, description, "");
@@ -336,15 +346,15 @@ int foxpipe_collapse(foxpipe_session_t *session, int reason, const char *descrip
     return 0;
 }
 
-int foxpipe_last_errno(foxpipe_session_t *session) {
+intptr_t foxpipe_last_errno(foxpipe_session_t *session) {
     return libssh2_session_last_errno(session->sshclient);
 }
 
-int foxpipe_last_error(foxpipe_session_t *session, char **errmsg, int *size) {
+intptr_t foxpipe_last_error(foxpipe_session_t *session, char **errmsg, intptr_t *size) {
     return libssh2_session_last_error(session->sshclient, errmsg, size, 0);
 }
 
-int foxpipe_direct_channel(foxpipe_session_t *session, const char* host_seen_by_sshd, int service, Scheme_Object **dev_sshin, Scheme_Object **dev_sshout) {
+intptr_t foxpipe_direct_channel(foxpipe_session_t *session, const char* host_seen_by_sshd, intptr_t service, Scheme_Object **dev_sshin, Scheme_Object **dev_sshout) {
     LIBSSH2_CHANNEL *channel;
     foxpipe_channel_t *object;
 
@@ -353,36 +363,37 @@ int foxpipe_direct_channel(foxpipe_session_t *session, const char* host_seen_by_
 
     if (channel != NULL) {
         foxpipe_channel_t *object;
-        
+
         libssh2_session_set_blocking(session->sshclient, 0);
         object = (foxpipe_channel_t*)scheme_malloc_atomic(sizeof(foxpipe_channel_t));
         object->session = session;
         object->channel = channel;
-        object->read_ready[0] = '\0';
+        object->read_offset = 0;
+        object->read_total = 0;
 
         (*dev_sshin) = (Scheme_Object *)scheme_make_input_port(scheme_make_port_type("<libssh2-channel-input-port>"),
-                                                               (void *)object, /* input port data object */
-                                                               scheme_intern_symbol("/dev/sshin"), /* (object-name) */
-                                                               channel_read_bytes, /* (read-bytes) */
-                                                               NULL, /* (peek-bytes): NULL means use the default */
-                                                               scheme_progress_evt_via_get, /* (port-progress-evt) */
-                                                               scheme_peeked_read_via_get, /* (port-commit-peeked) */
-                                                               (Scheme_In_Ready_Fun)channel_read_ready, /* (poll POLLIN) */
-                                                               channel_in_close, /* (close_output_port) */
-                                                               (Scheme_Need_Wakeup_Input_Fun)channel_read_need_wakeup,
-                                                               1 /* lifecycle is managed by custodian */);
+                                                                (void *)object, /* input port data object */
+                                                                scheme_intern_symbol("/dev/sshin"), /* (object-name) */
+                                                                channel_read_bytes, /* (read-bytes) */
+                                                                NULL, /* (peek-bytes): NULL means use the default */
+                                                                scheme_progress_evt_via_get, /* (port-progress-evt) */
+                                                                scheme_peeked_read_via_get, /* (port-commit-peeked) */
+                                                                (Scheme_In_Ready_Fun)channel_read_ready, /* (poll POLLIN) */
+                                                                channel_in_close, /* (close_output_port) */
+                                                                (Scheme_Need_Wakeup_Input_Fun)channel_read_need_wakeup,
+                                                                1 /* lifecycle is managed by custodian */);
 
         (*dev_sshout) = (Scheme_Object *)scheme_make_output_port(scheme_make_port_type("<libssh2-channel-output-port>"),
-                                                                 (void *)object, /* output port data object */
-                                                                 scheme_intern_symbol("/dev/sshout"), /* (object-name) */
-                                                                 scheme_write_evt_via_write, /* (write-bytes-avail-evt) */
-                                                                 channel_write_bytes, /* (write-bytes) */
-                                                                 (Scheme_Out_Ready_Fun)channel_write_ready, /* (poll POLLOUT) */
-                                                                 channel_out_close, /* (close-output-port) */
-                                                                 (Scheme_Need_Wakeup_Output_Fun)channel_write_need_wakeup,
-                                                                 NULL, /* (write-special-evt) */
-                                                                 NULL, /* (write-special) */
-                                                                 1 /* lifecycle is managed by custodian */);
+                                                                    (void *)object, /* output port data object */
+                                                                    scheme_intern_symbol("/dev/sshout"), /* (object-name) */
+                                                                    scheme_write_evt_via_write, /* (write-bytes-avail-evt) */
+                                                                    channel_write_bytes, /* (write-bytes) */
+                                                                    (Scheme_Out_Ready_Fun)channel_write_ready, /* (poll POLLOUT) */
+                                                                    channel_out_close, /* (close-output-port) */
+                                                                    (Scheme_Need_Wakeup_Output_Fun)channel_write_need_wakeup,
+                                                                    NULL, /* (write-special-evt) */
+                                                                    NULL, /* (write-special) */
+                                                                    1 /* lifecycle is managed by custodian */);
     }
 
     return foxpipe_last_errno(session);
