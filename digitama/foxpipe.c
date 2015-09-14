@@ -335,7 +335,7 @@ intptr_t foxpipe_authenticate(foxpipe_session_t *session, const char *wargrey, c
 }
 
 intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason, const char *description) {
-    /* TODO: It's better to handle the errors */
+    /* TODO: Errors should be handled */
 
     libssh2_session_disconnect_ex(session->sshclient, reason, description, "");
     libssh2_session_free(session->sshclient);
@@ -358,7 +358,7 @@ intptr_t foxpipe_direct_channel(foxpipe_session_t *session, const char* host_see
     LIBSSH2_CHANNEL *channel;
     foxpipe_channel_t *object;
 
-    libssh2_session_set_blocking(session->sshclient, 1); /* also disable the breaking */
+    libssh2_session_set_blocking(session->sshclient, 1);
     channel = libssh2_channel_direct_tcpip_ex(session->sshclient, host_seen_by_sshd, service, host_seen_by_sshd, 22);
     libssh2_session_set_blocking(session->sshclient, 0);
 
