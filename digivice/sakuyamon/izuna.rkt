@@ -150,17 +150,12 @@
           (cond [(false? idx) (add-host sceptor-host y)]
                 [(string=? (dict-iterate-key hosts idx) sceptor-host) (check-next #false y)]
                 [else (check-next (dict-iterate-next hosts idx) (+ (dict-count (dict-iterate-value hosts idx)) y 1))]))
+        (set-status sceptor-host)
         (refresh #:update? #true))
-      
-      (define/public (show-system-status)
-        (define-values (d h m s)
-          (let*-values ([(uptime) (- (current-seconds) sakuyamon-launch-time)]
-                        [(d uptime) (quotient/remainder uptime 86400)]
-                        [(h uptime) (quotient/remainder uptime 3600)]
-                        [(m uptime) (quotient/remainder uptime 60)])
-            (values d h m uptime)))
-        (set-status "up" #\space d "d" #\space h #\: m #\: s #\space
-                    (~r #:precision '(= 3) (/ (current-memory-use) 1024.0 1024.0)) "MB"))
+
+      (define/public (beat-heart scepter-host)
+        (set-status scepter-host #:update? #false)
+        (set-status #:offset (random (string-length scepter-host)) #:width 1 #:color-pair 'SpecialChar))
       
       (define/private (add-host hostname y)
         (wmove monitor y 0)
@@ -255,22 +250,33 @@
   (define on-foxpipe-rsyslog
     (lambda [scepter-host record]
       (match record
-        [(syslog _ _ _ _ app pid #false) (rich-echo 'Ignore "Recieved an empty message from ~a[~a]@~a~n" app pid scepter-host)]
+        [(syslog _ _ _ _ app pid #false) (rich-echo 'Ignore "Received an empty message from ~a[~a]@~a~n" app pid scepter-host)]
         [(syslog _ _ _ _ "taskgated" _ unsigned-signature) (rich-echo 'Folded "~a" unsigned-signature)]
         [(syslog _ _ _ _ _ _ (struct log:request _)) (send (stdreq) add-record! scepter-host record)]
         [(struct syslog _) (send (stdlog) add-record! scepter-host record)])))
   
-  (define on-system-idle
-    (lambda []
+  (define on-timer/second
+    (lambda [times]
       (let ([mtime (file-or-directory-modify-seconds (sakuyamon-colors.vim) #false (const 0))])
         (when (< (unbox mtime-colors.vim) mtime)
           (:colorscheme! (sakuyamon-colors.vim))
           (set-box! mtime-colors.vim mtime)
           (on-digivice-resized)))
-      (send (stdhost) show-system-status)))
+      
+      (let*-values ([(uptime) (- (current-seconds) sakuyamon-launch-time)]
+                    [(d uptime) (quotient/remainder uptime 86400)]
+                    [(h uptime) (quotient/remainder uptime 3600)]
+                    [(m uptime) (quotient/remainder uptime 60)]
+                    [(s ~n) (values uptime (curry ~r #:min-width 2 #:pad-string "0"))])
+        (define status (format "uptime: ~a ~a:~a:~a ~aMB" (~n_w d "day") (~n h) (~n m) (~n s)
+                               (~r #:precision '(= 3) (/ (current-memory-use) 1024.0 1024.0))))
+        (define width (+ (string-length status) 8))
+        (mvwaddstr (titlebar) 0 (- (getmaxx (titlebar)) width) (~a status #:align 'right #:width width))
+        (wrefresh (titlebar)))))
   
   (define digivice-izuna-monitor-main
     (lambda [foxpipes]
+      (define timer (thread (thunk (for ([t (in-naturals)]) (sync/timeout/enable-break 1.0 never-evt) (on-timer/second t)))))
       (define (on-signal signal)
         (rich-echo 'MoreMsg "Terminating Foxpipes")
         (for-each (lambda [foxpipe] (place-break foxpipe 'terminate)) (hash-values foxpipes))
@@ -278,15 +284,16 @@
           (unless (zero? (hash-count fps))
             (define who (apply sync (hash-map fps (lambda [host foxpipe] (wrap-evt (place-dead-evt foxpipe) (const host))))))
             (rich-echo 'Comment "Foxpipe@~a has collapsed." who)
-            (wait-foxpipe (hash-remove fps who)))))
+            (wait-foxpipe (hash-remove fps who))))
+        (break-thread timer 'terminate))
       (with-handlers ([exn:break? on-signal]) ;;; System Signal also be caught here
         (let recv-match-render-loop () #| TODO: Mac's heart beat might be received as a strange char |#
           (with-handlers ([exn:fail? (lambda [e] (rich-echo 'ErrorMsg "~a" (string-join (string-split (exn-message e)))))])
             (match (or (getch) (apply sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# (hash-values foxpipes)))
-              [(? false?) (on-system-idle)]
-              [(cons host (vector (? char? heart-beat))) (send (stdhost) set-status host)]
+              [(? false?) (void)]
+              [(cons host (vector (? char? heart-beat))) (send (stdhost) beat-heart host)]
               [(cons host (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
-              [(cons host (vector message)) (rich-echo (rich-echo 'WarningMsg "Recieved an unexpected message from ~a: ~s" host message))]
+              [(cons host (vector message)) (rich-echo (rich-echo 'WarningMsg "Received an unexpected message from ~a: ~s" host message))]
               [(cons host (? flonum? s)) (place-channel-put (hash-ref foxpipes host) (format "idled ~as" s))]
               [(list host (? string? figureprint) ...) (send (stdhost) add-host! host figureprint)]
               [(list host 'fail (? string? fmt) argl ...) (rich-echo 'WarningMsg "~a: ~a" host (apply format fmt argl))]
@@ -391,7 +398,7 @@
                   [(? false?)
                    (let ([reason (place-channel-put/get izunac (cons sshd-host timeout))])
                      (unless (false? reason)
-                       (error 'foxpipe "foxpipe has to collapse: ~a!" reason)))]
+                       (error 'foxpipe "has to collapse: ~a!" reason)))]
                   [(? input-port?)
                    (match (read /dev/sshdin)
                      [(? eof-object?) (error 'foxpipe "remote server disconnected!")]
