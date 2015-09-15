@@ -116,7 +116,8 @@
       (field [monitor (newwin 0 0 0 0)])
       (field [statusbar (newwin 1 0 0 0)])
       
-      (define/public (set-status #:update? [update? #true] #:color-pair [color #false] #:offset [x 0] #:width [width (getmaxx statusbar)] . contents)
+      (define/public (set-status #:update? [update? #true] #:clear? [clear? #false] #:color [color #false] #:offset [x 0] #:width [width (getmaxx statusbar)] . contents)
+        (unless (false? clear?) (wclear statusbar))
         (unless (empty? contents) (mvwaddwstr statusbar 0 x (apply ~a contents #:width width)))
         (unless (false? color) (mvwchgat statusbar 0 x width 'StatusLineNC color))
         (when update? (wrefresh statusbar)))
@@ -155,7 +156,7 @@
 
       (define/public (beat-heart scepter-host)
         (set-status scepter-host #:update? #false)
-        (set-status #:offset (random (string-length scepter-host)) #:width 1 #:color-pair 'SpecialChar))
+        (set-status #:offset (random (string-length scepter-host)) #:width 1 #:color 'SpecialChar))
       
       (define/private (add-host hostname y)
         (wmove monitor y 0)
@@ -204,7 +205,7 @@
         (wattrset monitor (hash-ref (color-links) (syslog-severity record) (const (list 0))))
         (waddwstr monitor (~syslog scepter-host record))
         (refresh #:update? #true))
-      
+
       (define/private (~syslog scepter-host record)
         (~a #:max-width (getmaxx monitor)
             (format "~a~a ~a ~a ~a[~a]: ~a"
@@ -214,11 +215,12 @@
                     scepter-host
                     (syslog-sender record)
                     (syslog-pid record)
-                    (string-replace (~a (syslog-message record)) (string #\newline) " "))))))
+                    (regexp-replaces (~a (syslog-message record))
+                                     `([,(string #\newline) " "]
+                                       [,(string #\tab) "    "])))))))
 
   (define rich-echo
-    (lambda [higroup fmt . contents]
-      (define stdwin (cmdlinebar))
+    (lambda [higroup #:stdwin [stdwin (cmdlinebar)] fmt . contents]
       (wclear stdwin)
       (wattrset stdwin higroup)
       (mvwaddstr stdwin 0 0 (apply format fmt contents))
@@ -249,9 +251,10 @@
   
   (define on-foxpipe-rsyslog
     (lambda [scepter-host record]
+      (define rich-status (lambda [clr msg] (send (stdlog) set-status #:clear? #true #:color clr #:width (string-length msg) msg)))
       (match record
-        [(syslog _ _ _ _ app pid #false) (rich-echo 'Ignore "Received an empty message from ~a[~a]@~a~n" app pid scepter-host)]
-        [(syslog _ _ _ _ "taskgated" _ unsigned-signature) (rich-echo 'Folded "~a" unsigned-signature)]
+        [(syslog _ _ timestamp host app pid #false) (rich-status 'Ignore (format "~a@~a: ~a[~a]: [Empty Message]" timestamp host app pid))]
+        [(syslog _ _ timestamp host "taskgated" _ unsigned-signature) (rich-status 'Folded (format "~a@~a: ~a" timestamp host unsigned-signature))]
         [(syslog _ _ _ _ _ _ (struct log:request _)) (send (stdreq) add-record! scepter-host record)]
         [(struct syslog _) (send (stdlog) add-record! scepter-host record)])))
   
@@ -335,7 +338,9 @@
                                          ((curry place-channel-put foxpipe)
                                           (hasheq 'sshd-host scepter-host
                                                   'host-seen-by-sshd "localhost"
-                                                  'service-seen-by-sshd (sakuyamon-scepter-port)))
+                                                  'service-seen-by-sshd (sakuyamon-scepter-port)
+                                                  'plaintransport? (not (not (or (member scepter-host '("localhost" "::1"))
+                                                                                 (regexp-match? #px"^127\\." scepter-host))))))
                                          (values scepter-host foxpipe)))))
                              (thunk (endwin))))
              (list "hostname" "2nd hostname")
@@ -352,55 +357,65 @@
   (require "../../digitama/foxpipe.rkt")
   
   (require file/sha1)
+
+  (define the-one-manages-foxpipe-or-plaintcp-io (make-parameter (make-custodian)))
+  (define ssh-session (make-parameter #false))
+  
+  (define (on-collapsed reason #:libssh2_exit? [exit? #false])
+    (with-handlers ([exn? void])
+      ;;; shutdown channels and plaintcp ports
+      (custodian-shutdown-all (the-one-manages-foxpipe-or-plaintcp-io))
+      (the-one-manages-foxpipe-or-plaintcp-io (make-custodian))
+      (when (ssh-session)
+        ;;; shutdown ssh tcp ports
+        (foxpipe_collapse (ssh-session) (~a reason))
+        (unless (false? exit?)
+          (libssh2_exit)))))
   
   (define realize
     (lambda [izunac]
       (with-handlers ([exn:break? void])
-        (define time0 (current-inexact-milliseconds))
         (define argh (place-channel-get izunac))
-        (match-define (list sshd-host host-seen-by-sshd service-seen-by-sshd)
-          (map (curry hash-ref argh) '(sshd-host host-seen-by-sshd service-seen-by-sshd)))
+        (match-define (list sshd-host host-seen-by-sshd service-seen-by-sshd plaintransport?)
+          (map (curry hash-ref argh) '(sshd-host host-seen-by-sshd service-seen-by-sshd plaintransport?)))
         (match-define (list username passphrase rsa.pub id_rsa)
           (map (curry hash-ref argh)
                '(username passphrase rsa.pub id_rsa)
                (list (current-tamer) ""
                      (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")
                      (build-path (find-system-path 'home-dir) ".ssh" "id_rsa"))))
-        
-        (let catch-send-clear-loop ([delay 0.0])
-          (define channel-custodian (make-custodian))
-          (define ssh-session (make-parameter #false))
-          (define terminate/sendback-if-failed
-            (lambda [maybe-exn]
-              (when (exn:fail? maybe-exn)
-                (place-channel-put izunac (list sshd-host 'fail (exn-message maybe-exn))))
-              (with-handlers ([exn? void])
-                (when (ssh-session) ;;; libssh2 treats long reason as an error
-                  (define reason (if (exn? maybe-exn) (exn-message maybe-exn) (~a maybe-exn)))
-                  (custodian-shutdown-all channel-custodian) ;;; This also releases libssh2_channel
-                  (foxpipe_collapse (ssh-session) reason))
-                (collect-garbage))
-              (cond [(exn:break:terminate? maybe-exn) (libssh2_exit)]
-                    [else (catch-send-clear-loop (+ (sin (current-inexact-milliseconds)) 1.0))])))
-          (with-handlers ([exn? terminate/sendback-if-failed])
-            (sync/enable-break (alarm-evt (+ (current-inexact-milliseconds) (* (abs delay) 1000))))
-            (place-channel-put izunac (list sshd-host 'notify "constructing ssh channel."))
-            (define session (foxpipe_construct sshd-host 22))
-            (ssh-session session)
-            (define figureprint (foxpipe_handshake session 'LIBSSH2_HOSTKEY_HASH_SHA1))
-            (place-channel-put izunac (cons sshd-host (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint)))))
-            (foxpipe_authenticate session username rsa.pub id_rsa passphrase)
-            (parameterize ([current-custodian channel-custodian])
-              (define timeout (+ (sakuyamon-foxpipe-idle) (/ (- (current-inexact-milliseconds) time0) 1000.0)))
-              (define-values [/dev/sshdin /dev/sshdout] (foxpipe_direct_channel session host-seen-by-sshd service-seen-by-sshd))
-              (let recv-match-send-loop ()
-                (match (sync/timeout/enable-break timeout /dev/sshdin)
-                  [(? false?)
-                   (let ([reason (place-channel-put/get izunac (cons sshd-host timeout))])
-                     (unless (false? reason)
-                       (error 'foxpipe "has to collapse: ~a!" reason)))]
-                  [(? input-port?)
-                   (match (read /dev/sshdin)
-                     [(? eof-object?) (error 'foxpipe "remote server disconnected!")]
-                     [msgvector (place-channel-put izunac (cons sshd-host msgvector))])])
-                (recv-match-send-loop)))))))))
+
+        (with-handlers ([exn:break? (curry on-collapsed #:libssh2_exit? #true)])
+          (let catch-send-clear-loop ()
+            (define (on-signal/sendback signal)
+              (place-channel-put izunac (list sshd-host 'fail (exn-message signal)))
+              (on-collapsed signal))
+            (with-handlers ([exn:fail? on-signal/sendback])
+              (match-define-values (_ cputime wallclock gctime)
+                ((curryr time-apply null)
+                 (lambda []
+                   (collect-garbage)
+                   (when (false? plaintransport?)
+                     (place-channel-put izunac (list sshd-host 'notify "constructing ssh channel"))
+                     (ssh-session (foxpipe_construct sshd-host 22))
+                     (define figureprint (foxpipe_handshake (ssh-session) 'LIBSSH2_HOSTKEY_HASH_SHA1))
+                     (place-channel-put izunac (cons sshd-host (regexp-match* #px".." (string-upcase (bytes->hex-string figureprint)))))
+                     (foxpipe_authenticate (ssh-session) username rsa.pub id_rsa passphrase)))))
+              (parameterize ([current-custodian (the-one-manages-foxpipe-or-plaintcp-io)])
+                (define maxinterval (+ (sakuyamon-foxpipe-idle) (/ (+ cputime gctime) 1000.0)))
+                (define-values (/dev/tcpin /dev/tcpout)
+                  (cond [(ssh-session) (foxpipe_direct_channel (ssh-session) host-seen-by-sshd service-seen-by-sshd)]
+                        [else (and (place-channel-put izunac (list sshd-host 'notify "connecting"))
+                                   (let-values ([(in out) (tcp-connect/enable-break sshd-host service-seen-by-sshd)])
+                                     (place-channel-put izunac (cons sshd-host (make-list 20 "00")))
+                                     (values in out)))]))
+                (let recv-match-send-loop ()
+                  (match (sync/timeout/enable-break maxinterval /dev/tcpin)
+                    [(? false?) (let ([reason (place-channel-put/get izunac (cons sshd-host maxinterval))])
+                                  (unless (false? reason) (error 'foxpipe "has to collapse: ~a!" reason)))]
+                    [(? input-port?) (match (read /dev/tcpin)
+                                       [(? eof-object?) (error 'foxpipe "remote server disconnected!")]
+                                       [msgvector (place-channel-put izunac (cons sshd-host msgvector))])])
+                  (recv-match-send-loop))))
+            (sync/timeout/enable-break (+ (random) 1.0) never-evt)
+            (catch-send-clear-loop)))))))
