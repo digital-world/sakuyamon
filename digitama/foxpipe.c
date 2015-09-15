@@ -353,13 +353,16 @@ intptr_t foxpipe_authenticate(foxpipe_session_t *session, const char *wargrey, c
 }
 
 intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, const char *description) {
+    char libssh2_longest_reason[257];
     size_t msize;
     char *reason;
     
-    msize = 256; /* the longest description that would make libssh2 happy */
+    msize = sizeof(libssh2_longest_reason) / sizeof(char) - 1;
     reason = description;
     if (strlen(description) > msize) {
-        reason = strndupa(description, msize);
+        strncpy(libssh2_longest_reason, description, msize);
+        libssh2_longest_reason[msize] = '\0';
+        reason = libssh2_longest_reason;
     }
 
     /* TODO: Errors should be handled */
@@ -369,10 +372,6 @@ intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, cons
 
     scheme_close_input_port((Scheme_Object *)session->dev_tcpin);
     scheme_close_output_port((Scheme_Object *)session->dev_tcpout);
-
-    if (reason != description) {
-        free(reason);
-    }
 
     free(session);
 
