@@ -235,14 +235,14 @@
       (match-define (vector pr+gctime/now uptime/now gctime/now gctimes _ _ _ _ _ sysmem _)
         (and (vector-set-performance-stats! izuna-statistics #false) izuna-statistics))
       (let*-values ([(uptime pr+gctime) (values (- uptime/now uptime/base) (- pr+gctime/now pr+gctime/base))]
-                    [(s ms) (quotient/remainder uptime 1000)]
+                    [(s) (quotient/remainder uptime 1000)]
                     [(d s) (quotient/remainder s 86400)]
                     [(h s) (quotient/remainder s 3600)]
                     [(m s) (quotient/remainder s 60)]
                     [(~t) (lambda [n w] (~r #:min-width w #:pad-string "0" n))]
                     [(~m) (lambda [m] (~r #:precision '(= 3) (/ m 1024.0 1024.0)))])
-        (define status (format "uptime ~a ~a:~a:~a.~a, ~ams gc[~a], ~a% idle, ~aMB, ~a"
-                               (~n_w d "day") (~t h 2) (~t m 2) (~t s 2) (~t ms 3) gctime/now gctimes
+        (define status (format "uptime ~a ~a:~a:~a, ~ams gc[~a], ~a% idle, ~aMB, ~a"
+                               (~n_w d "day") (~t h 2) (~t m 2) (~t s 2) gctime/now gctimes
                                (~r #:precision '(= 2) (* 100.0 (max 0 (- 1.0 (/ pr+gctime uptime)))))
                                (~m (+ (current-memory-use) sysmem))
                                (parameterize ([date-display-format 'iso-8601])
@@ -347,7 +347,8 @@
                                       (on-system-idle) ; will load the up-to-date colorscheme
                                       ((curry digivice-izuna-monitor-main)
                                        (thread (thunk (for ([t (in-naturals 1)])
-                                                        (sync/timeout/enable-break 1.0 never-evt)
+                                                        ; -0.001 adjustment works fine
+                                                        (sync/timeout/enable-break 0.999 never-evt)
                                                         (on-timer/second t))))
                                        (for/hash ([scepter-host (in-list (cons hostname other-hosts))])
                                          (define foxpipe (dynamic-place `(submod (file ,(quote-source-file)) foxpipe) 'realize))
