@@ -92,9 +92,9 @@
   (define sakuyamon-colors.vim (make-parameter (build-path (digimon-stone) "colors.vim")))
   (define sakuyamon-action (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
 
-  (define uptimebase (current-inexact-milliseconds))
-  (define gctimebase (current-gc-milliseconds))
-  (define pr+gctimebase (current-process-milliseconds))
+  (define uptime/base (current-milliseconds))
+  (define pr+gctime/base (current-process-milliseconds))
+  (define izuna-statistics (make-vector 11))
   (define mtime-colors.vim (box -inf.0))
 
   (define color-links
@@ -232,18 +232,21 @@
 
   (define on-timer/second
     (lambda [times]
-      (let*-values ([(uptime) (- (current-inexact-milliseconds) uptimebase)]
-                    [(s ms) (quotient/remainder (exact-truncate uptime) 1000)]
+      (match-define (vector pr+gctime/now uptime/now gctime/now gctimes _ _ _ _ _ sysmem _)
+        (and (vector-set-performance-stats! izuna-statistics #false) izuna-statistics))
+      (let*-values ([(uptime pr+gctime) (values (- uptime/now uptime/base) (- pr+gctime/now pr+gctime/base))]
+                    [(s ms) (quotient/remainder uptime 1000)]
                     [(d s) (quotient/remainder s 86400)]
                     [(h s) (quotient/remainder s 3600)]
                     [(m s) (quotient/remainder s 60)]
-                    [(~n) (lambda [n w] (~r #:min-width w #:pad-string "0" n))]
-                    [(~%) (lambda [n d] (~r #:precision '(= 1) (* 100.0 (/ (- n d) uptime))))])
-        (define status (format "~a, up: ~a ~a:~a:~a.~a, ~a% cpu ~a% gc, ~aMB"
-                               (parameterize ([date-display-format 'iso-8601]) (date->string (current-date) #true))
-                               (~n_w d "day") (~n h 2) (~n m 2) (~n s 2) (~n ms 3)
-                               (~% (current-process-milliseconds) pr+gctimebase) (~% (current-gc-milliseconds) gctimebase)
-                               (~r #:precision '(= 3) (/ (current-memory-use) 1024.0 1024.0))))
+                    [(~t) (lambda [n w] (~r #:min-width w #:pad-string "0" n))]
+                    [(~m) (lambda [m] (~r #:precision '(= 3) (/ m 1024.0 1024.0)))])
+        (define status (format "uptime ~a ~a:~a:~a.~a, ~ams gc[~a], ~a% idle, ~aMB, ~a"
+                               (~n_w d "day") (~t h 2) (~t m 2) (~t s 2) (~t ms 3) gctime/now gctimes
+                               (~r #:precision '(= 2) (* 100.0 (max 0 (- 1.0 (/ pr+gctime uptime)))))
+                               (~m (+ (current-memory-use) sysmem))
+                               (parameterize ([date-display-format 'iso-8601])
+                                 (date->string (current-date) #true))))
         (define width (+ (string-length status) 8))
         (mvwaddstr (titlebar) 0 (- (getmaxx (titlebar)) width) (~a status #:align 'right #:width width))
         (wrefresh (titlebar)))))
