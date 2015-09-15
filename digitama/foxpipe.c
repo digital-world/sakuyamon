@@ -1,6 +1,6 @@
 /**
- * This file implements the libssh2 channel ports
- * that suitable to work with Racket (sync).
+ * This module wraps libssh2 API to work with Racket (sync) and custodian.
+ * TODO: manager memory with Racket garbage collector.
  */
 
 #include <scheme.h>
@@ -36,7 +36,7 @@ static intptr_t channel_fill_buffer(foxpipe_channel_t *foxpipe) {
     return read;
 }
 
-static void channel_close_within_custodian(foxpipe_channel_t *foxpipe) {
+static intptr_t channel_close_within_custodian(foxpipe_channel_t *foxpipe) {
     /**
      * The function name just indicates that
      * Racket code is free to leave the channel to the custodian.
@@ -44,11 +44,19 @@ static void channel_close_within_custodian(foxpipe_channel_t *foxpipe) {
 
     if (foxpipe->read_total != -1) {
         libssh2_channel_close(foxpipe->channel);
-        foxpipe->read_total = -1; 
+        foxpipe->read_total = -1;
+        goto half_done;
     } else {
         libssh2_channel_wait_closed(foxpipe->channel);
         libssh2_channel_free(foxpipe->channel);
+        goto full_done;
     }
+
+half_done:
+    return 0;
+
+full_done:
+    return 1;
 }
 
 static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t offset, intptr_t size, intptr_t nonblock, Scheme_Object *unless) {
@@ -179,6 +187,7 @@ static void channel_read_need_wakeup(Scheme_Input_Port *port, void *fds) {
 
 static void channel_in_close(Scheme_Input_Port *p) {
     foxpipe_channel_t *channel;
+    intptr_t can_free;
 
     /**
      * Called to close the port.
@@ -186,7 +195,11 @@ static void channel_in_close(Scheme_Input_Port *p) {
      */
 
     channel = ((foxpipe_channel_t *)(p->port_data));
-    channel_close_within_custodian(channel);
+    can_free = channel_close_within_custodian(channel);
+
+    if (can_free > 0) {
+        free(channel);
+    }
 }
 
 static intptr_t channel_write_bytes(Scheme_Output_Port *out, const char *buffer, intptr_t offset, intptr_t size, intptr_t rarely_block, intptr_t enable_break) {
@@ -265,6 +278,7 @@ static void channel_write_need_wakeup(Scheme_Output_Port *port, void *fds) {
 
 static void channel_out_close(Scheme_Output_Port *p) {
     foxpipe_channel_t *channel;
+    intptr_t can_free;
 
     /**
      * Called to close the port.
@@ -276,7 +290,11 @@ static void channel_out_close(Scheme_Output_Port *p) {
      */
 
     channel = ((foxpipe_channel_t *)(p->port_data));
-    channel_close_within_custodian(channel);
+    can_free = channel_close_within_custodian(channel);
+
+    if (can_free > 0) {
+        free(channel);
+    }
 
     /* The documentation says this function must be called here */
     scheme_close_should_force_port_closed();
@@ -301,8 +319,7 @@ foxpipe_session_t *foxpipe_construct(Scheme_Object *tcp_connect, Scheme_Object *
         sshclient = libssh2_session_init();
 
         if (sshclient != NULL) {
-            /* allocating with `scheme_malloc` will occasionally cause segfault when collapsing. */
-            session = (foxpipe_session_t *)scheme_malloc_atomic(sizeof(foxpipe_session_t));
+            session = (foxpipe_session_t *)malloc(sizeof(foxpipe_session_t));
             session->sshclient = sshclient;
             session->dev_tcpin = dev_tcpin;
             session->dev_tcpout = dev_tcpout;
@@ -342,9 +359,7 @@ intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, cons
     msize = 256; /* the longest description that would make libssh2 happy */
     reason = description;
     if (strlen(description) > msize) {
-        reason = (char *)scheme_malloc_atomic(msize + 1);
-        strncpy(reason, description, msize);
-        reason[msize] = '\0';
+        reason = strndupa(description, msize);
     }
 
     /* TODO: Errors should be handled */
@@ -354,6 +369,12 @@ intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, cons
 
     scheme_close_input_port((Scheme_Object *)session->dev_tcpin);
     scheme_close_output_port((Scheme_Object *)session->dev_tcpout);
+
+    if (reason != description) {
+        free(reason);
+    }
+
+    free(session);
 
     return 0;
 }
@@ -377,8 +398,7 @@ intptr_t foxpipe_direct_channel(foxpipe_session_t *session, const char* host_see
     if (channel != NULL) {
         foxpipe_channel_t *object;
 
-        /* `scheme_malloc` is always used in Racket source base when making input/output ports. */
-        object = (foxpipe_channel_t*)scheme_malloc(sizeof(foxpipe_channel_t));
+        object = (foxpipe_channel_t*)malloc(sizeof(foxpipe_channel_t));
         object->session = session;
         object->channel = channel;
         object->read_offset = 0;
