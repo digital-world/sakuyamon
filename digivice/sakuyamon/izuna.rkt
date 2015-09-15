@@ -65,6 +65,8 @@
 
 (module* sakuyamon racket
   (require syntax/location)
+
+  (require racket/date)
   
   (require (submod ".."))
   (require (submod ".." syslog-rfc5424))
@@ -90,8 +92,10 @@
   (define sakuyamon-colors.vim (make-parameter (build-path (digimon-stone) "colors.vim")))
   (define sakuyamon-action (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
 
-  (define sakuyamon-launch-time (current-seconds))
-  (define mtime-colors.vim (box +inf.0))
+  (define uptimebase (current-inexact-milliseconds))
+  (define gctimebase (current-gc-milliseconds))
+  (define pr+gctimebase (current-process-milliseconds))
+  (define mtime-colors.vim (box -inf.0))
 
   (define color-links
     (let* ([colors.rktl (build-path (digimon-stone) "colors.rktl")]
@@ -225,7 +229,25 @@
       (wattrset stdwin higroup)
       (mvwaddstr stdwin 0 0 (apply format fmt contents))
       (wrefresh stdwin)))
-  
+
+  (define on-timer/second
+    (lambda [times]
+      (let*-values ([(uptime) (- (current-inexact-milliseconds) uptimebase)]
+                    [(s ms) (quotient/remainder (exact-truncate uptime) 1000)]
+                    [(d s) (quotient/remainder s 86400)]
+                    [(h s) (quotient/remainder s 3600)]
+                    [(m s) (quotient/remainder s 60)]
+                    [(~n) (lambda [n w] (~r #:min-width w #:pad-string "0" n))]
+                    [(~%) (lambda [n d] (~r #:precision '(= 1) (* 100.0 (/ (- n d) uptime))))])
+        (define status (format "~a, up: ~a ~a:~a:~a.~a, ~a% cpu ~a% gc, ~aMB"
+                               (parameterize ([date-display-format 'iso-8601]) (date->string (current-date) #true))
+                               (~n_w d "day") (~n h 2) (~n m 2) (~n s 2) (~n ms 3)
+                               (~% (current-process-milliseconds) pr+gctimebase) (~% (current-gc-milliseconds) gctimebase)
+                               (~r #:precision '(= 3) (/ (current-memory-use) 1024.0 1024.0))))
+        (define width (+ (string-length status) 8))
+        (mvwaddstr (titlebar) 0 (- (getmaxx (titlebar)) width) (~a status #:align 'right #:width width))
+        (wrefresh (titlebar)))))
+
   (define on-digivice-resized
     (lambda []
       (define-values [columns rows] (values (c-extern 'COLS _int) (c-extern 'LINES _int)))
@@ -234,6 +256,7 @@
       (for-each (lambda [stdwin] (and (wclear (stdwin)) (wnoutrefresh (stdwin)))) (list stdscr titlebar cmdlinebar))
       (wattrset (titlebar) 'Title)
       (mvwaddstr (titlebar) 0 0 (~a (current-digimon) #\space sakuyamon-action #\[ (getpid) #\] #:width columns))
+      (on-timer/second 0)
       (for ([win% (in-list (list host%       request%         rsyslog%))]
             [winp (in-list (list stdhost     stdreq           stdlog))]
             [scry (in-list (list 0           0                request-rows))]
@@ -258,28 +281,16 @@
         [(syslog _ _ _ _ _ _ (struct log:request _)) (send (stdreq) add-record! scepter-host record)]
         [(struct syslog _) (send (stdlog) add-record! scepter-host record)])))
   
-  (define on-timer/second
-    (lambda [times]
-      (let ([mtime (file-or-directory-modify-seconds (sakuyamon-colors.vim) #false (const 0))])
+  (define on-system-idle
+    (lambda []
+      (let ([mtime (file-or-directory-modify-seconds (sakuyamon-colors.vim))])
         (when (< (unbox mtime-colors.vim) mtime)
           (:colorscheme! (sakuyamon-colors.vim))
           (set-box! mtime-colors.vim mtime)
-          (on-digivice-resized)))
-      
-      (let*-values ([(uptime) (- (current-seconds) sakuyamon-launch-time)]
-                    [(d uptime) (quotient/remainder uptime 86400)]
-                    [(h uptime) (quotient/remainder uptime 3600)]
-                    [(m uptime) (quotient/remainder uptime 60)]
-                    [(s ~n) (values uptime (curry ~r #:min-width 2 #:pad-string "0"))])
-        (define status (format "uptime: ~a ~a:~a:~a ~aMB" (~n_w d "day") (~n h) (~n m) (~n s)
-                               (~r #:precision '(= 3) (/ (current-memory-use) 1024.0 1024.0))))
-        (define width (+ (string-length status) 8))
-        (mvwaddstr (titlebar) 0 (- (getmaxx (titlebar)) width) (~a status #:align 'right #:width width))
-        (wrefresh (titlebar)))))
+          (on-digivice-resized)))))
   
   (define digivice-izuna-monitor-main
-    (lambda [foxpipes]
-      (define timer (thread (thunk (for ([t (in-naturals)]) (sync/timeout/enable-break 1.0 never-evt) (on-timer/second t)))))
+    (lambda [timer foxpipes]
       (define (on-signal signal)
         (rich-echo 'MoreMsg "Terminating Foxpipes")
         (for-each (lambda [foxpipe] (place-break foxpipe 'terminate)) (hash-values foxpipes))
@@ -293,14 +304,15 @@
         (let recv-match-render-loop () #| TODO: Mac's heart beat might be received as a strange char |#
           (with-handlers ([exn:fail? (lambda [e] (rich-echo 'ErrorMsg "~a" (string-join (string-split (exn-message e)))))])
             (match (or (getch) (apply sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# (hash-values foxpipes)))
-              [(? false?) (void)]
+              [(? false?) (on-system-idle)]
               [(cons host (vector (? char? heart-beat))) (send (stdhost) beat-heart host)]
               [(cons host (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
               [(cons host (vector message)) (rich-echo (rich-echo 'WarningMsg "Received an unexpected message from ~a: ~s" host message))]
               [(cons host (? flonum? s)) (place-channel-put (hash-ref foxpipes host) (format "idled ~as" s))]
               [(list host (? string? figureprint) ...) (send (stdhost) add-host! host figureprint)]
-              [(list host 'fail (? string? fmt) argl ...) (rich-echo 'WarningMsg "~a: ~a" host (apply format fmt argl))]
               [(list host 'notify (? string? fmt) argl ...) (send (stdhost) set-status host ": " (apply format fmt argl))]
+              [(list host 'fail (? string? fmt) argl ...) (rich-echo 'WarningMsg "~a: ~a" host (apply format fmt argl))]
+              [(list host 'error (? string? fmt) argl ...) (error (format "~a: ~a" host ": " (apply format fmt argl)))]
               [(? char? c) (rich-echo 'Ignore "Key pressed: ~s[~a]" c (char->integer c))]
               [(or 'SIGQUIT) (let/ec collapse (raise (exn:break:terminate "user terminate" (current-continuation-marks) collapse)))]
               [(or 'SIGINT) (let/ec collapse (raise (exn:break "user break" (current-continuation-marks) collapse)))]
@@ -328,11 +340,12 @@
                                         (error "NCurses is unavailable!"))
                                       (when (has_colors)
                                         (start_color)
-                                        (use_default_colors)
-                                        (:colorscheme! (sakuyamon-colors.vim))
-                                        (set-box! mtime-colors.vim (file-or-directory-modify-seconds (sakuyamon-colors.vim))))
-                                      (on-digivice-resized)
+                                        (use_default_colors))
+                                      (on-system-idle) ; will load the up-to-date colorscheme
                                       ((curry digivice-izuna-monitor-main)
+                                       (thread (thunk (for ([t (in-naturals 1)])
+                                                        (sync/timeout/enable-break 1.0 never-evt)
+                                                        (on-timer/second t))))
                                        (for/hash ([scepter-host (in-list (cons hostname other-hosts))])
                                          (define foxpipe (dynamic-place `(submod (file ,(quote-source-file)) foxpipe) 'realize))
                                          ((curry place-channel-put foxpipe)
@@ -361,8 +374,8 @@
   (define the-one-manages-foxpipe-or-plaintcp-io (make-parameter (make-custodian)))
   (define ssh-session (make-parameter #false))
   
-  (define (on-collapsed reason #:libssh2_exit? [exit? #false])
-    (with-handlers ([exn? void])
+  (define (on-collapsed sshd-host izunac reason #:libssh2_exit? [exit? #false])
+    (with-handlers ([exn? (compose1 (curry place-channel-put izunac) (curry list sshd-host 'error) exn-message)])
       ;;; shutdown channels and plaintcp ports
       (custodian-shutdown-all (the-one-manages-foxpipe-or-plaintcp-io))
       (the-one-manages-foxpipe-or-plaintcp-io (make-custodian))
@@ -385,11 +398,11 @@
                      (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")
                      (build-path (find-system-path 'home-dir) ".ssh" "id_rsa"))))
 
-        (with-handlers ([exn:break? (curry on-collapsed #:libssh2_exit? #true)])
+        (with-handlers ([exn:break? (curry on-collapsed sshd-host izunac #:libssh2_exit? #true)])
           (let catch-send-clear-loop ()
             (define (on-signal/sendback signal)
               (place-channel-put izunac (list sshd-host 'fail (exn-message signal)))
-              (on-collapsed signal))
+              (on-collapsed sshd-host izunac signal))
             (with-handlers ([exn:fail? on-signal/sendback])
               (match-define-values (_ cputime wallclock gctime)
                 ((curryr time-apply null)
