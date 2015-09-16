@@ -24,10 +24,8 @@
 (define _chtype ; you may work with vim highlight groups when FFIing to C
   (match-let* ([(list attrmask charmask cpairmask) (map (curryr c-extern _int) (list 'ATTRIBUTES 'CHARTEXT 'COLORPAIR))]
                [(list color_pair pair_number) (map c-extern (list 'color_pair 'pair_number) (list (_fun _short -> _int) (_fun _int -> _short)))]
-               [_cterm ((lambda [a] (_bitmask a _int))
-                        (foldl (lambda [a As] (list* (string->symbol (string-downcase (symbol->string a))) '= (c-extern a _uint) As))
-                               null (list 'NORMAL 'STANDOUT 'UNDERLINE 'UNDERCURL 'REVERSE 'INVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT
-                                          'HORIZONTAL 'LEFT 'LOW 'RIGHT 'TOP 'VERTICAL 'ALTCHARSET #| this is also used to tell wide char |#)))]
+               [_cterm (c-extern/bitmask (list 'NORMAL 'STANDOUT 'UNDERLINE 'UNDERCURL 'REVERSE 'INVERSE 'BLINK 'DIM 'BOLD 'INVIS 'PROTECT
+                                               'HORIZONTAL 'LEFT 'LOW 'RIGHT 'TOP 'VERTICAL 'ALTCHARSET #| this is also used to tell wide char |#))]
                [chtype->c (lambda [_t] (bitwise-ior (bitwise-and (char->integer (chtype-char _t)) charmask)
                                                     ((ctype-scheme->c _cterm) (chtype-cterm _t))
                                                     (color_pair (chtype-ctermfg.bg _t))))])
