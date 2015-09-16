@@ -8,10 +8,9 @@
   (provide (all-defined-out))
 
   ;;; TODO: This module should be implemented in Typed Racket
-  ;;; but meanwhile structs in this module has lots of uncovertable contracts.
+  ;;; but meanwhile typed structs have lots of uncovertable contracts.
 
   (require "../../digitama/posix.rkt")
-  (require "../../digitama/geolocation.rkt")
 
   (struct log:message () #:prefab)
   (struct log:request log:message (timestamp method uri client host user-agent referer headers) #:prefab)
@@ -27,11 +26,6 @@
                                         "\\[\\d+\\]"  #| procid |#
                                         "\\[[^]]+\\]" #| structured data, just ignored |#
                                         ".+" #| free-from message |#)))
-      (define (~geolocation ip . whocares)
-        (define geo (what-is-my-address ip))
-        (cond [(false? geo) ip]
-              [(false? (geolocation-city geo)) (format "~a[~a/~a]" ip (geolocation-continent geo) (geolocation-country geo))]
-              [else (format "~a[~a ~a]" ip (geolocation-country geo) (geolocation-city geo))]))
       (match (regexp-match template log-text)
         [(? false?) (error 'string->syslog "Invalid Syslog Message: ~a" log-text)]
         [(list _ prival timestamp hostname appname procid _ ffmsg)
@@ -45,7 +39,7 @@
                    (match ffmsg
                      [(? false?) #false]
                      [(pregexp #px"\\s*request:\\s*(.+)" (list _ hstr)) (string->request hstr)]
-                     [else (regexp-replace* #px"\\d{1,3}(\\.\\d{1,3}){3}" ffmsg ~geolocation)])))])))
+                     [else ffmsg])))])))
   
   (define (string->request hstr)
     (define headers (for/hash ([(key val) (in-hash (read (open-input-string hstr)))])
@@ -71,7 +65,11 @@
   (require (submod ".."))
   (require (submod ".." syslog-rfc5424))
   (require "../../digitama/termctl.rkt")
+  (require "../../digitama/geolocation.rkt")
 
+  (define uptime/base (current-milliseconds))
+  (define pr+gctime/base (current-process-milliseconds))
+  
   ; /+-----------+----------------------------------------+\
   ;  | title% [this is a ripped off line]                 |
   ;  +-----------+----------------------------------------+
@@ -92,10 +90,10 @@
   (define sakuyamon-colors.vim (make-parameter (build-path (digimon-stone) "colors.vim")))
   (define sakuyamon-action (path-replace-suffix (file-name-from-path (quote-source-file)) #""))
 
-  (define uptime/base (current-milliseconds))
-  (define pr+gctime/base (current-process-milliseconds))
+  (define izuna-title (~a (current-digimon) #\space sakuyamon-action #\[ (getpid) #\]))
   (define izuna-statistics (make-vector 11))
   (define mtime-colors.vim (box -inf.0))
+  (define px.ip #px"\\d{1,3}(\\.\\d{1,3}){3}")
 
   (define color-links
     (let* ([colors.rktl (build-path (digimon-stone) "colors.rktl")]
@@ -108,34 +106,38 @@
           (set-box! links (with-handlers ([exn? (lambda [e] (unbox links))])
                             (eval (with-input-from-file colors.rktl read)))))
         (unbox links))))
+
+  (define (~geolocation ip . whocares)
+    (match (what-is-my-address ip)
+      [(vector continent country _ #false _ _) (format "~a[~a/~a]" ip continent country)]
+      [(vector _ country _ city _ _) (format "~a[~a ~a]" ip country city)]
+      [false/else/error ip]))
   
   (define titlebar (make-parameter #false))
   (define cmdlinebar (make-parameter #false))
-  (define stdhost (make-parameter #false))
-  (define stdreq (make-parameter #false))
-  (define stdlog (make-parameter #false))
+  (define winhost (make-parameter #false))
+  (define winreq (make-parameter #false))
+  (define winlog (make-parameter #false))
 
   (define window%
     (class object% (super-new)
       (field [monitor (newwin 0 0 0 0)])
       (field [statusbar (newwin 1 0 0 0)])
       
-      (define/public (set-status #:update? [update? #true] #:clear? [clear? #false] #:color [color #false] #:offset [x 0] #:width [width (getmaxx statusbar)] . contents)
+      (define/public (set-status #:clear? [clear? #false] #:color [color #false] #:offset [x 0] #:width [width (getmaxx statusbar)] . contents)
         (unless (false? clear?) (wclear statusbar))
         (unless (empty? contents) (mvwaddwstr statusbar 0 x (apply ~a contents #:width width)))
         (unless (false? color) (mvwchgat statusbar 0 x width 'StatusLineNC color))
-        (when update? (wrefresh statusbar)))
+        (wnoutrefresh statusbar))
       
       (define/public (resize y x lines cols)
         (wresize monitor (sub1 lines) cols)
         (mvwin monitor y x)
         (wresize statusbar 1 cols)
         (mvwin statusbar (sub1 (+ y lines)) x)
-        (wbkgdset statusbar 'StatusLine)
-        (set-status (object-name this) #:update? #false)
-        (refresh #:update? #false))
+        (wbkgdset statusbar 'StatusLine))
       
-      (define/public (refresh #:update? [update? #true])
+      (define/public (refresh #:update? [update? #false])
         (define smart-refresh (if update? wrefresh wnoutrefresh))
         (smart-refresh monitor)
         (smart-refresh statusbar))))
@@ -156,10 +158,10 @@
                 [(string=? (dict-iterate-key hosts idx) sceptor-host) (check-next #false y)]
                 [else (check-next (dict-iterate-next hosts idx) (+ (dict-count (dict-iterate-value hosts idx)) y 1))]))
         (set-status sceptor-host)
-        (refresh #:update? #true))
+        (refresh))
 
       (define/public (beat-heart scepter-host)
-        (set-status scepter-host #:update? #false)
+        (set-status scepter-host)
         (set-status #:offset (random (string-length scepter-host)) #:width 1 #:color 'SpecialChar))
       
       (define/private (add-host hostname y)
@@ -180,7 +182,7 @@
       (define/public (add-record! scepter-host record)
         (set-box! contents (cons (cons scepter-host record) (unbox contents)))
         (display-request scepter-host (syslog-message record))
-        (refresh #:update? #true))
+        (refresh))
       
       (define/private (display-request scepter-host req)
         (define hilinks (color-links))
@@ -194,6 +196,7 @@
       (define/private (request-ref req key)
         (case key
           [(timestamp) (log:request-timestamp req)]
+          [(client) (~geolocation (log:request-client req))]
           [else (hash-ref (log:request-headers req) key (const #false))]))))
   
   (define rsyslog%
@@ -208,7 +211,7 @@
         (set-box! contents (cons (cons scepter-host record) (unbox contents)))
         (wattrset monitor (hash-ref (color-links) (syslog-severity record) (const (list 0))))
         (waddwstr monitor (~syslog scepter-host record))
-        (refresh #:update? #true))
+        (refresh))
 
       (define/private (~syslog scepter-host record)
         (~a #:max-width (getmaxx monitor)
@@ -220,77 +223,81 @@
                     (syslog-sender record)
                     (syslog-pid record)
                     (regexp-replaces (~a (syslog-message record))
-                                     `([,(string #\newline) " "]
+                                     `([,px.ip ,~geolocation]
+                                       [,(string #\newline) " "]
                                        [,(string #\tab) "    "])))))))
 
+  (define display-statistics
+    (lambda [#:stdbar [stdbar (titlebar)] #:prefix [prefix izuna-title]]
+      (match-define (vector pr+gctime/now uptime/now gctime/now gctimes _ _ _ _ _ sysmem _)
+        (and (vector-set-performance-stats! izuna-statistics #false) izuna-statistics))
+      (define-values (uptime pr+gctime) (values (- uptime/now uptime/base) (- pr+gctime/now pr+gctime/base)))
+      (define ~t (lambda [n w] (~r #:min-width w #:pad-string "0" n)))
+      (define ~m (lambda [m] (~r #:precision '(= 3) (/ m 1024.0 1024.0))))
+      (define ~% (lambda [%] (~r #:precision '(= 2) (* 100.0 (max 0 %)))))
+      (let*-values ([(s) (quotient uptime 1000)]
+                    [(d s) (quotient/remainder s 86400)]
+                    [(h s) (quotient/remainder s 3600)]
+                    [(m s) (quotient/remainder s 60)])
+        (define status (~a #:align 'right #:width (- (getmaxx stdbar) (string-length prefix))
+                           (format "~a ~a:~a:~a up, ~ams gc[~a], ~a% idle, ~aMB, ~a"
+                                   (~n_w d "day") (~t h 2) (~t m 2) (~t s 2) gctime/now gctimes
+                                   (~% (- 1.0 (/ pr+gctime uptime))) (~m (+ (current-memory-use) sysmem))
+                                   (parameterize ([date-display-format 'iso-8601])
+                                     (date->string (current-date) #true)))))
+        (mvwaddstr stdbar 0 0 (string-append prefix status))
+        (wnoutrefresh stdbar))))
+  
   (define rich-echo
-    (lambda [higroup #:stdwin [stdwin (cmdlinebar)] fmt . contents]
-      (wclear stdwin)
-      (wattrset stdwin higroup)
-      (mvwaddstr stdwin 0 0 (apply format fmt contents))
-      (wrefresh stdwin)))
+    (lambda [#:stdbar [stdbar (cmdlinebar)] higroup fmt . contents]
+      (wclear stdbar)
+      (wattrset stdbar higroup)
+      (mvwaddstr stdbar 0 0 (apply format fmt contents))
+      (wrefresh stdbar)))
+  
+  (define update-windows-on-screen
+    (lambda []
+      (define mtime (file-or-directory-modify-seconds (sakuyamon-colors.vim)))
+      (when (< (unbox mtime-colors.vim) mtime)
+        (:colorscheme! (sakuyamon-colors.vim))
+        (set-box! mtime-colors.vim mtime)
+        (on-digivice-resized))
+      (doupdate)))
 
   (define on-timer/second
     (lambda [times]
-      (match-define (vector pr+gctime/now uptime/now gctime/now gctimes _ _ _ _ _ sysmem _)
-        (and (vector-set-performance-stats! izuna-statistics #false) izuna-statistics))
-      (let*-values ([(uptime pr+gctime) (values (- uptime/now uptime/base) (- pr+gctime/now pr+gctime/base))]
-                    [(s) (quotient uptime 1000)]
-                    [(d s) (quotient/remainder s 86400)]
-                    [(h s) (quotient/remainder s 3600)]
-                    [(m s) (quotient/remainder s 60)]
-                    [(~t) (lambda [n w] (~r #:min-width w #:pad-string "0" n))]
-                    [(~m) (lambda [m] (~r #:precision '(= 3) (/ m 1024.0 1024.0)))])
-        (define status (format "~a ~a:~a:~a up, ~ams gc[~a], ~a% idle, ~aMB, ~a"
-                               (~n_w d "day") (~t h 2) (~t m 2) (~t s 2) gctime/now gctimes
-                               (~r #:precision '(= 2) (* 100.0 (max 0 (- 1.0 (/ pr+gctime uptime)))))
-                               (~m (+ (current-memory-use) sysmem))
-                               (parameterize ([date-display-format 'iso-8601])
-                                 (date->string (current-date) #true))))
-        (define width (+ (string-length status) 8))
-        (mvwaddstr (titlebar) 0 (- (getmaxx (titlebar)) width) (~a status #:align 'right #:width width))
-        (wrefresh (titlebar)))))
+      (display-statistics)))
 
   (define on-digivice-resized
     (lambda []
       (define-values [columns rows] (values (c-extern 'COLS _int) (c-extern 'LINES _int)))
       (define-values [host-cols rsyslog-rows] (values (exact-round (* columns 0.16)) (exact-round (* rows 0.24))))
       (define-values [request-cols request-rows] (values (- columns host-cols 1) (- rows rsyslog-rows)))
-      (for-each (lambda [stdwin] (and (wclear (stdwin)) (wnoutrefresh (stdwin)))) (list stdscr titlebar cmdlinebar))
+      (for-each wclear (list (stdscr) (cmdlinebar)))
       (wattrset (titlebar) 'Title)
-      (mvwaddstr (titlebar) 0 0 (~a (current-digimon) #\space sakuyamon-action #\[ (getpid) #\] #:width columns))
-      (on-timer/second 0)
+      (display-statistics #:stdbar (titlebar) #:prefix izuna-title)
       (for ([win% (in-list (list host%       request%         rsyslog%))]
-            [winp (in-list (list stdhost     stdreq           stdlog))]
+            [winp (in-list (list winhost     winreq           winlog))]
             [scry (in-list (list 0           0                request-rows))]
             [scrx (in-list (list 0           (add1 host-cols) (add1 host-cols)))]
             [scrr (in-list (list rows        request-rows     rsyslog-rows))]
             [scrc (in-list (list host-cols   request-cols     request-cols))])
         (unless (winp) (winp (make-object win%)))
-        (send (winp) resize scry scrx scrr scrc))
+        (send (winp) resize scry scrx scrr scrc)
+        (send (winp) set-status (object-name (winp)))
+        (send (winp) refresh #:update? #true))
       (attrset 'VertSplit)
       (mvvline 0 host-cols (- rows 1))
-      (mvaddch (sub1 rows) host-cols (acs_map 'DARROW #:extra-attrs (list 'underline)))
-      (standend)
-      (for-each wnoutrefresh (list (stdscr) (titlebar)))
-      (doupdate)))
+      (mvaddch (sub1 rows) host-cols (acs_map 'DARROW #:extra-attrs (list 'underline)))))
   
   (define on-foxpipe-rsyslog
     (lambda [scepter-host record]
-      (define rich-status (lambda [clr msg] (send (stdlog) set-status #:clear? #true #:color clr #:width (string-length msg) msg)))
+      (define rich-status (lambda [clr msg] (send (winlog) set-status #:clear? #true #:color clr #:width (string-length msg) msg)))
       (match record
         [(syslog _ _ timestamp host app pid #false) (rich-status 'Ignore (format "~a@~a: ~a[~a]: [Empty Message]" timestamp host app pid))]
         [(syslog _ _ timestamp host "taskgated" _ unsigned-signature) (rich-status 'Folded (format "~a@~a: ~a" timestamp host unsigned-signature))]
-        [(syslog _ _ _ _ _ _ (struct log:request _)) (send (stdreq) add-record! scepter-host record)]
-        [(struct syslog _) (send (stdlog) add-record! scepter-host record)])))
-  
-  (define on-system-idle
-    (lambda []
-      (let ([mtime (file-or-directory-modify-seconds (sakuyamon-colors.vim))])
-        (when (< (unbox mtime-colors.vim) mtime)
-          (:colorscheme! (sakuyamon-colors.vim))
-          (set-box! mtime-colors.vim mtime)
-          (on-digivice-resized)))))
+        [(syslog _ _ _ _ _ _ (struct log:request _)) (send (winreq) add-record! scepter-host record)]
+        [(struct syslog _) (send (winlog) add-record! scepter-host record)])))
   
   (define digivice-izuna-monitor-main
     (lambda [timer foxpipes]
@@ -307,13 +314,13 @@
         (let recv-match-render-loop () #| TODO: Mac's heart beat might be received as a strange char |#
           (with-handlers ([exn:fail? (lambda [e] (rich-echo 'ErrorMsg "~a" (string-join (string-split (exn-message e)))))])
             (match (or (getch) (apply sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# (hash-values foxpipes)))
-              [(? false?) (on-system-idle)]
-              [(cons host (vector (? char? heart-beat))) (send (stdhost) beat-heart host)]
+              [(? false? on-system-idle) (update-windows-on-screen)]
+              [(cons host (vector (? char? heart-beat))) (send (winhost) beat-heart host)]
               [(cons host (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
-              [(cons host (vector message)) (rich-echo (rich-echo 'WarningMsg "Received an unexpected message from ~a: ~s" host message))]
+              [(cons host (vector message)) (rich-echo 'WarningMsg "Received an unexpected message from ~a: ~s" host message)]
               [(cons host (? flonum? s)) (place-channel-put (hash-ref foxpipes host) (format "idled ~as" s))]
-              [(list host (? string? figureprint) ...) (send (stdhost) add-host! host figureprint)]
-              [(list host 'notify (? string? fmt) argl ...) (send (stdhost) set-status host ": " (apply format fmt argl))]
+              [(list host (? string? figureprint) ...) (send (winhost) add-host! host figureprint)]
+              [(list host 'notify (? string? fmt) argl ...) (send (winhost) set-status host ": " (apply format fmt argl))]
               [(list host 'fail (? string? fmt) argl ...) (rich-echo 'WarningMsg "~a: ~a" host (apply format fmt argl))]
               [(list host 'error (? string? fmt) argl ...) (error (format "~a: ~a" host ": " (apply format fmt argl)))]
               [(? char? c) (rich-echo 'Ignore "Key pressed: ~s[~a]" c (char->integer c))]
@@ -344,10 +351,9 @@
                                       (when (has_colors)
                                         (start_color)
                                         (use_default_colors))
-                                      (on-system-idle) ; will load the up-to-date colorscheme
+                                      (update-windows-on-screen) ; will load the up-to-date colorscheme
                                       ((curry digivice-izuna-monitor-main)
                                        (thread (thunk (for ([t (in-naturals 1)])
-                                                        ; -0.001 adjustment works fine
                                                         (sync/timeout/enable-break (+ 1.0 -0.001) never-evt)
                                                         (on-timer/second t))))
                                        (for/hash ([scepter-host (in-list (cons hostname other-hosts))])
