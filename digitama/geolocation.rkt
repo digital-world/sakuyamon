@@ -4,8 +4,6 @@
 
 (require "agent.rkt")
 
-;;; TODO: meanwhile typed structure is not work well in untyped racket
-
 (struct geolocation ([continent : String]
                      [country : String]
                      [state/region : (Option String)]
@@ -14,7 +12,7 @@
                      [longitude : String])
   #:transparent)
 
-(define-type Geolocation (Vector String String (Option String) (Option String) String String))
+(define-type Geolocation geolocation)
 (define-type Maybe-Geolocation (Option Geolocation))
 
 (define what-is-my-address : (-> String Maybe-Geolocation)
@@ -32,11 +30,11 @@
                                                               [#px"&prime;\\s*" "′"] [#px"&Prime;\\s*" "′′"])) String)
                                      #px"(:?\\s*<[^>]+>\\s*)+")
                   [(list "Continent" continent "Country" country "State/Region" state "City" city "Latitude" latitude "Longitude" longitude whocares ...)
-                   (vector continent country state city latitude longitude)]
+                   (geolocation continent country state city latitude longitude)]
                   [(list "Continent" continent "Country" country "City" city "Latitude" latitude "Longitude" longitude whocare ...)
-                   (vector continent country #false city latitude longitude)]
+                   (geolocation continent country #false city latitude longitude)]
                   [(list "Continent" continent "Country" country "Latitude" latitude "Longitude" longitude whocare ...)
-                   (vector continent country #false #false latitude longitude)]
+                   (geolocation continent country #false #false latitude longitude)]
                   [what-is-wrong (and (eprintf ">> ~a: ~a" ip what-is-wrong) #false)]))))
         ((inst hash-ref String Maybe-Geolocation False) geodb ip (const #false))))))
 

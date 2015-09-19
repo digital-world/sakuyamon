@@ -1,10 +1,11 @@
 #lang at-exp racket
 
 (provide (except-out (all-defined-out) OK ERR))
-(provide (all-from-out "posix.rkt"))
+(provide (struct-out chtype))
 
 (require (for-syntax racket/syntax))
 
+@require{digicore.rkt}
 @require{posix.rkt}
 
 (define-ffi-definer define-ncurses (ffi-lib "libncurses" #:global? #true))
@@ -19,7 +20,6 @@
 (define _window* (_cpointer/null 'WINDOW*))
 (define _panel* (_cpointer/null 'PANEL*))
 (define _ok/err (make-ctype _int #false (lambda [c] (not (eq? c ERR)))))
-(define stdscr (make-parameter #false))
 
 (define _chtype ; you may work with vim highlight groups when FFIing to C
   (match-let* ([(list attrmask charmask cpairmask) (map (curryr c-extern _int) (list 'ATTRIBUTES 'CHARTEXT 'COLORPAIR))]
@@ -70,18 +70,6 @@
                             ((curryr hash-ref c (thunk (integer->char c)))
                              (hasheq #x0003 'SIGINT #x001C 'SIGQUIT #x019A 'SIGWINCH))))))
 
-(define acs-map (let ([acsmap (c-extern 'initailizer_element_should_be_constant (_fun _symbol -> _chtype))])
-                  (delay #| at this point ncureses has not initailized yet |#
-                    (make-hash (map (lambda [acs] (cons acs (acsmap acs)))
-                                    (list 'ULCORNER 'LLCORNER 'URCORNER 'LRCORNER 'RTEE 'LTEE 'BTEE 'TTEE 'HLINE 'VLINE
-                                          'S1 'S3 'S7 'S9 'DIAMOND 'CKBOARD 'DEGREE 'BULLET 'BOARD 'LANTERN 'BLOCK 'STERLING
-                                          'LARROW 'RARROW 'DARROW 'UARROW 'PLUS 'PLMINUS 'LEQUAL 'GEQUAL 'PI 'NEQUAL))))))
-
-(define acs_map
-  (lambda [key #:extra-attrs [attrs null]] ; if working with vim highlight, then only cterm will be used. 
-    (define altchar (hash-ref (force acs-map) key make-defchtype))
-    (chtype (chtype-char altchar) (append (chtype-cterm altchar) attrs) 0)))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                         WARNING: ncurses uses YX-Coordinate System                          ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -111,13 +99,15 @@
                         (unless (false? bar) ; inability to allocate the ripped off line window
                           ((lambda _ (if (wnoutrefresh bar) OK ERR)) ; (hook/2) should return an integer value which is indeed useless
                            (match r
-                             [(? parameter? outside-needs-this) (outside-needs-this bar)]
+                             [(? parameter? untyped-racket-needs-it) (untyped-racket-needs-it bar)]
                              [(? procedure? hook/2-as-expected) (hook/2-as-expected bar cols)]
-                             [(list-no-order (? procedure? hook/2) attrs ...) (void (wbkgdset bar attrs) (hook/2 bar cols))])))))))
+                             [(list-no-order (? procedure? hook/2) attrs ...) (void (wbkgdset bar attrs) (hook/2 bar cols))]
+                             [(? symbol? name-of-prefab-window) (hash-set! :prefabwindows name-of-prefab-window bar)
+                              #| TODO: check if the wrapped deallocator will release the storage as expected |#])))))))
         -> _ok/err ; always #true
         -> (void) #| Racket should not output this value |#))
 
-(define-ncurses initscr (_fun -> [curwin : _window*] -> (and (stdscr curwin) curwin)))
+(define-ncurses initscr (_fun -> [curwin : _window*] -> (and (hash-set! :prefabwindows 'stdscr curwin) curwin)))
 (define-ncurses beep (_fun -> _ok/err))
 (define-ncurses flash (_fun -> _ok/err))
 (define-ncurses raw (_fun -> _ok/err))
@@ -127,7 +117,7 @@
 (define-ncurses flushinp (_fun -> _ok/err -> #true))
 (define-ncurses qiflush (_fun -> _ok/err)) ; Break, SIGINT, SIGQUIT
 (define-ncurses intrflush (_fun [null : _window* = #false] _bool -> _ok/err)) ; SIGINT, SIGQUIT, SIGTSTP
-(define-ncurses keypad (_fun [stdwin : _window* = (stdscr)] _bool -> _ok/err))
+(define-ncurses keypad (_fun [stdwin : _window* = (:prefabwin 'stdscr)] _bool -> _ok/err))
 (define-ncurses idlok (_fun _window* _bool -> _ok/err))
 (define-ncurses idcok (_fun _window* _bool -> _ok/err))
 (define-ncurses scrollok (_fun _window* _bool -> _ok/err))
@@ -172,7 +162,7 @@
 (define-ncurses-winapi/mv getch (_fun -> _keycode))
 (define-ncurses-winapi/mv inch (_fun -> _chtype))
 
-(define-ncurses-winapi clear (_fun -> _ok/err)) ;;; it just calls (*erase), also do (*move 0 0)
+(define-ncurses-winapi clear (_fun -> _ok/err)) ;;; it just calls (erase), also do (move 0 0)
 (define-ncurses-winapi clrtobot (_fun -> _ok/err))
 (define-ncurses-winapi clrtoeol (_fun -> _ok/err))
 (define-ncurses-winapi insdelln (_fun _int -> _ok/err))
@@ -236,8 +226,8 @@
 ;;; No. is combined with attribute and color, the actual storage is only 8bit.    ;;;
 ;;; It's your duty to manage the palette.                                         ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-ncurses init_pair (_fun _short _color-256 _color-256 -> _ok/err))
-(define-ncurses pair_content (_fun [pair : _short] [fg : (_ptr o _color-256)] [bg : (_ptr o _color-256)]
+(define-ncurses init_pair (_fun _color-pair _color-256 _color-256 -> _ok/err))
+(define-ncurses pair_content (_fun [pair : _color-pair] [fg : (_ptr o _color-256)] [bg : (_ptr o _color-256)]
                                    -> [$? : _ok/err]
                                    -> (and $? (cons fg bg))))
 
@@ -293,7 +283,24 @@
 (define-ncurses scr_init (_fun _file -> _ok/err))
 (define-ncurses scr_set (_fun _file -> _ok/err))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define acs-map (let ([acsmap (c-extern 'initailizer_element_should_be_constant (_fun _symbol -> _chtype))])
+                  (delay #| at this point ncureses has not initailized yet |#
+                    (make-hash (map (lambda [acs] (cons acs (acsmap acs)))
+                                    (list 'ULCORNER 'LLCORNER 'URCORNER 'LRCORNER 'RTEE 'LTEE 'BTEE 'TTEE 'HLINE 'VLINE
+                                          'S1 'S3 'S7 'S9 'DIAMOND 'CKBOARD 'DEGREE 'BULLET 'BOARD 'LANTERN 'BLOCK 'STERLING
+                                          'LARROW 'RARROW 'DARROW 'UARROW 'PLUS 'PLMINUS 'LEQUAL 'GEQUAL 'PI 'NEQUAL))))))
+
+(define acs_map
+  (lambda [key #:extra-attrs [attrs null]] ; if working with vim highlight, then only cterm will be used. 
+    (define altchar (hash-ref (force acs-map) key make-defchtype))
+    (chtype (chtype-char altchar) (append (chtype-cterm altchar) attrs) 0)))
+
+(define :prefabwin
+  (lambda [name]
+    (hash-ref :prefabwindows name
+              (lambda [] (error ':prefabwin "no such previously fabricated window: ~a" name)))))
+
 (define :colorscheme! ;;; this function should invoked after (initscr)
   (lambda [colors.vim #:exn-handler [uncaught-exn void]]
     #| What's different from vim is that the Normal group is always used as default setting |#
@@ -324,59 +331,247 @@
                          [else (void (init_pair ipair (vector-ref hl 2) (vector-ref hl 3))
                                      (hash-set! :highlight groupname (chtype #\nul (vector-ref hl 1) (vector-ref hl 0))))]))))))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(module+ main
-  (define statusbar (make-parameter #false))
-  (ripoffline 1 (list 'reverse (lambda [titlebar cols] (waddwstr titlebar (~a "> racket digitama/termctl.rkt" #:width cols)))))
-  (ripoffline -1 statusbar)
-  (void (initscr)
-        (plumber-add-flush! (current-plumber) (lambda [this] (plumber-flush-handle-remove! this) (endwin))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(module* typed/ffi typed/racket
+  (provide (all-defined-out))
 
-  (define (uncaught-exn errobj)
-    (define messages (call-with-input-string (exn-message errobj) port->lines))
-    (clear)
-    (addstr (format "»» name: ~a~n" (object-name errobj)))
-    (unless (null? messages)
-      (define msghead " message: ")
-      (define msgspace (~a #:min-width (sub1 (string-length msghead))))
-      (addstr (format "»»~a~a~n" msghead (car messages)))
-      (for-each (lambda [msg] (addstr (format "»»»~a~a~n" msgspace msg))) (cdr messages)))
-    (for ([stack (in-list (continuation-mark-set->context (exn-continuation-marks errobj)))])
-      (when (cdr stack)
-        (define srcinfo (srcloc->string (cdr stack)))
-        (unless (or (false? srcinfo) (regexp-match? #px"^/" srcinfo))
-          (addstr (format "»»»» ~a: ~a~n" srcinfo (or (car stack) 'λ))))))
-    (refresh)
-    (getch))
+  (require (submod "posix.rkt" typed/ffi))
+  (require (for-syntax racket/syntax))
+  
+  (define-type Window* CPointer)
+  (define-type Window*/Null (Option CPointer))
+  
+  (define-type Panel* CPointer)
+  (define-type Panel*/Null (Option CPointer))
+
+  (define-type OK/ERR Boolean)
+  (define-type CTerm CBitmask)
+  (define-type ChType chtype)
+  (define-type CharType (U ChType Char (Pairof Byte RBitmask) RBitmask Symbol))
+  (define-type Color-Pair (U Byte Symbol))
+  (define-type Color256 (U Byte Symbol))
+  (define-type RGB/Component Byte)
+  (define-type KeyCode (U False Symbol Char))
+  (define-type Ripoffline-StdInit (Window* Positive-Integer -> Any))
+  (define-type Ripoffline-Init (U Symbol (Parameterof Window*/Null) Ripoffline-StdInit (Pairof Ripoffline-StdInit RBitmask)))
+
+  (define-syntax (define-type-ncurses-winapi stx)
+    (syntax-case stx [->]
+      [[_ id (dom0 anti-dead-loop ... -> rng)]
+       #'(define-type-ncurses-winapi id (-> dom0 anti-dead-loop ... rng))]
+      [[_ id (-> dom/rng ...)]
+       (with-syntax ([wid (format-id #'id "w~a" (syntax-e #'id))])
+         #'(require/typed/provide (submod "..")
+                                  [id (-> dom/rng ...)]
+                                  [wid (-> Window* dom/rng ...)]))]))
+
+  (define-syntax (define-type-ncurses-winapi/mv stx)
+    (syntax-case stx [->]
+      [[_ id (dom0 anti-dead-loop ... -> rng)]
+       #'(define-type-ncurses-winapi/mv id (-> dom0 anti-dead-loop ... rng))]
+      [[_ id (-> dom/rng ...)]
+       (with-syntax ([mvid (format-id #'id "mv~a" (syntax-e #'id))]
+                     [mvwid (format-id #'id "mvw~a" (syntax-e #'id))])
+         #'(begin (define-type-ncurses-winapi id (-> dom/rng ...))
+                  (require/typed/provide (submod "..")
+                                         [mvid (-> Nonnegative-Integer Nonnegative-Integer dom/rng ...)]
+                                         [mvwid (-> Window* Nonnegative-Integer Nonnegative-Integer dom/rng ...)])))]))
+  
+  (require/typed/provide (submod "..")
+                         [#:struct chtype ([char : Char]
+                                           [cterm : CTerm]
+                                           [ctermfg.bg : Byte])]
+                         [acs_map (-> Symbol [#:extra-attrs RBitmask] ChType)]
+                         [:prefabwin (-> Symbol Window*)])
+  
+  (require/typed/provide (submod "..")
+                         [ripoffline (-> Integer Ripoffline-Init Void)]
+                         [initscr (-> Window*/Null)]
+                         [beep (-> OK/ERR)]
+                         [flash (-> OK/ERR)]
+                         [raw (-> OK/ERR)]
+                         [cbreak (-> OK/ERR)]
+                         [noecho (-> OK/ERR)]
+                         [start_color (-> OK/ERR)]
+                         [flushinp (-> True)]
+                         [qiflush (-> OK/ERR)]
+                         [intrflush (Boolean -> OK/ERR)]
+                         [keypad (Boolean -> OK/ERR)]
+                         [idlok (Window* Boolean -> OK/ERR)]
+                         [idcok (Window* Boolean -> OK/ERR)]
+                         [scrollok (Window* Boolean -> OK/ERR)]
+                         [clearok (Window* Boolean -> OK/ERR)]
+                         [delwin (Window* -> Void)] ;;;  weird, it should return OK/ERR
+                         [endwin (-> OK/ERR)]
+                         [newpad (Positive-Integer Positive-Integer -> Window*/Null)]
+                         [newwin (Nonnegative-Integer Nonnegative-Integer Nonnegative-Integer Nonnegative-Integer -> Window*/Null)]
+                         [mvwin (Window* Nonnegative-Integer Nonnegative-Integer -> OK/ERR)]
+                         [getcury (Window* -> Nonnegative-Integer)]
+                         [getcurx (Window* -> Nonnegative-Integer)]
+                         [getbegy (Window* -> Nonnegative-Integer)]
+                         [getbegx (Window* -> Nonnegative-Integer)]
+                         [getmaxy (Window* -> Positive-Integer)]
+                         [getmaxx (Window* -> Positive-Integer)]
+                         [putwin (Path-String -> OK/ERR)]
+                         [getwin (Path-String -> OK/ERR)]
+                         [overlay (Window* Window* -> OK/ERR)]
+                         [overwrite (Window* Window* -> OK/ERR)]
+                         [wresize (Window* Positive-Integer Positive-Integer -> OK/ERR)]
+                         [wnoutrefresh (Window* -> OK/ERR)]
+                         [doupdate (-> OK/ERR)]
+                         [has_colors (-> Boolean)]
+                         [use_default_colors (-> OK/ERR)]
+                         [assume_default_colors (Color256 Color256 -> OK/ERR)]
+                         [init_pair (Color-Pair Color256 Color256 -> OK/ERR)]
+                         [pair_content (Color-Pair -> (Option (Pairof Color256 Color256)))]
+                         [init_color (Color256 RGB/Component RGB/Component RGB/Component -> OK/ERR)]
+                         [color_content (Color256 -> (Option (List RGB/Component RGB/Component RGB/Component)))]
+                         [can_change_color (-> False)]
+                         [curs_set (Integer -> Integer)]
+                         [def_prog_mode (-> True)]
+                         [reset_prog_mode (-> True)]
+                         [def_shell_mode (-> True)]
+                         [reset_shell_mode (-> True)]
+                         [scr_dump (Path-String -> OK/ERR)]
+                         [scr_restore (Path-String -> OK/ERR)]
+                         [scr_init (Path-String -> OK/ERR)]
+                         [scr_set (Path-String -> OK/ERR)])
+
+  (require/typed/provide (submod "..")
+                         [copywin (-> Window* Window* Nonnegative-Integer Nonnegative-Integer
+                                      Nonnegative-Integer Nonnegative-Integer Nonnegative-Integer Nonnegative-Integer Boolean OK/ERR)]
+                         [prefresh (-> Window* Nonnegative-Integer Nonnegative-Integer
+                                       Nonnegative-Integer Nonnegative-Integer Nonnegative-Integer Nonnegative-Integer OK/ERR)]
+                         [pnoutrefresh (-> Window* Nonnegative-Integer Nonnegative-Integer
+                                           Nonnegative-Integer Nonnegative-Integer Nonnegative-Integer Nonnegative-Integer OK/ERR)])
+
+  (require/typed/provide (submod "..")
+                         [del_panel (Panel* -> OK/ERR)]
+                         [new_panel (Window* -> Panel*)]
+                         [update_panels (-> Void)]
+                         [top_panel (Panel* -> OK/ERR)]
+                         [bottom_panel (Panel* -> OK/ERR)]
+                         [show_panel (Panel* -> OK/ERR)]
+                         [hide_panel (Panel* -> OK/ERR)]
+                         [panel_hidden (Panel* -> Boolean)]
+                         [move_panel (Panel* Nonnegative-Integer Nonnegative-Integer -> OK/ERR)]
+                         [panel_above (Panel* -> Panel*)]
+                         [panel_below (Panel* -> Panel*)]
+                         [set_panel_userptr (Panel* Any -> OK/ERR)]
+                         [panel_userptr (Panel* -> Any)]
+                         [panel_window (Panel* -> Window*)]
+                         [replace_panel (Panel* Window* -> Window*)])
+  
+  (require/typed/provide (submod "..")
+                         [:colorscheme! (-> Path-String [#:exn-handler (-> exn Any)] Void)])
+
+  (define-type-ncurses-winapi border (-> OK/ERR))
+  (define-type-ncurses-winapi timeout (Integer -> OK/ERR))
+  (define-type-ncurses-winapi clear (-> OK/ERR))
+  (define-type-ncurses-winapi clrtobot (-> OK/ERR))
+  (define-type-ncurses-winapi clrtoeol (-> OK/ERR))
+  (define-type-ncurses-winapi insdelln (Integer -> OK/ERR))
+  (define-type-ncurses-winapi deleteln (-> OK/ERR))
+  (define-type-ncurses-winapi insertln (-> OK/ERR))
+  (define-type-ncurses-winapi move (Nonnegative-Integer Nonnegative-Integer -> OK/ERR))
+  (define-type-ncurses-winapi scrl (Integer -> OK/ERR))
+  (define-type-ncurses-winapi refresh (-> OK/ERR))
+  (define-type-ncurses-winapi setscrreg (Nonnegative-Integer Nonnegative-Integer -> OK/ERR))
+  (define-type-ncurses-winapi bkgd (CharType -> Void))
+  (define-type-ncurses-winapi bkgdset (CharType -> Void))
+  (define-type-ncurses-winapi attron (CharType -> OK/ERR))
+  (define-type-ncurses-winapi attrset (CharType -> OK/ERR))
+  (define-type-ncurses-winapi attroff (CharType -> OK/ERR))
+  (define-type-ncurses-winapi standout (-> OK/ERR))
+  (define-type-ncurses-winapi standend (-> OK/ERR))
+  (define-type-ncurses-winapi attr_on (CharType -> OK/ERR))
+  (define-type-ncurses-winapi attr_set (CharType Color-Pair -> OK/ERR))
+  (define-type-ncurses-winapi attr_get (-> (values ChType Color-Pair)))
+  (define-type-ncurses-winapi attr_off (CharType -> OK/ERR))
+  (define-type-ncurses-winapi color_set (Color-Pair -> OK/ERR))
+
+  (define-type-ncurses-winapi/mv vline (Nonnegative-Integer -> OK/ERR))
+  (define-type-ncurses-winapi/mv hline (Nonnegative-Integer -> OK/ERR))
+  (define-type-ncurses-winapi/mv getch (-> KeyCode))
+  (define-type-ncurses-winapi/mv inch (-> ChType))
+  (define-type-ncurses-winapi/mv insch (-> OK/ERR))
+  (define-type-ncurses-winapi/mv delch (-> OK/ERR))
+  (define-type-ncurses-winapi/mv addch (ChType -> OK/ERR))
+  (define-type-ncurses-winapi/mv addstr (String -> OK/ERR))
+  (define-type-ncurses-winapi/mv addwstr (String -> OK/ERR))
+  (define-type-ncurses-winapi/mv chgat (Nonnegative-Integer CharType Color-Pair -> OK/ERR)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(module* main typed/racket
+  (require "digicore.rkt")
+  (require (submod ".." typed/ffi))
+
+  (require/typed racket
+                 [#:opaque Plumber plumber?]
+                 [#:opaque Plumber-Flush-Handle plumber-flush-handle?]
+                 [current-plumber (Parameterof Plumber)]
+                 [plumber-add-flush! (-> Plumber (-> Plumber-Flush-Handle Any) Plumber-Flush-Handle)]
+                 [plumber-flush-handle-remove! (-> Plumber-Flush-Handle Void)]
+                 [srcloc->string (-> srcloc String)])
+  
+  (require/typed (submod ".." digitama)
+                 [:highlight (HashTable Symbol ChType)])
+  
+  (ripoffline +1 (list (lambda [titlebar cols] (waddwstr titlebar (~a "> racket digitama/termctl.rkt" #:width cols))) 'reverse))
+  (ripoffline -1 'statusbar)
+  (void (initscr)
+        (plumber-add-flush! (current-plumber)
+                            (lambda [this] (plumber-flush-handle-remove! this) (endwin))))
+  
+  (define uncaught-exn : (-> exn KeyCode)
+    (lambda [errobj]
+      (define messages ((inst call-with-input-string (Listof String)) (exn-message errobj) port->lines))
+      (clear)
+      (addstr (format "»» name: ~a~n" (object-name errobj)))
+      (unless (null? messages)
+        (define msghead " message: ")
+        (define msgspace (~a #:min-width (max 0 (sub1 (string-length msghead)))))
+        (addstr (format "»»~a~a~n" msghead (car messages)))
+        (for-each (lambda [msg] (addstr (format "»»»~a~a~n" msgspace msg))) (cdr messages)))
+      (for ([stack (in-list (continuation-mark-set->context (exn-continuation-marks errobj)))])
+        (when (srcloc? (cdr stack))
+          (define srcinfo (srcloc->string (cdr stack)))
+          (unless (or (false? srcinfo) (regexp-match? #px"^/" srcinfo))
+            (addstr (format "»»»» ~a: ~a~n" srcinfo (or (car stack) 'λ))))))
+      (refresh)
+      (getch)))
   
   (with-handlers ([exn:fail? (compose1 void uncaught-exn)])
-    (unless (and (stdscr) (statusbar) (has_colors) (start_color) (use_default_colors) (curs_set 0)
+    (unless (and (has_colors) (start_color) (use_default_colors) (curs_set 0)
                  (raw) (noecho) (timeout -1) (keypad #true))
       (error "A thunk of initializing failed!")))
 
-  (define :hitest
+  (define :hitest : (-> Path-String String KeyCode)
     (lambda [colors.vim hints]
       (with-handlers ([exn:fail? uncaught-exn])
         (:colorscheme! colors.vim #:exn-handler uncaught-exn)
         (define-values [units fields] (values (+ 24 (apply max 0 (map (compose1 string-length symbol->string) (hash-keys :highlight)))) 3))
         (define-values [cols rows] (values (* fields units) (max (ceiling (/ (hash-count :highlight) fields)) 1)))
+        (define stdscr (:prefabwin 'stdscr))
+        (define statusbar (:prefabwin 'statusbar))
         (define stdclr (newwin 0 0 0 0)) ; full screen window
         (define padclr (newpad rows cols))
-        (when (false? padclr) (error "Unable to create color area!"))
+        
+        (when (or (false? stdclr) (false? padclr)) (error "Unable to create color area!"))
         (for ([name (in-list (sort (hash-keys :highlight) symbol<?))])
           (wattrset padclr name)
           (define-values [attr colorpair] (wattr_get padclr))
           (waddstr padclr (~a name (pair_content colorpair) #:width units)))
         (wstandend padclr)
     
-        (let demostrate ()
-          (define-values [maxy mby y] (let ([maxy (getmaxy (stdscr))]) (values maxy (min maxy (+ rows 2)) (max (quotient (- maxy rows 2) 2) 0))))
-          (define-values [maxx mbx x] (let ([maxx (getmaxx (stdscr))]) (values maxx (min maxx (+ cols 2)) (max (quotient (- maxx cols 2) 2) 0))))
+        (let demostrate : KeyCode ()
+          (define-values [maxy mby y] (let ([maxy (getmaxy stdscr)]) (values maxy (min maxy (+ rows 2)) (max (quotient (- maxy rows 2) 2) 0))))
+          (define-values [maxx mbx x] (let ([maxx (getmaxx stdscr)]) (values maxx (min maxx (+ cols 2)) (max (quotient (- maxx cols 2) 2) 0))))
           (define-values [title title-offset] (values (format " ~a " (file-name-from-path colors.vim)) 2))
           (wresize stdclr mby mbx)
           (mvwin stdclr y x)
           (when (false? padclr) (error "Unable to create color area border!"))
-          (for-each wclear (list (stdscr) (statusbar)))
+          (for-each wclear (list stdscr statusbar))
           (wattrset stdclr 'VertSplit)
           (wborder stdclr)
           (unless (< mbx (+ title-offset (string-length title) 2))
@@ -385,9 +580,9 @@
             (mvwaddch stdclr 0 (+ title-offset (string-length title) 1) (acs_map 'LTEE))
             (wattrset stdclr 'TabLineFill)
             (mvwaddstr stdclr 0 (add1 title-offset) title))
-          (wattrset (statusbar) 'StatusLine)
-          (mvwaddstr (statusbar) 0 0 (~a hints #:width maxx))
-          (for-each wnoutrefresh (list (stdscr) stdclr (statusbar)))
+          (wattrset statusbar 'StatusLine)
+          (mvwaddstr statusbar 0 0 (~a hints #:width maxx))
+          (for-each wnoutrefresh (list stdscr stdclr statusbar))
           (pnoutrefresh padclr 0 0 (add1 y) (add1 x) (min (+ rows y 1) (sub1 maxy)) (min (+ cols x 1) (sub1 maxx)))
           (doupdate)
 
@@ -404,7 +599,7 @@
                 [(#\J #\j) (:colorscheme (min (add1 index) (sub1 (vector-length colors))))]
                 [(#\K #\k) (:colorscheme (max (sub1 index) 0))]))]))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module digitama racket
   (provide (all-defined-out))
 
@@ -412,6 +607,7 @@
   (define normal-ctermfg (box 'none))
   (define normal-ctermbg (box 'none))
   (define :highlight (make-hasheq))
+  (define :prefabwindows (make-hasheq))
   (define make-defchtype (thunk (chtype #\nul null 0))))
 
 (require (submod "." digitama))

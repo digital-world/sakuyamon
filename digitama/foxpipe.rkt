@@ -2,6 +2,7 @@
 
 (provide (all-defined-out))
 
+@require{digicore.rkt}
 @require{posix.rkt}
 
 (define raise-foxpipe-error
@@ -13,38 +14,35 @@
 
 (define _foxpipe_session* (_cpointer/null 'foxpipe_session))
 
-(define _hashtype
-  (_enum (list 'LIBSSH2_HOSTKEY_HASH_MD5  '= 1
-               'LIBSSH2_HOSTKEY_HASH_SHA1 '= 2)))
-
-(define _disconnect_reason
-  (_enum (list 'SSH_DISCONNECT_HOST_NOT_ALLOWED_TO_CONNECT    '= 1
-               'SSH_DISCONNECT_PROTOCOL_ERROR                 '= 2
-               'SSH_DISCONNECT_KEY_EXCHANGE_FAILED            '= 3
-               'SSH_DISCONNECT_RESERVED                       '= 4
-               'SSH_DISCONNECT_MAC_ERROR                      '= 5
-               'SSH_DISCONNECT_COMPRESSION_ERROR              '= 6
-               'SSH_DISCONNECT_SERVICE_NOT_AVAILABLE          '= 7
-               'SSH_DISCONNECT_PROTOCOL_VERSION_NOT_SUPPORTED '= 8
-               'SSH_DISCONNECT_HOST_KEY_NOT_VERIFIABLE        '= 9
-               'SSH_DISCONNECT_CONNECTION_LOST                '= 10
-               'SSH_DISCONNECT_BY_APPLICATION                 '= 11
-               'SSH_DISCONNECT_TOO_MANY_CONNECTIONS           '= 12
-               'SSH_DISCONNECT_AUTH_CANCELLED_BY_USER         '= 13
-               'SSH_DISCONNECT_NO_MORE_AUTH_METHODS_AVAILABLE '= 14
-               'SSH_DISCONNECT_ILLEGAL_USER_NAME              '= 15)))
-
 (define-ssh libssh2_init
-  ;;; this function will be invoked by libssh2_session_init if needed.
-  (_fun [flags : _int = 0] ; 0 means init with crypto.
+  (_fun #:in-original-place? #true
+        [flags : _int = 0] ; 0 means init with crypto.
         -> _int))
 
 (define-ssh libssh2_exit
-  (_fun -> _void))
+  (_fun #:in-original-place? #true
+        -> _void))
 
 (define-ffi-definer define-foxpipe
   (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
                        "native" (system-library-subpath #false) "foxpipe")))
+
+(define _hashtype (c-extern/enum (list 'HOSTKEY_HASH_MD5 'HOSTKEY_HASH_SHA1)))
+(define _disconnect_reason (c-extern/enum (list 'DISCONNECT_HOST_NOT_ALLOWED_TO_CONNECT
+                                                'DISCONNECT_PROTOCOL_ERROR
+                                                'DISCONNECT_KEY_EXCHANGE_FAILED
+                                                'DISCONNECT_RESERVED
+                                                'DISCONNECT_MAC_ERROR
+                                                'DISCONNECT_COMPRESSION_ERROR
+                                                'DISCONNECT_SERVICE_NOT_AVAILABLE
+                                                'DISCONNECT_PROTOCOL_VERSION_NOT_SUPPORTED
+                                                'DISCONNECT_HOST_KEY_NOT_VERIFIABLE
+                                                'DISCONNECT_CONNECTION_LOST
+                                                'DISCONNECT_BY_APPLICATION
+                                                'DISCONNECT_TOO_MANY_CONNECTIONS
+                                                'DISCONNECT_AUTH_CANCELLED_BY_USER
+                                                'DISCONNECT_NO_MORE_AUTH_METHODS_AVAILABLE
+                                                'DISCONNECT_ILLEGAL_USER_NAME)))
 
 (define-foxpipe foxpipe_last_errno
   (_fun [session : _foxpipe_session*]
@@ -58,11 +56,21 @@
         -> errmsg)
   #:c-id foxpipe_last_error)
 
+(define-foxpipe foxpipe_collapse
+  (_fun [session : _foxpipe_session*]
+        [reason : _disconnect_reason = 'disconnect_by_application]
+        [description : _string]
+        -> [$? : _int]
+        -> (cond [(zero? $?) $?]
+                 [else (raise-foxpipe-error 'foxpipe_collapse session)]))
+  #:wrap (deallocator))
+
 (define-foxpipe foxpipe_construct
   (_fun [tcp-connect : _racket = tcp-connect/enable-break]
         [sshd_host : _racket]
         [sshd_port : _racket]
-        -> [session : _foxpipe_session*]))
+        -> [session : _foxpipe_session*])
+  #:wrap (allocator foxpipe_collapse))
 
 (define-foxpipe foxpipe_handshake
   (_fun [session : _foxpipe_session*]
@@ -80,14 +88,6 @@
         -> (cond [(zero? $?) $?]
                  [else (raise-foxpipe-error 'foxpipe_authenticate session)])))
 
-(define-foxpipe foxpipe_collapse
-  (_fun [session : _foxpipe_session*]
-        [reason : _disconnect_reason = 'SSH_DISCONNECT_BY_APPLICATION]
-        [description : _string]
-        -> [$? : _int]
-        -> (cond [(zero? $?) $?]
-                 [else (raise-foxpipe-error 'foxpipe_collapse session)])))
-
 (define-foxpipe foxpipe_direct_channel
   (_fun [session : _foxpipe_session*]
         [host-seen-by-sshd : _string]
@@ -97,3 +97,26 @@
         -> [$? : _int]
         -> (cond [(negative? $?) (raise-foxpipe-error 'foxpipe_direct_channel session)]
                  [else (values /dev/sshin /dev/sshout)])))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(module* typed/ffi typed/racket
+  (provide (all-defined-out))
+  
+  (require (submod "posix.rkt" typed/ffi))
+  
+  (require/typed/provide (submod "..")
+                         [_foxpipe_session* CType]
+                         [libssh2_init (-> Integer)]
+                         [libssh2_exit (-> Void)])
+
+  (define-type Foxpipe-Session* CPointer)
+  (define-type Foxpipe-Session*/Null (Option CPointer))
+
+  (require/typed/provide (submod "..")
+                         [foxpipe_last_errno (-> Foxpipe-Session* Integer)]
+                         [foxpipe_last_errmsg (-> Foxpipe-Session* String)]
+                         [foxpipe_construct (-> String Integer Foxpipe-Session*/Null)]
+                         [foxpipe_handshake (-> Foxpipe-Session* Symbol Bytes)]
+                         [foxpipe_authenticate (-> Foxpipe-Session* String Path-String Path-String String Integer)]
+                         [foxpipe_collapse (-> Foxpipe-Session* String Integer)]
+                         [foxpipe_direct_channel (-> Foxpipe-Session* String Index (Values Input-Port Output-Port))]))
