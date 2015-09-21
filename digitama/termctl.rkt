@@ -15,8 +15,8 @@
 (define OK (c-extern 'OKAY _int))
 (define ERR (c-extern 'ERROR _int))
 
-(define _window* (_cpointer/null 'WINDOW*))
-(define _panel* (_cpointer/null 'PANEL*))
+(define-cpointer-type _window*)
+(define-cpointer-type _panel*)
 (define _ok/err (make-ctype _int #false (lambda [c] (not (eq? c ERR)))))
 
 (define _chtype ; you may work with vim highlight groups when FFIing to C
@@ -105,7 +105,7 @@
         -> _ok/err ; always #true
         -> (void) #| Racket should not output this value |#))
 
-(define-ncurses initscr (_fun -> [curwin : _window*] -> (and (hash-set! :prefabwindows 'stdscr curwin) curwin)))
+(define-ncurses initscr (_fun -> [curwin : _window*/null] -> (and (hash-set! :prefabwindows 'stdscr curwin) curwin)))
 (define-ncurses beep (_fun -> _ok/err))
 (define-ncurses flash (_fun -> _ok/err))
 (define-ncurses raw (_fun -> _ok/err)) ; this one is better than (cbreak), it stops all user signals.
@@ -114,7 +114,7 @@
 (define-ncurses start_color (_fun -> _ok/err))
 (define-ncurses flushinp (_fun -> _ok/err -> #true))
 (define-ncurses qiflush (_fun -> _ok/err)) ; Break, SIGINT, SIGQUIT
-(define-ncurses intrflush (_fun [null : _window* = #false] _bool -> _ok/err)) ; SIGINT, SIGQUIT, SIGTSTP
+(define-ncurses intrflush (_fun [null : _window*/null = #false] _bool -> _ok/err)) ; SIGINT, SIGQUIT, SIGTSTP
 (define-ncurses keypad (_fun [stdwin : _window* = (:prefabwin 'stdscr)] _bool -> _ok/err))
 (define-ncurses idlok (_fun _window* _bool -> _ok/err))
 (define-ncurses idcok (_fun _window* _bool -> _ok/err))
@@ -135,9 +135,9 @@
 ;;;  scrolling is unavaliable (as well as pads);                                  ;;;
 ;;;  its size cannot be changed manually.                                         ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-ncurses newpad (_fun [nrows : _int] [ncols : _int] -> _window*) #:wrap (allocator delwin))
+(define-ncurses newpad (_fun [nrows : _int] [ncols : _int] -> _window*/null) #:wrap (allocator delwin))
 (define-ncurses newwin (_fun [nrows : _int] [ncols : _int] [y : _int] [x : _int]
-                             -> [stdwin : _window*]
+                             -> [stdwin : _window*/null]
                              -> (and stdwin (wbkgdset stdwin (make-defchtype)) stdwin)) #:wrap (allocator delwin))
 
 (define-ncurses-winapi border (_fun ; please use (wattr_on) and friends to highlight border lines.
@@ -254,7 +254,7 @@
 
 ;;; Panels
 (define-panel del_panel (_fun _panel* -> _ok/err) #:wrap (deallocator))
-(define-panel new_panel (_fun _window* -> _panel*) #:wrap (allocator del_panel))
+(define-panel new_panel (_fun _window* -> _panel*/null) #:wrap (allocator del_panel))
 (define-panel update_panels (_fun -> _void)) ; followed by (doupdate).
 (define-panel top_panel (_fun _panel* -> _ok/err))
 (define-panel bottom_panel (_fun _panel* -> _ok/err))
@@ -328,29 +328,25 @@
                          [else (void (init_pair ipair (vector-ref hl 2) (vector-ref hl 3))
                                      (hash-set! :highlight groupname (chtype #\nul (vector-ref hl 1) (vector-ref hl 0))))]))))))))
 
-(define-cpointer-type _animal)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module* typed/ffi typed/racket
   (provide (all-defined-out))
 
   (require (submod "posix.rkt" typed/ffi))
   (require (for-syntax racket/syntax))
-  
-  (define-type Window* CPointer)
-  (define-type Window*/Null (Option CPointer))
-  
-  (define-type Panel* CPointer)
-  (define-type Panel*/Null (Option CPointer))
 
-  (define-type CTerm CBitmask)
+  (require/typed/provide/pointers Window* Panel*)
+  (require/typed/provide/ctypes _chtype _color-pair _color256 _rgb/component _keycode)
+
+  (define-type CTerm (Listof Symbol))
   (define-type ChType chtype)
-  (define-type CharType (U ChType Char (Pairof Byte RBitmask) RBitmask Symbol))
+  (define-type CharType (U ChType Char (Pairof Byte CTerm) CTerm Symbol))
   (define-type Color-Pair (U Byte Symbol))
   (define-type Color256 (U Byte Symbol))
   (define-type RGB/Component Byte)
   (define-type KeyCode (U False Symbol Char))
   (define-type Ripoffline-StdInit (Window* Positive-Integer -> Any))
-  (define-type Ripoffline-Init (U Symbol (Parameterof Window*/Null) Ripoffline-StdInit (Pairof Ripoffline-StdInit RBitmask)))
+  (define-type Ripoffline-Init (U Symbol (Parameterof Window*/Null) Ripoffline-StdInit (Pairof Ripoffline-StdInit CTerm)))
 
   (define-syntax (define-type-ncurses-winapi stx)
     (syntax-case stx [->]
@@ -373,12 +369,12 @@
                   (require/typed/provide (submod "..")
                                          [mvid (-> Natural Natural dom/rng ...)]
                                          [mvwid (-> Window* Natural Natural dom/rng ...)])))]))
-  
+
   (require/typed/provide (submod "..")
                          [#:struct chtype ([char : Char]
                                            [cterm : CTerm]
                                            [ctermfg.bg : Byte])]
-                         [:altchar (-> Symbol [#:extra-attrs RBitmask] ChType)]
+                         [:altchar (-> Symbol [#:extra-attrs CTerm] ChType)]
                          [:prefabwin (-> Symbol Window*)])
   
   (require/typed/provide (submod "..")
@@ -544,7 +540,9 @@
         (define stdclr (newwin 0 0 0 0)) ; full screen window
         (define padclr (newpad rows cols))
         
-        (when (or (false? stdclr) (false? padclr)) (error "Unable to create color area!"))
+        (unless (and (window*? stdclr) (window*? padclr))
+          (error "Unable to create color area!"))
+        
         (for ([name (in-list (sort (hash-keys :highlight) symbol<?))])
           (wattrset padclr name)
           (define-values [attr colorpair] (wattr_get padclr))
