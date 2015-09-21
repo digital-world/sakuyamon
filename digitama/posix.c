@@ -3,15 +3,7 @@
 #define _POSIX_C_SOURCE 199506L
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
 #include <syslog.h>
-#include <stdarg.h>
-#include <pwd.h>
-#include <grp.h>
 
 /* Quote Headers */
 

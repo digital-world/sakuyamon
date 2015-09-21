@@ -1,15 +1,12 @@
 #lang at-exp racket/base
 
 ;;; To force makefile.rkt counting the required file
-@require{digicore.rkt}
 @require{../../DigiGnome/digitama/posix.rkt}
 
 (provide (all-defined-out))
 (provide (all-from-out "../../DigiGnome/digitama/posix.rkt"))
 
-(define-ffi-definer define-digitama
-  (ffi-lib (build-path (digimon-digitama) (car (use-compiled-file-paths))
-                       "native" (system-library-subpath #false) "posix")))
+(define-ffi-definer define-digitama (digimon-ffi-lib "posix" #:global? #true))
 
 ;;; syslog
 (define-digitama rsyslog
@@ -28,7 +25,7 @@
         -> (cond [($? . >= . 0) sysloadavg]
                  [else (raise-foreign-error 'getloadavg (saved-errno))])))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module* typed/ffi typed/racket
   (provide (all-defined-out))
   (provide (all-from-out (submod "../../DigiGnome/digitama/posix.rkt" typed/ffi)))
@@ -40,7 +37,7 @@
                          [rsyslog (-> Symbol Symbol String Void)]
                          [getloadavg (-> Array)]))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module* main typed/racket
   (require (submod ".." typed/ffi))
 
