@@ -120,7 +120,7 @@
 (define-ncurses idcok (_fun _window* _bool -> _ok/err))
 (define-ncurses scrollok (_fun _window* _bool -> _ok/err))
 (define-ncurses clearok (_fun _window* _bool -> _ok/err))
-(define-ncurses delwin (_fun _window* -> _ok/err) #:wrap (deallocator))
+(define-ncurses delwin (_fun _window* -> _ok/err) #:wrap (deallocator))  ;;; deallocator always return void
 (define-ncurses endwin (_fun -> _ok/err))
 
 ;;; Windows/Pads and Input/Output functions
@@ -394,7 +394,7 @@
                          [idcok (Window* Boolean -> Boolean)]
                          [scrollok (Window* Boolean -> Boolean)]
                          [clearok (Window* Boolean -> Boolean)]
-                         [delwin (Window* -> Void)] ;;;  weird, it should return Boolean
+                         [delwin (Window* -> Void)]
                          [endwin (-> Boolean)]
                          [newpad (Positive-Integer Positive-Integer -> Window*/Null)]
                          [newwin (Natural Natural Natural Natural -> Window*/Null)]
