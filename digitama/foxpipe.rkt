@@ -14,12 +14,6 @@
 
 (define-cpointer-type _foxpipe-session*)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Note that, if the c source code is translated by `xform` or `MZ_GC_DECL_REG` to work with the 3m GC, then it may not be ;;;
-;;; able to run at non-main place in which case the Racket VM will exit due to SIGABRT. That's why all the APIs are defined ;;;
-;;; with `#:in-original-place? #true` here.                                                                                 ;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 (define-ssh libssh2_init
   (_fun #:in-original-place? #true
         [flags : _int = 0] ; 0 means init with crypto.
@@ -60,6 +54,11 @@
         -> errmsg)
   #:c-id foxpipe_last_error)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Note that, the allocator and deallocator will be called in atomic mode which should be respect to the main place.       ;;;
+;;; This also result in other APIs having to be marked with #:in-original-place? #true                                      ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (define-foxpipe foxpipe_collapse
   (_fun #:in-original-place? #true
         [session : _foxpipe-session*]
@@ -68,7 +67,7 @@
         -> [$? : _int]
         -> (cond [(zero? $?) $?]
                  [else (raise-foxpipe-error 'foxpipe_collapse session)]))
-  #:wrap (deallocator))
+  #:wrap (deallocator)) ;;; deallocator always return void
 
 (define-foxpipe foxpipe_construct
   (_fun #:in-original-place? #true
@@ -125,7 +124,7 @@
                          [foxpipe_construct (-> String Integer Foxpipe-Session*/Null)]
                          [foxpipe_handshake (-> Foxpipe-Session* Symbol Bytes)]
                          [foxpipe_authenticate (-> Foxpipe-Session* String Path-String Path-String String Integer)]
-                         [foxpipe_collapse (-> Foxpipe-Session* String Integer)]
+                         [foxpipe_collapse (-> Foxpipe-Session* String Void)]
                          [foxpipe_direct_channel (-> Foxpipe-Session* String Index (Values Input-Port Output-Port))]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -147,7 +146,7 @@
     (lambda [izunac]
       (with-handlers ([exn:break? void])
         (define/extract-symtable (place-channel-get izunac)
-          [sshd-host : String = "gyoudmon.org"]
+          [sshd-host : String = "localhost"]
           [host-seen-by-sshd : String = "localhost"]
           [service-seen-by-sshd : Index = 514]
           [plaintransport? : Boolean = #false]
@@ -176,24 +175,19 @@
               (match-define-values ((list session) cputime wallclock gctime)
                 ((inst time-apply Foxpipe-Session*/Null Any)
                  (thunk (collect-garbage)
-                        (when (false? plaintransport?)
-                          (place-channel-put izunac (list sshd-host 'notify "constructing ssh channel"))
-                          (define session : Foxpipe-Session*/Null (foxpipe_construct sshd-host 22))
-                          (when (foxpipe-session*? session)
-                            (ssh-session session)
-                            (define figureprint : String (bytes->hex-string (foxpipe_handshake session 'hostkey_hash_sha1)))
-                            (place-channel-put izunac (cons sshd-host (regexp-match* #px".." (string-upcase figureprint))))
-                            (foxpipe_authenticate session username rsa.pub id_rsa passphrase)))
+                        (place-channel-put izunac (list sshd-host 'notify "constructing ssh channel"))
+                        (define session : Foxpipe-Session*/Null (foxpipe_construct sshd-host 22))
+                        (when (foxpipe-session*? session)
+                          (ssh-session session)
+                          (define figureprint : String (bytes->hex-string (foxpipe_handshake session 'hostkey_hash_sha1)))
+                          (place-channel-put izunac (cons sshd-host (regexp-match* #px".." (string-upcase figureprint))))
+                          (foxpipe_authenticate session username rsa.pub id_rsa passphrase))
                         (ssh-session))
                  null))
               (parameterize ([current-custodian (the-one-manages-foxpipe-or-plaintcp-io)])
                 (define maxinterval : Positive-Real (+ (sakuyamon-foxpipe-idle) (/ (+ cputime gctime) 1000.0)))
                 (define-values (/dev/tcpin /dev/tcpout)
-                  (cond [(foxpipe-session*? session) (foxpipe_direct_channel session host-seen-by-sshd service-seen-by-sshd)]
-                        [else (let-values ([(whocares) (place-channel-put izunac (list sshd-host 'notify "connecting"))]
-                                           [(in out) (tcp-connect/enable-break sshd-host service-seen-by-sshd)])
-                                (place-channel-put izunac (cons sshd-host (make-list 20 "00")))
-                                (values in out))]))
+                  (foxpipe_direct_channel (cast session Foxpipe-Session*) host-seen-by-sshd service-seen-by-sshd))
                 (let recv-match-send-loop : Void ()
                   (match (sync/timeout/enable-break maxinterval /dev/tcpin)
                     [(? false?) (let ([reason (place-channel-put/get izunac (cons sshd-host maxinterval))])
