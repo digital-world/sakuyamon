@@ -43,7 +43,7 @@ typedef struct foxpipe_session {
     Scheme_Output_Port *dev_tcpout;
 } foxpipe_session_t;
 
-static size_t FOXPIPE_CHANNEL_READ_BUFFER_SIZE = LIBSSH2_PACKET_MAXCOMP;
+static size_t FOXPIPE_CHANNEL_READ_BUFFER_SIZE = 2048;
 typedef struct foxpipe_channel {
     foxpipe_session_t *session;
     LIBSSH2_CHANNEL *channel;
@@ -89,7 +89,9 @@ full_done:
     return 1;
 }
 
-static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t offset, intptr_t size, intptr_t nonblock, Scheme_Object *unless) {
+static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer,
+                                   intptr_t offset, intptr_t size,
+                                   intptr_t nonblock, Scheme_Object *unless) {
     foxpipe_channel_t *foxpipe;
     intptr_t read, rest, delta;
     char *src, *dest;
@@ -127,7 +129,7 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
      */
 
     foxpipe = (foxpipe_channel_t *)(in->port_data);
-    dest = buffer + offset; /* As deep in RVM here, the boundary is already checked. */
+    dest = buffer XFORM_TRUST_PLUS offset; /* As deep in RVM here, the boundary is already checked. */
     read = 0;
 
     if (scheme_unless_ready(unless)) {
@@ -153,7 +155,7 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer, intptr_t
         delta = (size <= rest) ? size : rest;
         memcpy(dest, src, delta);
         (*foxpipe->read_offset) += delta;
-        dest += delta;
+        dest = dest XFORM_TRUST_PLUS delta;
         read += delta;
         size -= delta;
     }
@@ -236,7 +238,9 @@ static void channel_in_close(Scheme_Input_Port *p) {
     channel_close_within_custodian(channel);
 }
 
-static intptr_t channel_write_bytes(Scheme_Output_Port *out, const char *buffer, intptr_t offset, intptr_t size, intptr_t rarely_block, intptr_t enable_break) {
+static intptr_t channel_write_bytes(Scheme_Output_Port *out, const char *buffer,
+                                    intptr_t offset, intptr_t size,
+                                    intptr_t rarely_block, intptr_t enable_break) {
     LIBSSH2_SESSION *session;
     LIBSSH2_CHANNEL *channel;
     char *offed_buffer;
@@ -259,7 +263,7 @@ static intptr_t channel_write_bytes(Scheme_Output_Port *out, const char *buffer,
 
     session = ((foxpipe_channel_t *)(out->port_data))->session->sshclient;
     channel = ((foxpipe_channel_t *)(out->port_data))->channel;
-    offed_buffer = (char *)buffer + offset; /* As deep in RVM here, the boundary is already checked. */
+    offed_buffer = (char *)buffer XFORM_TRUST_PLUS offset; /* As deep in RVM here, the boundary is already checked. */
     sent = 0;
 
     /**
@@ -349,7 +353,7 @@ foxpipe_session_t *foxpipe_construct(Scheme_Object *tcp_connect, Scheme_Object *
         dev_tcpin = (Scheme_Input_Port *)scheme_current_thread->ku.multiple.array[0];
         dev_tcpout = (Scheme_Output_Port *)scheme_current_thread->ku.multiple.array[1];
 
-        /* The racket GC cannot work with libssh2 whose structures' shape is required. */
+        /* The racket GC cannot work with libssh2 whose structures' shape is unknown. */
         sshclient = libssh2_session_init();
 
         if (sshclient != NULL) {
@@ -424,9 +428,10 @@ intptr_t foxpipe_last_error(foxpipe_session_t *session, char **errmsg, intptr_t 
     return libssh2_session_last_error(session->sshclient, errmsg, (int *)size, 0);
 }
 
-intptr_t foxpipe_direct_channel(foxpipe_session_t *session, const char* host_seen_by_sshd, intptr_t service, Scheme_Object **dev_sshin, Scheme_Object **dev_sshout) {
+intptr_t foxpipe_direct_channel(foxpipe_session_t *session,
+                                const char* host_seen_by_sshd, intptr_t service,
+                                Scheme_Object **dev_sshin, Scheme_Object **dev_sshout) {
     LIBSSH2_CHANNEL *channel;
-    foxpipe_channel_t *object;
 
     libssh2_session_set_blocking(session->sshclient, 1);
     channel = libssh2_channel_direct_tcpip_ex(session->sshclient, host_seen_by_sshd, service, host_seen_by_sshd, 22);
@@ -434,39 +439,49 @@ intptr_t foxpipe_direct_channel(foxpipe_session_t *session, const char* host_see
 
     if (channel != NULL) {
         foxpipe_channel_t *object;
+        void *make_xform_happy_buffer, *make_xform_happy_offset, *make_xform_happy_total;
+        Scheme_Input_Port *make_xform_happy_sshin;
+        Scheme_Output_Port *make_xform_happy_sshout;
 
         object = (foxpipe_channel_t*)scheme_malloc(sizeof(foxpipe_channel_t));
+        make_xform_happy_buffer = scheme_malloc_atomic(sizeof(char) * FOXPIPE_CHANNEL_READ_BUFFER_SIZE);
+        make_xform_happy_offset = scheme_malloc_atomic(sizeof(size_t));
+        make_xform_happy_total = scheme_malloc_atomic(sizeof(size_t));
+
         object->session = session;
         object->channel = channel;
-        object->read_buffer = (char *)scheme_malloc_atomic(sizeof(char) * FOXPIPE_CHANNEL_READ_BUFFER_SIZE);
-        object->read_offset = (size_t *)scheme_malloc_atomic(sizeof(size_t));
-        object->read_total = (size_t *)scheme_malloc_atomic(sizeof(size_t));
+        object->read_buffer = (char *)make_xform_happy_buffer;
+        object->read_offset = (size_t *)make_xform_happy_offset;
+        object->read_total = (size_t *)make_xform_happy_total;
         (*object->read_offset) = 0;
         (*object->read_total) = 0;
 
-        (*dev_sshin) = (Scheme_Object *)scheme_make_input_port(scheme_make_port_type("<libssh2-channel-input-port>"),
-                                                                (void *)object, /* input port data object */
-                                                                scheme_intern_symbol("/dev/sshin"), /* (object-name) */
-                                                                channel_read_bytes, /* (read-bytes) */
-                                                                NULL, /* (peek-bytes): NULL means use the default */
-                                                                scheme_progress_evt_via_get, /* (port-progress-evt) */
-                                                                scheme_peeked_read_via_get, /* (port-commit-peeked) */
-                                                                (Scheme_In_Ready_Fun)channel_read_ready, /* (poll POLLIN) */
-                                                                channel_in_close, /* (close_output_port) */
-                                                                (Scheme_Need_Wakeup_Input_Fun)channel_read_need_wakeup,
-                                                                1 /* lifecycle is managed by custodian */);
+        make_xform_happy_sshin = scheme_make_input_port(scheme_make_port_type("<libssh2-channel-input-port>"),
+                                                        (void *)object, /* input port data object */
+                                                        scheme_intern_symbol("/dev/sshin"), /* (object-name) */
+                                                        channel_read_bytes, /* (read-bytes) */
+                                                        NULL, /* (peek-bytes): NULL means use the default */
+                                                        scheme_progress_evt_via_get, /* (port-progress-evt) */
+                                                        scheme_peeked_read_via_get, /* (port-commit-peeked) */
+                                                        (Scheme_In_Ready_Fun)channel_read_ready, /* (poll POLLIN) */
+                                                        channel_in_close, /* (close_output_port) */
+                                                        (Scheme_Need_Wakeup_Input_Fun)channel_read_need_wakeup,
+                                                        1 /* lifecycle is managed by custodian */);
 
-        (*dev_sshout) = (Scheme_Object *)scheme_make_output_port(scheme_make_port_type("<libssh2-channel-output-port>"),
-                                                                    (void *)object, /* output port data object */
-                                                                    scheme_intern_symbol("/dev/sshout"), /* (object-name) */
-                                                                    scheme_write_evt_via_write, /* (write-bytes-avail-evt) */
-                                                                    channel_write_bytes, /* (write-bytes) */
-                                                                    (Scheme_Out_Ready_Fun)channel_write_ready, /* (poll POLLOUT) */
-                                                                    channel_out_close, /* (close-output-port) */
-                                                                    (Scheme_Need_Wakeup_Output_Fun)channel_write_need_wakeup,
-                                                                    NULL, /* (write-special-evt) */
-                                                                    NULL, /* (write-special) */
-                                                                    1 /* lifecycle is managed by custodian */);
+        make_xform_happy_sshout = scheme_make_output_port(scheme_make_port_type("<libssh2-channel-output-port>"),
+                                                            (void *)object, /* output port data object */
+                                                            scheme_intern_symbol("/dev/sshout"), /* (object-name) */
+                                                            scheme_write_evt_via_write, /* (write-bytes-avail-evt) */
+                                                            channel_write_bytes, /* (write-bytes) */
+                                                            (Scheme_Out_Ready_Fun)channel_write_ready, /* (poll POLLOUT) */
+                                                            channel_out_close, /* (close-output-port) */
+                                                            (Scheme_Need_Wakeup_Output_Fun)channel_write_need_wakeup,
+                                                            NULL, /* (write-special-evt) */
+                                                            NULL, /* (write-special) */
+                                                            1 /* lifecycle is managed by custodian */);
+
+        (*dev_sshin) = (Scheme_Object *)make_xform_happy_sshin;
+        (*dev_sshout) = (Scheme_Object *)make_xform_happy_sshout;
     }
 
     return foxpipe_last_errno(session);
