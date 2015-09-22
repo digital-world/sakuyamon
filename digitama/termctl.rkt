@@ -9,14 +9,12 @@
 @require{posix.rkt}
 
 (define-ffi-definer define-ncurses (ffi-lib "libncurses" #:global? #true))
-(define-ffi-definer define-panel (ffi-lib "libpanel" #:global? #true))
 (define-ffi-definer define-termctl (digimon-ffi-lib "termctl" #:global? #true))
 
 (define OK (c-extern 'OKAY _int))
 (define ERR (c-extern 'ERROR _int))
 
 (define-cpointer-type _window*)
-(define-cpointer-type _panel*)
 (define _ok/err (make-ctype _int #false (lambda [c] (not (eq? c ERR)))))
 
 (define _chtype ; you may work with vim highlight groups when FFIing to C
@@ -252,23 +250,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses can_change_color (_fun -> _bool -> #false))
 
-;;; Panels
-(define-panel del_panel (_fun _panel* -> _ok/err) #:wrap (deallocator))
-(define-panel new_panel (_fun _window* -> _panel*/null) #:wrap (allocator del_panel))
-(define-panel update_panels (_fun -> _void)) ; followed by (doupdate).
-(define-panel top_panel (_fun _panel* -> _ok/err))
-(define-panel bottom_panel (_fun _panel* -> _ok/err))
-(define-panel show_panel (_fun _panel* -> _ok/err))
-(define-panel hide_panel (_fun _panel* -> _ok/err))
-(define-panel panel_hidden (_fun _panel* -> _bool))
-(define-panel move_panel (_fun _panel* _int _int -> _ok/err))
-(define-panel panel_above (_fun _panel* -> _panel*))
-(define-panel panel_below (_fun _panel* -> _panel*))
-(define-panel set_panel_userptr (_fun _panel* _racket -> _ok/err))
-(define-panel panel_userptr (_fun _panel* -> _racket))
-(define-panel panel_window (_fun _panel* -> _window*))
-(define-panel replace_panel (_fun _panel* _window* -> _window*))
-
 ;;; Miscellaneous
 (define-ncurses curs_set (_fun _int -> _int))
 (define-ncurses def_prog_mode (_fun -> _int -> #true))
@@ -335,7 +316,7 @@
   (require (submod "posix.rkt" typed/ffi))
   (require (for-syntax racket/syntax))
 
-  (require/typed/provide/pointers Window* Panel*)
+  (require/typed/provide/pointers Window*)
   (require/typed/provide/ctypes _chtype _color-pair _color256 _rgb/component _keycode)
 
   (define-type CTerm (Listof Symbol))
@@ -375,7 +356,8 @@
                                            [cterm : CTerm]
                                            [ctermfg.bg : Byte])]
                          [:altchar (-> Symbol [#:extra-attrs CTerm] ChType)]
-                         [:prefabwin (-> Symbol Window*)])
+                         [:prefabwin (-> Symbol Window*)]
+                         [:colorscheme! (-> Path-String [#:exn-handler (-> exn Any)] Void)])
   
   (require/typed/provide (submod "..")
                          [ripoffline (-> Integer Ripoffline-Init Void)]
@@ -432,26 +414,6 @@
                          [scr_restore (Path-String -> Boolean)]
                          [scr_init (Path-String -> Boolean)]
                          [scr_set (Path-String -> Boolean)])
-
-  (require/typed/provide (submod "..")
-                         [del_panel (Panel* -> Boolean)]
-                         [new_panel (Window* -> Panel*)]
-                         [update_panels (-> Void)]
-                         [top_panel (Panel* -> Boolean)]
-                         [bottom_panel (Panel* -> Boolean)]
-                         [show_panel (Panel* -> Boolean)]
-                         [hide_panel (Panel* -> Boolean)]
-                         [panel_hidden (Panel* -> Boolean)]
-                         [move_panel (Panel* Natural Natural -> Boolean)]
-                         [panel_above (Panel* -> Panel*)]
-                         [panel_below (Panel* -> Panel*)]
-                         [set_panel_userptr (Panel* Any -> Boolean)]
-                         [panel_userptr (Panel* -> Any)]
-                         [panel_window (Panel* -> Window*)]
-                         [replace_panel (Panel* Window* -> Window*)])
-  
-  (require/typed/provide (submod "..")
-                         [:colorscheme! (-> Path-String [#:exn-handler (-> exn Any)] Void)])
 
   (define-type-ncurses-winapi border (-> Boolean))
   (define-type-ncurses-winapi timeout (Integer -> Boolean))
