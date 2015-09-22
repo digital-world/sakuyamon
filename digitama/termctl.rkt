@@ -103,6 +103,10 @@
         -> _ok/err ; always #true
         -> (void) #| Racket should not output this value |#))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Note that, the allocator and deallocator will be called in atomic mode which  ;;;
+;;; should be respect to the main place.                                          ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses initscr (_fun -> [curwin : _window*/null] -> (and (hash-set! :prefabwindows 'stdscr curwin) curwin)))
 (define-ncurses beep (_fun -> _ok/err))
 (define-ncurses flash (_fun -> _ok/err))

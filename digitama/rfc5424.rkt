@@ -32,8 +32,6 @@
 
 (define string->syslog : (-> String Syslog)
   (lambda [log-text]
-    (define c->facility : CEnum-C->Racket (ctype-c->scheme _facility))
-    (define c->severity : CEnum-C->Racket (ctype-c->scheme _severity))
     (define template (pregexp (format "^<(~a)>\\s*(~a)\\s+(~a)\\s+(~a)(~a)?:?\\s*(~a)?\\s*(~a)?$"
                                       "\\d{1,3}" #| prival |#
                                       "[^:]+[^ ]+" #| timestamp |#
@@ -45,8 +43,8 @@
     (match (regexp-match template log-text)
       [(list _ (? string? prival) (? string? timestamp) (? string? hostname) (? string? appname) procid _ ffmsg)
        (let-values ([[facility severity] (quotient/remainder (cast (string->number prival) Integer) 8)])
-         (syslog5424 (c->facility (arithmetic-shift facility 3))
-                     (c->severity severity)
+         (syslog5424 (facility-c->racket (arithmetic-shift facility 3))
+                     (severity-c->racket severity)
                      timestamp
                      hostname
                      appname
