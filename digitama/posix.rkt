@@ -6,7 +6,7 @@
 (provide (except-out (all-defined-out) define-posix define-digitama))
 (provide (all-from-out "../../DigiGnome/digitama/posix.rkt"))
 
-(define-ffi-definer define-posix (ffi-lib "posix" #:global? #true))
+(define-ffi-definer define-posix (ffi-lib #false #:global? #true))
 (define-ffi-definer define-digitama (digimon-ffi-lib "posix" #:global? #true))
 
 ;;; syslog
