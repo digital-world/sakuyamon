@@ -1,6 +1,6 @@
 #lang at-exp racket
 
-(provide (except-out (all-defined-out) OK ERR))
+(provide (except-out (all-defined-out) OK ERR define-ncurses define-termctl))
 (provide (struct-out chtype))
 
 (require (for-syntax racket/syntax))

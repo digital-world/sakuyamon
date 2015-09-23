@@ -3,13 +3,14 @@
 ;;; To force makefile.rkt counting the required file
 @require{../../DigiGnome/digitama/posix.rkt}
 
-(provide (all-defined-out))
+(provide (except-out (all-defined-out) define-posix define-digitama))
 (provide (all-from-out "../../DigiGnome/digitama/posix.rkt"))
 
-(define-ffi-definer define-posix (digimon-ffi-lib "posix" #:global? #true))
+(define-ffi-definer define-posix (ffi-lib "posix" #:global? #true))
+(define-ffi-definer define-digitama (digimon-ffi-lib "posix" #:global? #true))
 
 ;;; syslog
-(define-posix rsyslog
+(define-digitama rsyslog
   (_fun _severity
         [topic : _symbol]
         [message : _string]

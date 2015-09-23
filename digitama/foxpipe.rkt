@@ -1,6 +1,6 @@
 #lang at-exp racket
 
-(provide (all-defined-out))
+(provide (except-out (all-defined-out) define-libssh2 define-foxpipe))
 
 @require{posix.rkt}
 
@@ -9,17 +9,17 @@
     (raise-foreign-error src (foxpipe_last_errno session)
                          #:strerror (lambda [errno] (foxpipe_last_errmsg session)))))
 
-(define-ffi-definer define-ssh (ffi-lib "libssh2" #:global? #true))
+(define-ffi-definer define-libssh2 (ffi-lib "libssh2" #:global? #true))
 (define-ffi-definer define-foxpipe (digimon-ffi-lib  "foxpipe" #:global? #true))
 
 (define-cpointer-type _foxpipe-session*)
 
-(define-ssh libssh2_init
+(define-libssh2 libssh2_init
   (_fun #:in-original-place? #true
         [flags : _int = 0] ; 0 means init with crypto.
         -> _int))
 
-(define-ssh libssh2_exit
+(define-libssh2 libssh2_exit
   (_fun #:in-original-place? #true
         -> _void))
 
