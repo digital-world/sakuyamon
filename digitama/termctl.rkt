@@ -479,7 +479,7 @@
   
   (define uncaught-exn : (-> exn KeyCode)
     (lambda [errobj]
-      (define messages ((inst call-with-input-string (Listof String)) (exn->string errobj) port->lines))
+      (define messages ((inst call-with-input-string (Listof String)) (exn-message errobj) port->lines))
       (clear)
       (addstr (format "»» name: ~a~n" (object-name errobj)))
       (unless (null? messages)
