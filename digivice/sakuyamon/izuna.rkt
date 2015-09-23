@@ -332,7 +332,7 @@
                          (update-windows-on-screen) ; will load the up-to-date colorscheme
                          (define timer (timer-thread on-timer/second 1.0))
                          (for ([scepter-host : String (in-list (cons hostname other-hosts))])
-                           (place-channel-put ($foxpipe+ scepter-host (dynamic-place `(submod ,(#%file) foxpipe) 'realize))
+                           (place-channel-put ($foxpipe+ scepter-host (dynamic-place (cast `(submod ,(#%file) foxpipe) Module-Path) 'realize))
                                               ((inst hasheq Symbol Any)
                                                'sshd-host scepter-host
                                                'host-seen-by-sshd "localhost"
