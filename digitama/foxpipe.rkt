@@ -15,12 +15,12 @@
 (define-cpointer-type _foxpipe-session*)
 
 (define-ssh libssh2_init
-  (_fun ;#:in-original-place? #true
+  (_fun #:in-original-place? #true
         [flags : _int = 0] ; 0 means init with crypto.
         -> _int))
 
 (define-ssh libssh2_exit
-  (_fun ;#:in-original-place? #true
+  (_fun #:in-original-place? #true
         -> _void))
 
 (define _hashtype (c-extern/enum (list 'HOSTKEY_HASH_MD5 'HOSTKEY_HASH_SHA1)))
@@ -41,12 +41,12 @@
                                                 'DISCONNECT_ILLEGAL_USER_NAME)))
 
 (define-foxpipe foxpipe_last_errno
-  (_fun ;#:in-original-place? #true
+  (_fun #:in-original-place? #true
         [session : _foxpipe-session*]
         -> _int))
 
 (define-foxpipe foxpipe_last_errmsg
-  (_fun ;#:in-original-place? #true
+  (_fun #:in-original-place? #true
         [session : _foxpipe-session*]
         [errmsg : (_ptr o _bytes)]
         [size : (_ptr o _int)]
@@ -54,35 +54,41 @@
         -> errmsg)
   #:c-id foxpipe_last_error)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Note that, the allocator and deallocator will be called in atomic mode which  ;;;
+;;; should be respect to the main place.                                          ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-foxpipe foxpipe_collapse
-  (_fun ;#:in-original-place? #true
+  (_fun #:in-original-place? #true
         [session : _foxpipe-session*]
         [reason : _disconnect_reason = 'disconnect_by_application]
         [description : _string]
         -> [$? : _int]
-        -> (cond [(zero? $?) (void)]
+        -> (cond [(zero? $?) (void)] ;;; deallocator always return void
                  [else (raise-foxpipe-error 'foxpipe_collapse session)]))
-  ;#:wrap (deallocator) ;;; deallocator always return void
-  )
+  #:wrap (deallocator))
 
 (define-foxpipe foxpipe_construct
-  (_fun ;#:in-original-place? #true
-        [tcp-connect : _racket = tcp-connect/enable-break]
-        [sshd_host : _racket]
-        [sshd_port : _racket]
-        -> [session : _foxpipe-session*/null])
-  ;#:wrap (allocator foxpipe_collapse)
-  )
+  (_fun #:in-original-place? #true
+        [sshd_host : _string]
+        [sshd_port : _short]
+        [timeout_ms : _long]
+        [errno : (_ptr o _int)]
+        [errcode : (_ptr o _int)]
+        -> [session : _foxpipe-session*/null]
+        -> (or session (cond [(positive? errno) (raise-foreign-error 'foxpipe_construct errno)]
+                             [else (raise-foreign-error 'foxpipe_construct errcode #:strerror gai_strerror)])))
+  #:wrap (allocator foxpipe_collapse))
 
 (define-foxpipe foxpipe_handshake
-  (_fun ;#:in-original-place? #true
+  (_fun #:in-original-place? #true
         [session : _foxpipe-session*]
         [type : _hashtype]
         -> [figureprint : _bytes]
         -> (or figureprint (raise-foxpipe-error 'foxpipe_handshake session))))
 
 (define-foxpipe foxpipe_authenticate
-  (_fun ;#:in-original-place? #true
+  (_fun #:in-original-place? #true
         [session : _foxpipe-session*]
         [username : _string]
         [publickey : _file]
@@ -93,7 +99,7 @@
                  [else (raise-foxpipe-error 'foxpipe_authenticate session)])))
 
 (define-foxpipe foxpipe_direct_channel
-  (_fun ;#:in-original-place? #true
+  (_fun #:in-original-place? #true
         [session : _foxpipe-session*]
         [host-seen-by-sshd : _string]
         [service-seen-by-sshd : _uint]
@@ -119,7 +125,7 @@
   (require/typed/provide (submod "..")
                          [foxpipe_last_errno (-> Foxpipe-Session* Integer)]
                          [foxpipe_last_errmsg (-> Foxpipe-Session* String)]
-                         [foxpipe_construct (-> String Integer Foxpipe-Session*/Null)]
+                         [foxpipe_construct (-> String Index Natural Foxpipe-Session*/Null)]
                          [foxpipe_handshake (-> Foxpipe-Session* Symbol Bytes)]
                          [foxpipe_authenticate (-> Foxpipe-Session* String Path-String Path-String String Integer)]
                          [foxpipe_collapse (-> Foxpipe-Session* String Void)]
