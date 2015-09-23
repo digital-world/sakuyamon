@@ -126,14 +126,15 @@
       (define/override add-host!
         (lambda [sceptor-host figureprint]
           (set-box! figure-print figureprint)
-          ((inst hash-ref! String SymbolTable) hosts sceptor-host (inst make-hash Symbol Any))
-          (let check-next ([idx : (Option Integer) (hash-iterate-first hosts)]
-                           [y : Natural 0])
-            (cond [(false? idx) (add-host sceptor-host y)]
-                  [(string=? (hash-iterate-key hosts idx) sceptor-host) (check-next #false y)]
-                  [else (check-next (hash-iterate-next hosts idx) (+ (hash-count (hash-iterate-value hosts idx)) y 1))]))
+          (unless (hash-has-key? hosts sceptor-host)
+            ((inst hash-set! String SymbolTable) hosts sceptor-host (cast (make-hash) SymbolTable))
+            (let check-next ([idx : (Option Integer) (hash-iterate-first hosts)]
+                             [y : Natural 0])
+              (cond [(false? idx) (add-host sceptor-host y)]
+                    [(string=? (hash-iterate-key hosts idx) sceptor-host) (check-next #false y)]
+                    [else (check-next (hash-iterate-next hosts idx) (+ (hash-count (hash-iterate-value hosts idx)) y 1))]))
+            (alert 'MoreMsg "~a: ~a" sceptor-host figureprint))
           (set-status sceptor-host)
-          (alert 'MoreMsg "~a: ~a" sceptor-host figureprint)
           (refresh)))
 
       (define/override beat-heart
