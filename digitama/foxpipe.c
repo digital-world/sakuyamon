@@ -3,7 +3,19 @@
  */
 
 #include <scheme.h>
+#include <signal.h>
+#include <syslog.h>
+#include <setjmp.h>
 #include <libssh2.h> /* ld: (ssh2) */
+
+static sigjmp_buf caught_signal;
+static void restore_from_signal(int signo, siginfo_t *siginfo, void *whocares) {
+    openlog("izuna", LOG_PID | LOG_CONS, LOG_KERN);
+    setlogmask(LOG_UPTO(LOG_DEBUG));
+    syslog(LOG_WARNING, "caught an unexpected signal: %d[%s]\n", signo, strsignal(signo));
+    closelog();
+    siglongjmp(caught_signal, signo);
+}
 
 /* Hash Types */
 intptr_t HOSTKEY_HASH_MD5  = LIBSSH2_HOSTKEY_HASH_MD5;
@@ -91,7 +103,7 @@ full_done:
 
 static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer,
                                    intptr_t offset, intptr_t size,
-                                   intptr_t nonblock, Scheme_Object *unless) {
+                                   int nonblock, Scheme_Object *unless) {
     foxpipe_channel_t *foxpipe;
     intptr_t read, rest, delta;
     char *src, *dest;
@@ -129,7 +141,7 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer,
      */
 
     foxpipe = (foxpipe_channel_t *)(in->port_data);
-    dest = buffer XFORM_TRUST_PLUS offset; /* As deep in RVM here, the boundary is already checked. */
+    dest = buffer + offset; /* As deep in RVM here, the boundary is already checked. */
     read = 0;
 
     if (scheme_unless_ready(unless)) {
@@ -155,7 +167,7 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer,
         delta = (size <= rest) ? size : rest;
         memcpy(dest, src, delta);
         (*foxpipe->read_offset) += delta;
-        dest = dest XFORM_TRUST_PLUS delta;
+        dest = dest + delta;
         read += delta;
         size -= delta;
     }
@@ -240,7 +252,7 @@ static void channel_in_close(Scheme_Input_Port *p) {
 
 static intptr_t channel_write_bytes(Scheme_Output_Port *out, const char *buffer,
                                     intptr_t offset, intptr_t size,
-                                    intptr_t rarely_block, intptr_t enable_break) {
+                                    int rarely_block, int enable_break) {
     LIBSSH2_SESSION *session;
     LIBSSH2_CHANNEL *channel;
     char *offed_buffer;
@@ -263,7 +275,7 @@ static intptr_t channel_write_bytes(Scheme_Output_Port *out, const char *buffer,
 
     session = ((foxpipe_channel_t *)(out->port_data))->session->sshclient;
     channel = ((foxpipe_channel_t *)(out->port_data))->channel;
-    offed_buffer = (char *)buffer XFORM_TRUST_PLUS offset; /* As deep in RVM here, the boundary is already checked. */
+    offed_buffer = (char *)buffer + offset; /* As deep in RVM here, the boundary is already checked. */
     sent = 0;
 
     /**
@@ -393,15 +405,24 @@ intptr_t foxpipe_authenticate(foxpipe_session_t *session, const char *wargrey, c
 }
 
 intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, const char *description) {
-    size_t libssh2_longest_reason_size;
-    intptr_t status, sockfd;
-    char *reason;
+    struct sigaction catch_segfault, saved_action;
+    intptr_t status;
     
-    /* TODO: Errors should be handled */
+    /**
+     * TODO: Meanwhile I've no idea why libssh2_session_disconnect_ex() causes SIGSEGV,
+     *       Lucky this point is not quite important, so that I can just ignore it.
+     **/
 
-    status = scheme_get_port_socket((Scheme_Object *)session->dev_tcpout, &sockfd);
-    
-    if (status != 0) {
+    sigemptyset(&catch_segfault.sa_mask);
+    catch_segfault.sa_flags = SA_RESTART | SA_SIGINFO;
+    catch_segfault.sa_sigaction = restore_from_signal;
+    sigaction(SIGSEGV, &catch_segfault, &saved_action);
+
+    status = sigsetjmp(caught_signal, 1);
+    if (status == 0) {
+        size_t libssh2_longest_reason_size;
+        char *reason;
+
         libssh2_longest_reason_size = 256;
         reason = (char *)description;
         if (strlen(description) > libssh2_longest_reason_size) {
@@ -417,7 +438,9 @@ intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, cons
     scheme_close_input_port((Scheme_Object *)session->dev_tcpin);
     scheme_close_output_port((Scheme_Object *)session->dev_tcpout);
 
-    return 0;
+    sigaction(SIGSEGV, &saved_action, NULL);
+
+    return status;
 }
 
 intptr_t foxpipe_last_errno(foxpipe_session_t *session) {
