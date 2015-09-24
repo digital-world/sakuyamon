@@ -21,13 +21,13 @@ launchctl_restart() {
 }
 
 systemctl_restart() {
-    systemctl enable sakuyamon.service || exit $?;
-    systemctl reload sakuyamon.service || exit $?;
+    systemctl enable sakuyamon.service;
+    systemctl reload sakuyamon.service;
     systemctl restart sakuyamon.service || exit $?;
 
-    systemctl enable foxpipe.service || exit $?;
-    systemctl reload foxpipe.service || exit $?;
-    systemctl restart foxpipe.service || exit $?
+    systemctl enable foxpipe.service;
+    systemctl reload foxpipe.service;
+    systemctl restart foxpipe.service || exit $?;
 }
 
 case "$1" in
