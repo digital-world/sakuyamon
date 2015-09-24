@@ -29,5 +29,5 @@
 (define sakuyamon-timeout-file 30)
 
 (define sakuyamon-foxpipe-port 514)
-(define sakuyamon-foxpipe-timeout-idle 8.0)
 (define sakuyamon-foxpipe-max-waiting 4)
+(define sakuyamon-foxpipe-sampling-interval 0.618)

@@ -18,14 +18,18 @@
   (define log-pool : Bytes (make-bytes max-size))
   (define foxpipe : UDP-Socket (udp-open-socket))
   (define scepter : (Parameterof (Option TCP-Listener)) (make-parameter #false))
-  
-  (define kudagitsune : (Parameterof (Option Thread)) (make-parameter #false))
   (define izunas : (HashTable Input-Port Output-Port) ((inst make-hash Input-Port Output-Port)))
+  
+  (define sakuyamon-action : String (path->string (path-replace-suffix (cast (file-name-from-path (#%file)) Path) #"")))
   (define sakuyamon-scepter-port : (Parameterof Index) (make-parameter (sakuyamon-foxpipe-port)))
+  (define sakuyamon-statistics : System-Status (vector 0.0 0.0 0.0))
   
   (define foxlog : (-> Symbol String Any * Void)
     (lambda [severity maybe . argl]
-      (rsyslog severity 'foxpipe (apply format maybe argl))))
+      (openlog sakuyamon-action (list 'pid 'cons) 'daemon)
+      (setlogmask_upto 'debug)
+      (syslog severity (apply format maybe argl))
+      (closelog)))
 
   (define syslog-perror : (-> String Any * Void)
     (lambda [maybe . argl]
@@ -44,56 +48,52 @@
       (syslog-perror (exn-message e))
       (exit 'FATAL)))
   
-  (define signal-handler : (-> exn Void)
-    (lambda [signal]
-      (define fox : Thread (cast (kudagitsune) Thread))
-      (foxlog 'notice "terminated by ~a."
-              (cond [(exn:break:hang-up? signal) 'SIGHUP]
-                    [(exn:break:terminate? signal) 'SIGTERM]
-                    [else 'SIGINT]))
-      (thread-send fox signal)
-      (thread-wait fox)
-      (when (exn:break:hang-up? signal)
-        (raise signal))))
-
-  (define remove-port : (-> Input-Port Symbol Void)
+  (define remove-port : (-> Input-Port (U String Symbol) Void)
     (lambda [/dev/tcpin reason]
       (define /dev/tcpout ((inst hash-ref Input-Port Output-Port Nothing) izunas (cast /dev/tcpin Input-Port)))
       (match-define-values [_ _ remote port] (tcp-addresses /dev/tcpout #true))
       ((inst hash-remove! Input-Port Output-Port) izunas (cast /dev/tcpin Input-Port))
       (tcp-abandon-port /dev/tcpin)
       (tcp-abandon-port /dev/tcpout)
-      (foxlog 'notice "~a:~a has ~a!" remote port (case reason [(eof) 'gone] [(exn) 'broken]))))
+      (foxlog 'notice "~a:~a has gone: ~a!" remote port (if (string? reason) reason "closed by client!"))))
   
   (define push-back : (-> Any Void)
     (lambda [packet]
-      (for ([{/dev/iznin /dev/iznout} ((inst in-hash Input-Port Output-Port) izunas)])
-        (with-handlers ([exn? (lambda [e] (remove-port /dev/iznin 'exn))])
+      (for ([(/dev/iznin /dev/iznout) ((inst in-hash Input-Port Output-Port) izunas)])
+        (with-handlers ([exn? (lambda [[e : exn]] (remove-port /dev/iznin (exn-message e)))])
           ;;; (vector) is wrotten with the shape '#()', so clients have a natural boundary to stop (read)ing.
           ;;; or they might have to check the next char again and again in nonblocking mode. 
           (write (vector packet) /dev/iznout)
           (flush-output /dev/iznout)))))
   
+  (define on-timer/push-system-samples : (-> Natural Any)
+    (lambda [times]
+      (displayln times)
+      (unless (zero? (hash-count izunas))
+        (with-handlers ([exn:break? void])
+          (for ([sample (in-array (getloadavg))]
+                [index (in-naturals)])
+            (vector-set! sakuyamon-statistics index (cast sample Real))))
+        (push-back sakuyamon-statistics))))
+
   (define serve-forever : (-> (Evtof (List Natural String Natural)) (Evtof (List Input-Port Output-Port)) Void)
     (lambda [/dev/udp /dev/tcp]
-      (match (apply sync/timeout/enable-break (sakuyamon-foxpipe-idle) /dev/udp /dev/tcp
-                    (wrap-evt (thread-receive-evt) (lambda [e] (thread-receive)))
-                    ((inst hash-keys Input-Port Output-Port) izunas))
-        [(list /dev/tcpin /dev/tcpout)
-         (let-values ([{local lport remote port} (tcp-addresses (cast /dev/tcpin Port) #true)])
-           (foxlog 'notice  "~a:~a has connected via SSH Channel." remote port)
-           ((inst hash-set! Input-Port Output-Port) izunas (cast /dev/tcpin Input-Port) (cast /dev/tcpout Output-Port)))]
-        [(list size _ _)
-         (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
-           (define packet : String (string-trim (bytes->string/utf-8 log-pool #false 0 (cast size Natural))))
-           (with-handlers ([exn:fail? void])
-             (displayln packet)
-             (flush-output (current-output-port)))
-           (push-back packet))]
-        [(? tcp-port? /dev/tcpin) (remove-port (cast /dev/tcpin Input-Port) 'eof)]
-        [(? exn:break? signal) (raise signal)]
-        [#false (push-back beating-heart#)])
-      (serve-forever /dev/udp /dev/tcp)))
+      (with-handlers ([exn:break? void])
+        (match (apply sync/enable-break /dev/udp /dev/tcp ((inst hash-keys Input-Port Output-Port) izunas))
+          [(list /dev/tcpin /dev/tcpout)
+           (let-values ([(local lport remote port) (tcp-addresses (cast /dev/tcpin Port) #true)])
+             (foxlog 'notice  "~a:~a has connected via SSH Channel." remote port)
+             ((inst hash-set! Input-Port Output-Port) izunas (cast /dev/tcpin Input-Port) (cast /dev/tcpout Output-Port)))]
+          [(list size _ _)
+           (when (or (terminal-port? (current-output-port)) (positive? (hash-count izunas)))
+             (define packet : String (string-trim (bytes->string/utf-8 log-pool #false 0 (cast size Natural))))
+             (with-handlers ([exn:fail? void])
+               (displayln packet)
+               (flush-output (current-output-port)))
+             (push-back packet))]
+          [(? tcp-port? /dev/tcpin)
+           (remove-port (cast /dev/tcpin Input-Port) 'eof)])
+        (serve-forever /dev/udp /dev/tcp))))
 
   ((cast parse-command-line (-> String (Vectorof String) Help-Table (-> Any Void) (Listof String) (-> String Void) Void))
    (format "~a ~a" (#%module) (path-replace-suffix (cast (file-name-from-path (#%file)) Path) #""))
@@ -110,7 +110,7 @@
                                 (scepter (tcp-listen (sakuyamon-scepter-port) (sakuyamon-foxpipe-max-waiting) #true "localhost")))
                               
                               (when root?
-                                (define-values {uid gid} (fetch_tamer_ids #"tamer"))
+                                (define-values (uid gid) (fetch_tamer_ids #"tamer"))
                                 ;;; if change uid first, then gid cannot be changed again.
                                 (setegid gid)
                                 (seteuid uid))
@@ -119,17 +119,28 @@
                                 (syslog-perror "Misconfigured: Privilege Has Not Dropped!")
                                 (exit 'ECONFIG))
                               
-                              (match-let-values ([{_ port _ _} (udp-addresses foxpipe #true)])
+                              (match-let-values ([(_ port _ _) (udp-addresses foxpipe #true)])
                                 (foxlog 'notice "waiting rsyslog packets on ~a." port))
 
                               (unless (terminal-port? (current-output-port))
                                 (displayln beating-heart#)
                                 (flush-output))))
-                     (thunk (with-handlers ([exn:break? signal-handler])
-                              (kudagitsune (thread (thunk (with-handlers ([exn:break? void])
-                                                            (serve-forever (udp-receive!-evt foxpipe log-pool)
-                                                                           (tcp-accept-evt (cast (scepter) TCP-Listener)))))))
-                              (sync/enable-break never-evt)))
+                     (thunk (let ([caught-signal : (Parameterof (Option exn:break)) (make-parameter #false)])
+                              (define timer : Thread (timer-thread on-timer/push-system-samples (sakuyamon-foxpipe-sampling-interval)))
+                              (define kudagitsune : Thread (thread (thunk (serve-forever (udp-receive!-evt foxpipe log-pool)
+                                                                                         (tcp-accept-evt (cast (scepter) TCP-Listener))))))
+                              (with-handlers ([exn:break? (lambda [[eb : exn:break]] (caught-signal eb))])
+                                (sync/enable-break never-evt))
+                              (break-thread timer)
+                              (break-thread kudagitsune)
+                              (thread-wait kudagitsune)
+                              (define signal : exn:break (cast (caught-signal) exn:break))
+                              (foxlog 'notice "terminated by ~a."
+                                      (cond [(exn:break:hang-up? signal) 'SIGHUP]
+                                            [(exn:break:terminate? signal) 'SIGTERM]
+                                            [else 'SIGINT]))
+                              (when (exn:break:hang-up? signal)
+                                (raise signal))))
                      (thunk (and (udp-close foxpipe) ;;; custodian dose not care about udp socket.
                                  (custodian-shutdown-all (current-custodian)))))))
    null

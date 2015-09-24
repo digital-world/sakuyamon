@@ -48,5 +48,6 @@
       (printf "~a: " i)
       (for ([sample (in-array (getloadavg))])
         (display (~a (~r (cast sample Flonum) #:precision '(= 2)) #\space)))
+      (display sysloadavg)
       (newline)
       (sleep 5))))

@@ -136,7 +136,7 @@
         (define/extract-symtable (place-channel-get izunac)
           [sshd-host : String = "localhost"]
           [host-seen-by-sshd : String = "localhost"]
-          [service-seen-by-sshd : Index = 514]
+          [service-seen-by-sshd : Index = (sakuyamon-foxpipe-port)]
           [plaintransport? : Boolean = #false]
           [username : String = (current-tamer)]
           [passphrase : String = ""]
@@ -170,7 +170,7 @@
                                              (foxpipe_authenticate session username rsa.pub id_rsa passphrase))
                                            (ssh-session))
                                     null))
-              (define maxinterval : Positive-Real (+ (sakuyamon-foxpipe-idle) (/ (+ cputime gctime) 1000.0)))
+              (define maxinterval : Positive-Real (+ (sakuyamon-foxpipe-sampling-interval) (/ (+ cputime gctime) 1000.0)))
               (define-values (/dev/tcpin /dev/tcpout)
                 (foxpipe_direct_channel (cast session Foxpipe-Session*) host-seen-by-sshd service-seen-by-sshd))
               (let recv-match-send-loop : Void ()

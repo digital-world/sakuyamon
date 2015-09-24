@@ -24,14 +24,13 @@
                          [date-display-format (Parameterof Symbol)]
                          [date->string (-> date Boolean String)])
   
-  (define-type Racket-Place-Status (Vector Fixnum Fixnum Fixnum Natural Natural Natural Natural Natural Fixnum Fixnum Natural Natural))
   (define-type NCurseWindow<%> (Class (field [monitor Window*] [statusbar Window*])
                                       [resize (-> Natural Natural Positive-Integer Positive-Integer Any)]
                                       [set-status (-> [#:clear? Boolean] [#:color (Option Color-Pair)] [#:offset Natural] [#:width Positive-Integer] Any * Any)]
                                       [refresh (-> [#:update? Boolean] Any)]
-                                      [add-record! (-> String Syslog Any)]
-                                      [add-host! (-> String (Listof String) Any)]
-                                      [beat-heart (-> String Any)]))
+                                      [on-host (-> String (Listof String) Any)]
+                                      [on-syslog (-> String Syslog Any)]
+                                      [on-sample (-> String System-Status Any)]))
   
   (define uptime/base : Fixnum (current-milliseconds))
   (define pr+gctime/base : Fixnum (current-process-milliseconds))
@@ -106,24 +105,24 @@
         (smart-refresh monitor)
         (smart-refresh statusbar))
 
-      (define/public (add-host! scepter-host figureprint)
-        (raise (exn:fail:unsupported "add-host!: invoking an abstract method!" (current-continuation-marks))))
+      (define/public (on-host scepter-host figureprint)
+        (raise (exn:fail:unsupported "on-host: invoking an abstract method!" (current-continuation-marks))))
 
-      (define/public (add-record! scepter-host record)
-        (raise (exn:fail:unsupported "add-record!: invoking an abstract method!" (current-continuation-marks))))
+      (define/public (on-syslog scepter-host record)
+        (raise (exn:fail:unsupported "on-syslog: invoking an abstract method!" (current-continuation-marks))))
 
-      (define/public (beat-heart scepter-host)
-        (raise (exn:fail:unsupported "beat-heart!: invoking an abstract method!" (current-continuation-marks))))))
+      (define/public (on-sample scepter-host sample)
+        (raise (exn:fail:unsupported "on-sample!: invoking an abstract method!" (current-continuation-marks))))))
   
   (define host% : NCurseWindow<%>
     (class window% (super-new)
       (inherit-field monitor statusbar)
-      (inherit set-status resize refresh add-record!)
+      (inherit set-status resize refresh on-syslog)
       
       (define figure-print : (Boxof (Listof String)) (box null))
       (define hosts : (HashTable String SymbolTable) (make-hash))
       
-      (define/override add-host!
+      (define/override on-host
         (lambda [sceptor-host figureprint]
           (set-box! figure-print figureprint)
           (unless (hash-has-key? hosts sceptor-host)
@@ -137,9 +136,9 @@
           (set-status sceptor-host)
           (refresh)))
 
-      (define/override beat-heart
-        (lambda [scepter-host]
-          (set-status scepter-host)
+      (define/override on-sample
+        (lambda [scepter-host sample]
+          (set-status scepter-host #\space sample)
           (set-status #:offset (random (string-length scepter-host)) #:width 1 #:color 'SpecialChar)))
       
       (define/private (add-host [hostname : String] [y : Natural]) : Boolean
@@ -151,18 +150,19 @@
   (define request% : NCurseWindow<%>
     (class window% (super-new)
       (inherit-field monitor statusbar)
-      (inherit set-status resize refresh add-host! beat-heart)
+      (inherit set-status resize refresh on-host on-sample)
       (scrollok monitor #true)
       
       (define contents : (Boxof (Listof (Pairof String Syslog))) (box null))
       (define fields : (Listof Symbol) (list 'timestamp 'method 'host 'uri 'client 'user-agent 'referer))
       
-      (define/override add-record! : (-> String Syslog Any)
+      (define/override on-syslog : (-> String Syslog Any)
         (lambda [scepter-host record]
           (define req : Log:Message (syslog5424-message record))
           (set-box! contents (cons (cons scepter-host record) (unbox contents)))
           (when (log:request? req)
             (display-request scepter-host req))
+          (set-status scepter-host)
           (refresh)))
       
       (define/private (display-request [scepter-host : String] [req : Log:Request]) : Any
@@ -183,16 +183,17 @@
   (define rsyslog% : NCurseWindow<%>
     (class window% (super-new)
       (inherit-field monitor statusbar)
-      (inherit set-status resize refresh add-host! beat-heart)
+      (inherit set-status resize refresh on-host on-sample)
       (scrollok monitor #true)
       
       (define contents : (Boxof (Listof (Pairof String Syslog))) (box null))
       
-      (define/override add-record! : (-> String Syslog Any)
+      (define/override on-syslog : (-> String Syslog Any)
         (lambda [scepter-host record]
           (set-box! contents (cons (cons scepter-host record) (unbox contents)))
           (wattrset monitor (hash-ref (color-links) (syslog5424-severity record) (const (list 0))))
           (waddwstr monitor (~syslog scepter-host record))
+          (set-status scepter-host)
           (refresh)))
 
       (define/private (~syslog [scepter-host : String] [record : Syslog]) : String
@@ -284,19 +285,18 @@
       (match record
         [(syslog5424 _ _ timestamp host app pid #false) (rich-status 'Ignore (format "~a@~a: ~a[~a]: [Empty Message]" timestamp host app pid))]
         [(syslog5424 _ _ timestamp host "taskgated" _ unsigned-signature) (rich-status 'Folded (format "~a@~a: ~a" timestamp host unsigned-signature))]
-        [(syslog5424 _ _ _ _ _ _ (? string? weird-log:request-seems-to-be-the-black-hole)) (send ($stdwin 'rsyslog%) add-record! scepter-host record)]
-        [(syslog5424 _ _ _ _ _ _ (struct log:request _)) (send ($stdwin 'request%) add-record! scepter-host record)])))
+        [_ (send ($stdwin (if (log:request?  (syslog5424-message record)) 'request% 'rsyslog%)) on-syslog scepter-host record)])))
   
   (define digivice-recv-match-render-loop : (-> Any)
     (lambda []
       (with-handlers ([exn:fail? (lambda [[e : exn]] (alert 'ErrorMsg "~a" (exn-message e)))])
         (match (or (getch) (apply sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# ($foxpipe*)))
           [(? false? on-system-idle) (update-windows-on-screen)]
-          [(cons (? string? host) (vector (? char? heart-beat))) (send ($stdwin 'host%) beat-heart host)]
+          [(cons (? string? host) (vector (? vector? sample))) (send ($stdwin 'host%) on-sample host (cast sample System-Status))]
           [(cons (? string? host) (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
           [(cons (? string? host) (vector message)) (alert 'WarningMsg "Received an unexpected message from ~a: ~s" host message)]
           [(cons (? string? host) (? flonum? s)) (place-channel-put ($foxpipe host) (format "idled ~as" s))]
-          [(list (? string? host) (? string? figureprint) ...) (send ($stdwin 'host%) add-host! host (cast figureprint (Listof String)))]
+          [(list (? string? host) (? string? figureprint) ...) (send ($stdwin 'host%) on-host host (cast figureprint (Listof String)))]
           [(list (? string? host) 'notify (? string? fmt) argl ...) (send ($stdwin 'host%) set-status host ": " (apply format fmt argl))]
           [(list (? string? host) 'fail (? string? fmt) argl ...) (alert 'WarningMsg "~a: ~a" host (apply format fmt argl))]
           [(? char? c) (alert 'Ignore "Key pressed: ~s[~a]" c (char->integer c))]
@@ -320,8 +320,7 @@
                ((inst dynamic-wind Void)
                 (thunk (and (ripoffline +1 'titlebar)
                             (ripoffline -1 'cmdlinebar)
-                            (initscr)
-                            (libssh2_init)))
+                            (initscr)))
                 (thunk (with-handlers ([exn:fail? (lambda [[e : exn]] (endwin) (displayln (exn-message e)))])
                          (unless (and (:prefabwin 'titlebar) (:prefabwin 'cmdlinebar) (:prefabwin 'stdscr)
                                       (curs_set 0) (raw) (noecho) (timeout 0) (intrflush #true) (keypad #true))
@@ -356,8 +355,7 @@
                                (wait-foxpipe))))
                          (for-each place-kill ($foxpipe*))
                          (break-thread timer)))
-                (thunk (and (endwin)
-                            (libssh2_exit)))))
+                (thunk (endwin))))
              (list "hostname" "2nd hostname")
              (lambda [--help]
                (display (string-replace --help #px"  -- : .+?-h --'\\s*" ""))
@@ -399,6 +397,7 @@
           (when (foxpipe-session*? session)
             (foxpipe_collapse session (~a signal)))
           (when (exn:break? signal)
+            (libssh2_exit)
             (exit 0)))
         
         (let catch-send-clear-loop : Void ()
@@ -417,7 +416,7 @@
                                                (foxpipe_authenticate session username rsa.pub id_rsa passphrase)))
                                            (ssh-session))
                                     null))
-              (define maxinterval : Positive-Real (+ (sakuyamon-foxpipe-idle) (/ (+ cputime gctime) 1000.0)))
+              (define maxinterval : Positive-Real (+ (sakuyamon-foxpipe-sampling-interval) (/ (+ cputime gctime) 1000.0)))
               (define-values (/dev/tcpin /dev/tcpout)
                 (cond [(foxpipe-session*? session) (foxpipe_direct_channel session host-seen-by-sshd service-seen-by-sshd)]
                       [else (let-values ([(whocares) (place-channel-put izunac (list sshd-host 'notify "connecting"))]
