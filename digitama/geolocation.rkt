@@ -13,7 +13,7 @@
   #:transparent)
 
 (define-type Geolocation geolocation)
-(define-type Maybe-Geolocation (Option geolocation))
+(define-type Maybe-Geolocation (Option Geolocation))
 
 (define what-is-my-address : (-> String Maybe-Geolocation)
   (let ([geodb : (HashTable String Maybe-Geolocation) (make-hash)])
