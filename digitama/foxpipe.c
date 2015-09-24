@@ -427,7 +427,7 @@ foxpipe_session_t *foxpipe_construct(const char *sshd_host, short sshd_port, tim
             /* The racket GC cannot work with libssh2 whose structures' shape is unknown. */
             sshclient = libssh2_session_init();
             if (sshclient != NULL) {
-                session = (foxpipe_session_t *)scheme_malloc_atomic(sizeof(foxpipe_session_t));
+                session = (foxpipe_session_t *)malloc(sizeof(foxpipe_session_t));
                 session->sshclient = sshclient;
                 session->clientfd = clientfd;
                 libssh2_session_set_timeout(sshclient, timeout_ms);
@@ -471,15 +471,16 @@ intptr_t foxpipe_authenticate(foxpipe_session_t *session, const char *wargrey, c
 }
 
 intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, const char *description) {
+    char libssh2_longest_buffer[257];
     size_t libssh2_longest_reason_size;
     char *reason;
 
     if (session->clientfd > 0) {
-        libssh2_longest_reason_size = 256;
         reason = (char *)description;
-        
+     
+        libssh2_longest_reason_size = sizeof(libssh2_longest_buffer) / sizeof(char);
         if (strlen(description) > libssh2_longest_reason_size) {
-            reason = (char *)scheme_malloc_atomic(sizeof(char) * (libssh2_longest_reason_size + 1));
+            reason = libssh2_longest_buffer;
             strncpy(reason, description, libssh2_longest_reason_size);
             reason[libssh2_longest_reason_size] = '\0';
         }
@@ -514,7 +515,7 @@ intptr_t foxpipe_direct_channel(foxpipe_session_t *session,
     if (channel != NULL) {
         foxpipe_channel_t *object;
 
-        object = (foxpipe_channel_t*)scheme_malloc_atomic(sizeof(foxpipe_channel_t));
+        object = (foxpipe_channel_t*)malloc(sizeof(foxpipe_channel_t));
         object->session = session;
         object->channel = channel;
         object->read_offset = 0;
