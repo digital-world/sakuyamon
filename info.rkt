@@ -30,4 +30,4 @@
 
 (define sakuyamon-foxpipe-port 514)
 (define sakuyamon-foxpipe-max-waiting 4)
-(define sakuyamon-foxpipe-sampling-interval 0.618)
+(define sakuyamon-foxpipe-sampling-interval 1.618)
