@@ -134,7 +134,7 @@
     (lambda [izunac]
       (with-handlers ([exn:break? void])
         (define/extract-symtable (place-channel-get izunac)
-          [sshd-host : String = "localhost"]
+          [sshd-host : String = "127.0.0.1"]
           [host-seen-by-sshd : String = "localhost"]
           [service-seen-by-sshd : Index = (sakuyamon-foxpipe-port)]
           [plaintransport? : Boolean = #false]

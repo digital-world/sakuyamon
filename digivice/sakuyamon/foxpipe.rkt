@@ -68,7 +68,6 @@
   
   (define on-timer/push-system-samples : (-> Natural Any)
     (lambda [times]
-      (displayln times)
       (unless (zero? (hash-count izunas))
         (with-handlers ([exn:break? void])
           (for ([sample (in-array (getloadavg))]
