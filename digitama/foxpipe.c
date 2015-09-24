@@ -457,7 +457,7 @@ const char *foxpipe_handshake(foxpipe_session_t *session, intptr_t MD5_or_SHA1) 
 
     figureprint = NULL;
     
-    status = libssh2_session_handshake(session->sshclient, (*session->clientfd));
+    status = libssh2_session_handshake(session->sshclient, session->clientfd);
     if (status == 0) {
         figureprint = libssh2_hostkey_hash(session->sshclient, MD5_or_SHA1);
     }
@@ -474,18 +474,21 @@ intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, cons
     size_t libssh2_longest_reason_size;
     char *reason;
 
-    libssh2_longest_reason_size = 256;
-    reason = (char *)description;
+    if (session->clientfd > 0) {
+        libssh2_longest_reason_size = 256;
+        reason = (char *)description;
         
-    if (strlen(description) > libssh2_longest_reason_size) {
-        reason = (char *)scheme_malloc_atomic(sizeof(char) * (libssh2_longest_reason_size + 1));
-        strncpy(reason, description, libssh2_longest_reason_size);
-        reason[libssh2_longest_reason_size] = '\0';
-    }
+        if (strlen(description) > libssh2_longest_reason_size) {
+            reason = (char *)scheme_malloc_atomic(sizeof(char) * (libssh2_longest_reason_size + 1));
+            strncpy(reason, description, libssh2_longest_reason_size);
+            reason[libssh2_longest_reason_size] = '\0';
+        }
 
-    libssh2_session_disconnect_ex(session->sshclient, reason_code, reason, "");
-    libssh2_session_free(session->sshclient);
-    socket_shutdown(session->clientfd, SHUT_RDWR);
+        libssh2_session_disconnect_ex(session->sshclient, reason_code, reason, "");
+        libssh2_session_free(session->sshclient);
+        socket_shutdown(session->clientfd, SHUT_RDWR);
+        session->clientfd = 0;
+    }
 
     return 0;
 }
