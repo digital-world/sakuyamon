@@ -48,16 +48,15 @@ const intptr_t DISCONNECT_ILLEGAL_USER_NAME              = SSH_DISCONNECT_ILLEGA
  **/
 typedef struct foxpipe_session {
     LIBSSH2_SESSION *sshclient;
-    intptr_t *clientfd;
+    intptr_t clientfd;
 } foxpipe_session_t;
 
-static size_t FOXPIPE_CHANNEL_READ_BUFFER_SIZE = 2048;
 typedef struct foxpipe_channel {
     foxpipe_session_t *session;
     LIBSSH2_CHANNEL *channel;
-    char *read_buffer;
-    size_t *read_offset; /* These two cannot point to read_buffer directly, */
-    size_t *read_total;  /* since the storage maybe moved by GC. */
+    char read_buffer[2048];
+    size_t read_offset;
+    size_t read_total;
 } foxpipe_channel_t;
 
 static int socket_connect(int clientfd, struct sockaddr *remote, socklen_t addrlen, time_t timeout_ms) {
@@ -111,12 +110,14 @@ static int socket_shutdown(intptr_t socketfd, int howto) {
 
 static intptr_t channel_fill_buffer(foxpipe_channel_t *foxpipe) {
     intptr_t read;
+    size_t buffer_size;
 
-    read = libssh2_channel_read(foxpipe->channel, foxpipe->read_buffer, FOXPIPE_CHANNEL_READ_BUFFER_SIZE);
+    buffer_size = sizeof(foxpipe->read_buffer) / sizeof(char);
+    read = libssh2_channel_read(foxpipe->channel, foxpipe->read_buffer, buffer_size);
 
     if (read > 0) {
-        (*foxpipe->read_total) = read;
-        (*foxpipe->read_offset) = 0;
+        foxpipe->read_total = read;
+        foxpipe->read_offset = 0;
     }
 
     return read;
@@ -128,14 +129,14 @@ static intptr_t channel_close_within_custodian(foxpipe_channel_t *foxpipe) {
      * Racket code is free to leave the channel to the custodian.
      */
 
-    if ((*foxpipe->read_total) >= 0) {
+    if (foxpipe->read_total >= 0) {
         libssh2_channel_close(foxpipe->channel);
-        (*foxpipe->read_total) = -1;
+        foxpipe->read_total = -1;
         goto half_done;
-    } else if ((*foxpipe->read_total) == -1) {
+    } else if (foxpipe->read_total == -1) {
         libssh2_channel_wait_closed(foxpipe->channel);
         libssh2_channel_free(foxpipe->channel);
-        (*foxpipe->read_total) = -2;
+        foxpipe->read_total = -2;
         goto full_done;
     }
 
@@ -195,7 +196,7 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer,
     }
 
     while (size > 0) {
-        rest = (*foxpipe->read_total) - (*foxpipe->read_offset);
+        rest = foxpipe->read_total - foxpipe->read_offset;
 
         if (rest <= 0) {
             if (libssh2_channel_eof(foxpipe->channel) == 1) {
@@ -208,10 +209,10 @@ static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer,
             }
         }
         
-        src = foxpipe->read_buffer + (*foxpipe->read_offset);
+        src = foxpipe->read_buffer + foxpipe->read_offset;
         delta = (size <= rest) ? size : rest;
         memcpy(dest, src, delta);
-        (*foxpipe->read_offset) += delta;
+        foxpipe->read_offset += delta;
         dest = dest + delta;
         read += delta;
         size -= delta;
@@ -242,12 +243,11 @@ static intptr_t channel_read_ready(Scheme_Input_Port *p) {
      */
 
     read = 1; /* default status, even if the port has been closed */
-    if ((*foxpipe->read_total) >= 0) { /* Port has not been closed */
-        if ((*foxpipe->read_offset) < (*foxpipe->read_total)) {
-            read = (*foxpipe->read_total) - (*foxpipe->read_offset);
+    if (foxpipe->read_total >= 0) { /* Port has not been closed */
+        if (foxpipe->read_offset < foxpipe->read_total) {
+            read = foxpipe->read_total - foxpipe->read_offset;
         } else {
-            socketfd = (*foxpipe->session->clientfd);
-            scheme_fd_to_semaphore(socketfd, MZFD_CREATE_READ, 1);
+            scheme_fd_to_semaphore(foxpipe->session->clientfd, MZFD_CREATE_READ, 1);
             read = channel_fill_buffer(foxpipe);
         }
     }
@@ -270,7 +270,7 @@ static void channel_read_need_wakeup(Scheme_Input_Port *port, void *fds) {
      */
 
     channel = (foxpipe_channel_t *)port->port_data;
-    socketfd = (*channel->session->clientfd);
+    socketfd = channel->session->clientfd;
     
     fdin = ((fd_set *)fds) + 0;
     fderr = ((fd_set *)fds) + 2;
@@ -361,7 +361,7 @@ static void channel_write_need_wakeup(Scheme_Output_Port *port, void *fds) {
      */
 
     channel = (foxpipe_channel_t *)port->port_data;
-    socketfd = (*channel->session->clientfd);
+    socketfd = channel->session->clientfd;
     
     fdout = ((fd_set *)fds) + 1;
     fderr = ((fd_set *)fds) + 2;
@@ -427,11 +427,10 @@ foxpipe_session_t *foxpipe_construct(const char *sshd_host, short sshd_port, tim
             /* The racket GC cannot work with libssh2 whose structures' shape is unknown. */
             sshclient = libssh2_session_init();
             if (sshclient != NULL) {
-                session = (foxpipe_session_t *)scheme_malloc(sizeof(foxpipe_session_t));
-                session->clientfd = (intptr_t *)scheme_malloc_atomic(sizeof(intptr_t));
+                session = (foxpipe_session_t *)scheme_malloc_atomic(sizeof(foxpipe_session_t));
                 session->sshclient = sshclient;
+                session->clientfd = clientfd;
                 libssh2_session_set_timeout(sshclient, timeout_ms);
-                (*session->clientfd) = clientfd;
                 goto job_done;
             }
         }
@@ -486,7 +485,7 @@ intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, cons
 
     libssh2_session_disconnect_ex(session->sshclient, reason_code, reason, "");
     libssh2_session_free(session->sshclient);
-    socket_shutdown((*session->clientfd), SHUT_RDWR);
+    socket_shutdown(session->clientfd, SHUT_RDWR);
 
     return 0;
 }
@@ -512,14 +511,11 @@ intptr_t foxpipe_direct_channel(foxpipe_session_t *session,
     if (channel != NULL) {
         foxpipe_channel_t *object;
 
-        object = (foxpipe_channel_t*)scheme_malloc(sizeof(foxpipe_channel_t));
-        object->read_buffer = scheme_malloc_atomic(sizeof(char) * FOXPIPE_CHANNEL_READ_BUFFER_SIZE);
-        object->read_offset = scheme_malloc_atomic(sizeof(size_t));
-        object->read_total = scheme_malloc_atomic(sizeof(size_t));
+        object = (foxpipe_channel_t*)scheme_malloc_atomic(sizeof(foxpipe_channel_t));
         object->session = session;
         object->channel = channel;
-        (*object->read_offset) = 0;
-        (*object->read_total) = 0;
+        object->read_offset = 0;
+        object->read_total = 0;
 
         (*sshin) = (Scheme_Object *)scheme_make_input_port(scheme_make_port_type("<libssh2-channel-input-port>"),
                                                             (void *)object, /* input port data object */
