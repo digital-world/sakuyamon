@@ -20,7 +20,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/time.h>
+
+#if defined(__sun) && defined(__SVR4)
 #include <sys/loadavg.h>
+#endif
 
 /** Syslog Logs **/
 void rsyslog(int priority, const char *topic, const char *message) {
@@ -60,9 +63,9 @@ int vector_get_performance_stats(long *ncores, double *avg1, double *avg5, doubl
         status = getloadavg(sysloadavg, sizeof(sysloadavg) / sizeof(double));
         if (status == -1) goto job_done;
 
-        (*avg1) = sysloadavg[LOADAVG_1MIN];
-        (*avg5) = sysloadavg[LOADAVG_5MIN];
-        (*avg15) = sysloadavg[LOADAVG_15MIN];
+        (*avg1) = sysloadavg[0];
+        (*avg5) = sysloadavg[1];
+        (*avg15) = sysloadavg[2];
     }
 
     /* uptime:illumos-gate:w.c */ {
@@ -73,7 +76,7 @@ int vector_get_performance_stats(long *ncores, double *avg1, double *avg5, doubl
             bthint.ut_type = BOOT_TIME;
 	        btinfo = getutxid(&bthint);
             if (btinfo != NULL) {
-			    boot_time = btinfo->ut_xtime;
+			    boot_time = btinfo->ut_tv.tv_sec;
                 
                 /**
                  * getting some types of record requires super privilege.
