@@ -140,6 +140,7 @@ int system_statistics(long *ncores, double *avg01, double *avg05, double *avg15,
 #ifdef __illumos__
         struct anoninfo swapinfo;
         long pagesize, mtotal, mfree, stotal, sfree;
+        long kb = 1024L;
         
         pagesize = getpagesize();
         mtotal = sysconf(_SC_PHYS_PAGES);
@@ -156,8 +157,8 @@ int system_statistics(long *ncores, double *avg01, double *avg05, double *avg15,
          * Note: The Virtual Memory of Illumos is different from other Unices.
          * This algorithm relates to `swap -s`, see 'Solaris Performance and Tools'.
          **/
-        (*swaptotal) = swapinfo.ani_max * pagesize;
-        (*swapfree) = (swapinfo.ani_max - swapinfo.ani_resv) * pagesize;
+        (*swaptotal) = swapinfo.ani_max / kb * pagesize;
+        (*swapfree) = (swapinfo.ani_max - swapinfo.ani_resv) / kb * pagesize;
 #endif
 
 #if __macosx__
@@ -171,10 +172,10 @@ int system_statistics(long *ncores, double *avg01, double *avg05, double *avg15,
 #endif
 
 #ifdef __linux__
-        (*ramtotal) = info.totalram * info.mem_unit;
-        (*ramfree) = info.freeram * info.mem_unit;
-        (*swaptotal) = info.totalswap * info.mem_unit;
-        (*swapfree) = info.freeswap * info.mem_unit;
+        (*ramtotal) = info.totalram / kb * info.mem_unit;
+        (*ramfree) = info.freeram / kb * info.mem_unit;
+        (*swaptotal) = info.totalswap / kb * info.mem_unit;
+        (*swapfree) = info.freeswap / kb * info.mem_unit;
 #endif
     }
 
