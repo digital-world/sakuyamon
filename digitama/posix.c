@@ -2,6 +2,11 @@
 #if defined(__sun) && defined(__SVR4)
 #define _POSIX_C_SOURCE 199506L
 #define __EXTENSIONS__
+#define __illumos__
+#endif
+
+#if defined(__APPLE__) && defined(__MACH__)
+#define __macosx__
 #endif
 
 #include <stdio.h>
@@ -21,8 +26,19 @@
 #include <sys/types.h>
 #include <sys/time.h>
 
-#if defined(__sun) && defined(__SVR4)
+#ifdef __illumos__
 #include <sys/loadavg.h>
+#include <sys/swap.h>
+#include <vm/anon.h>
+#endif
+
+#ifdef __macosx__
+#include <sys/sysctl.h>
+#include <kern/clock.h>
+#endif
+
+#ifdef __linux__
+#include <sys/sysinfo.h>
 #endif
 
 /** Syslog Logs **/
@@ -43,12 +59,24 @@ void rsyslog(int priority, const char *topic, const char *message) {
 }
 
 /** System Monitor **/
+#ifdef __illumos__
 static time_t boot_time = 0;
+#endif
 
-int vector_get_performance_stats(long *ncores, double *avg1, double *avg5, double *avg15, time_t *uptime) {
+int system_statistics(long *ncores, double *avg01, double *avg05, double *avg15, time_t *uptime,
+                      long *ramtotal, long *ramfree, long *swaptotal, long *swapfree) {
     intptr_t status;
 
+#ifdef __linux__
+    struct sysinfo info;
+#endif
+
     errno = 0;
+
+#ifdef __linux__
+    status = sysinfo(&info);
+    if (status == -1) goto job_done;
+#endif
 
     /* number of processors */ {
         status = sysconf(_SC_NPROCESSORS_CONF);
@@ -58,17 +86,24 @@ int vector_get_performance_stats(long *ncores, double *avg1, double *avg5, doubl
     }
 
     /* system load average */ {
+#ifndef __linux__
         double sysloadavg[3];
 
         status = getloadavg(sysloadavg, sizeof(sysloadavg) / sizeof(double));
         if (status == -1) goto job_done;
 
-        (*avg1) = sysloadavg[0];
-        (*avg5) = sysloadavg[1];
+        (*avg01) = sysloadavg[0];
+        (*avg05) = sysloadavg[1];
         (*avg15) = sysloadavg[2];
+#else
+        (*avg01) = info.loads[0];
+        (*avg05) = info.loads[1];
+        (*avg15) = info.loads[2];
+#endif
     }
 
-    /* uptime:illumos-gate:w.c */ {
+    /* uptime */ {
+#ifdef __illumos__
         if (boot_time == 0) {
 	        struct utmpx *btinfo, bthint;
 
@@ -90,6 +125,57 @@ int vector_get_performance_stats(long *ncores, double *avg1, double *avg5, doubl
         }
 	
         (*uptime) = time(NULL) - boot_time;
+#endif
+
+#ifdef __macosx__
+        clock_get_uptime(uptime);
+#endif
+
+#ifdef __linux__
+        (*uptime) = info.uptime;
+#endif
+    }
+
+    /* memory status */ {
+#ifdef __illumos__
+        struct anoninfo swapinfo;
+        long pagesize, mtotal, mfree, stotal, sfree;
+        
+        pagesize = getpagesize();
+        mtotal = sysconf(_SC_PHYS_PAGES);
+        mfree = sysconf(_SC_AVPHYS_PAGES);
+        if ((mtotal < 0) || (mfree < 0)) goto job_done;
+
+        (*ramtotal) = pagesize * mtotal;
+        (*ramfree) = pagesize * mfree;
+
+        status = swapctl(SC_AINFO, &swapinfo);
+        if (status == -1) goto job_done;
+
+        /**
+         * Note: The Virtual Memory of Illumos is different from other Unices.
+         * This algorithm relates to `swap -s`, see 'Solaris Performance and Tools'.
+         **/
+        (*swaptotal) = swapinfo.ani_max * pagesize;
+        (*swapfree) = (swapinfo.ani_max - swapinfo.ani_resv) * pagesize;
+#endif
+
+#if __macosx__
+        intptr_t mib[2];
+        size_t size;
+
+        mib[0] = CTL_HW;
+        mib[1] = HW_MEMSIZE;
+        status = sysctl(mib, 2, ramtotal, &size, NULL, 0);
+        if (status == -1) goto job_done;
+#endif
+
+#ifdef __linux__
+        (*ramtotal) = info.totalram * info.mem_unit;
+        (*ramfree) = info.freeram * info.mem_unit;
+        (*swaptotal) = info.totalswap * info.mem_unit;
+        (*swapfree) = info.freeswap * info.mem_unit;
+#endif
     }
 
 job_done:

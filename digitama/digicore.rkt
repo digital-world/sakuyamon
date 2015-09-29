@@ -7,9 +7,6 @@
 
 (current-digimon "sakuyamon")
 
-(define-type Racket-Place-Status (Vector Fixnum Fixnum Fixnum Natural Natural Natural Natural Natural Fixnum Fixnum Natural Natural))
-(define-type System-Status (Vector Positive-Integer Real Real Real Positive-Integer))
-
 (define-parameter/extract-info (digimon-zone)
   [[sakuyamon-tamer-terminus? sakuyamon-terminus-tamer?] : Boolean = #false]
   [[sakuyamon-digimon-terminus? sakuyamon-terminus-digimon?] : Boolean = #false]

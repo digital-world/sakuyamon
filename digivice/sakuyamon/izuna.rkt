@@ -16,14 +16,7 @@
   (require "../../digitama/rfc5424.rkt")
   (require "../../digitama/geolocation.rkt")
 
-  (require/typed/provide racket
-                         [vector-set-performance-stats! (-> Racket-Place-Status (Option Thread) Void)])
-
-  (require/typed/provide racket/date
-                         [current-date (-> date)] ;;; should be date*
-                         [date-display-format (Parameterof Symbol)]
-                         [date->string (-> date Boolean String)])
-  
+  (define-type Racket-Place-Status (Vector Fixnum Fixnum Fixnum Natural Natural Natural Natural Natural Fixnum Fixnum Natural Natural))
   (define-type NCurseWindow<%> (Class (field [stdscr Window*] [statusbar Window*])
                                       [refresh (-> [#:with (-> Window* Any)] Any)]
                                       [resize (-> Natural Natural Positive-Integer Positive-Integer Any)]
@@ -32,10 +25,18 @@
   (define-type Monitor<%> (Class #:implements NCurseWindow<%>
                                  (init-field [scepter-host String])
                                  [set-figureprint! (-> (Listof String) Any)]
-                                 [visualize (-> System-Status Any)]))
+                                 [visualize (-> Symbol System-Status Any)]))
 
   (define-type Console<%> (Class #:implements NCurseWindow<%>
                                  [add-syslog (-> String Syslog Any)]))
+
+  (require/typed/provide racket
+                         [vector-set-performance-stats! (-> Racket-Place-Status (Option Thread) Void)])
+
+  (require/typed/provide racket/date
+                         [current-date (-> date)] ;;; should be date*
+                         [date-display-format (Parameterof Symbol)]
+                         [date->string (-> date Boolean String)])
   
   (define uptime/base : Fixnum (current-milliseconds))
   (define pr+gctime/base : Fixnum (current-process-milliseconds))
@@ -128,8 +129,9 @@
           (wclear statusbar)))
       
       (define/public visualize
-        (lambda [sample]
-          (mvwaddwstr stdscr 0 0 (~a sample))))
+        (lambda [systype sample]
+          (mvwaddwstr stdscr 0 0 (~a systype))
+          (mvwaddwstr stdscr 1 0 (~a sample))))
       
       (define/override (resize y x lines cols)
         (super resize (add1 y) x (cast (sub1 lines) Positive-Integer) cols)
@@ -301,7 +303,7 @@
       (with-handlers ([exn:fail? (lambda [[e : exn]] (alert 'ErrorMsg "~a" (exn-message e)))])
         (match (or (getch) (sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# foxpipe))
           [(? false? on-system-idle) (update-windows-on-screen hosts)]
-          [(cons (? string? host) (vector (? vector? sample))) (send ($monitor host) visualize (cast sample System-Status))]
+          [(cons (? string? host) (vector (cons (? symbol? systype) (? sysinfo? sample)))) (send ($monitor host) visualize systype sample)]
           [(cons (? string? host) (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
           [(cons (? string? host) (vector message)) (alert 'WarningMsg "Received an unexpected message from ~a: ~s" host message)]
           [(cons (? string? host) (? flonum? s)) (place-channel-put foxpipe (format "idled ~as" s)) #| put/get is OK, no thread is (sync)ing |#]
