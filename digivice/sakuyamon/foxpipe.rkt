@@ -22,7 +22,6 @@
   
   (define sakuyamon-action : String (path->string (path-replace-suffix (cast (file-name-from-path (#%file)) Path) #"")))
   (define sakuyamon-scepter-port : (Parameterof Index) (make-parameter (sakuyamon-foxpipe-port)))
-  (define sakuyamon-statistics : System-Status (vector 0.0 0.0 0.0))
   
   (define foxlog : (-> Symbol String Any * Void)
     (lambda [severity maybe . argl]
@@ -55,7 +54,7 @@
       ((inst hash-remove! Input-Port Output-Port) izunas (cast /dev/tcpin Input-Port))
       (tcp-abandon-port /dev/tcpin)
       (tcp-abandon-port /dev/tcpout)
-      (foxlog 'notice "~a:~a has gone: ~a!" remote port (if (string? reason) reason "closed by client!"))))
+      (foxlog 'notice "~a:~a has gone: ~a" remote port (if (string? reason) reason "closed by client!"))))
   
   (define push-back : (-> Any Void)
     (lambda [packet]
@@ -69,11 +68,7 @@
   (define on-timer/push-system-samples : (-> Natural Any)
     (lambda [times]
       (unless (zero? (hash-count izunas))
-        (with-handlers ([exn:break? void])
-          (for ([sample (in-array (getloadavg))]
-                [index (in-naturals)])
-            (vector-set! sakuyamon-statistics index (cast sample Real))))
-        (push-back sakuyamon-statistics))))
+        (push-back vector_get_performance_stats))))
 
   (define serve-forever : (-> (Evtof (List Natural String Natural)) (Evtof (List Input-Port Output-Port)) Void)
     (lambda [/dev/udp /dev/tcp]
@@ -125,7 +120,7 @@
                                 (displayln beating-heart#)
                                 (flush-output))))
                      (thunk (let ([caught-signal : (Parameterof (Option exn:break)) (make-parameter #false)])
-                              (define timer : Thread (timer-thread on-timer/push-system-samples (sakuyamon-foxpipe-sampling-interval)))
+                              (define timer : Thread (timer-thread (sakuyamon-foxpipe-sampling-interval) on-timer/push-system-samples))
                               (define kudagitsune : Thread (thread (thunk (serve-forever (udp-receive!-evt foxpipe log-pool)
                                                                                          (tcp-accept-evt (cast (scepter) TCP-Listener))))))
                               (with-handlers ([exn:break? (lambda [[eb : exn:break]] (caught-signal eb))])
