@@ -24,13 +24,18 @@
                          [date-display-format (Parameterof Symbol)]
                          [date->string (-> date Boolean String)])
   
-  (define-type NCurseWindow<%> (Class (field [monitor Window*] [statusbar Window*])
+  (define-type NCurseWindow<%> (Class (field [stdscr Window*] [statusbar Window*])
+                                      [refresh (-> [#:with (-> Window* Any)] Any)]
                                       [resize (-> Natural Natural Positive-Integer Positive-Integer Any)]
-                                      [set-status (-> [#:clear? Boolean] [#:color (Option Color-Pair)] [#:offset Natural] [#:width Positive-Integer] Any * Any)]
-                                      [refresh (-> [#:update? Boolean] Any)]
-                                      [on-host (-> String (Listof String) Any)]
-                                      [on-syslog (-> String Syslog Any)]
-                                      [on-sample (-> String System-Status Any)]))
+                                      [set-status (-> [#:clear? Boolean] [#:color (Option Color-Pair)] [#:offset Natural] [#:width Positive-Integer] Any * Any)]))
+
+  (define-type Monitor<%> (Class #:implements NCurseWindow<%>
+                                 (init-field [scepter-host String])
+                                 [set-figureprint! (-> (Listof String) Any)]
+                                 [visualize (-> System-Status Any)]))
+
+  (define-type Console<%> (Class #:implements NCurseWindow<%>
+                                 [add-syslog (-> String Syslog Any)]))
   
   (define uptime/base : Fixnum (current-milliseconds))
   (define pr+gctime/base : Fixnum (current-process-milliseconds))
@@ -38,10 +43,10 @@
   ; /+-----------+----------------------------------------+\
   ;  | title% [this is a ripped off line]                 |
   ;  +-----------+----------------------------------------+
-  ;  | host%     | request%                               |
+  ;  | host1     | request%                               |
   ;  |           |                                        |
-  ;  |           |                                        |
-  ;  |           |                                        |
+  ;  +-----------+                                        |
+  ;  | host2...n |                                        |
   ;  |           |                                        |
   ;  |           +----------------------------------------+
   ;  |           | rsyslog%                               |
@@ -60,8 +65,8 @@
   (define mtime-colors.vim : (Boxof Natural) (box 0))
   (define px.ip : PRegexp #px"\\d{1,3}(\\.\\d{1,3}){3}")
 
-  (define-strdict foxpipe : Place)
-  (define-symdict stdwin : (Instance NCurseWindow<%>))
+  (define-symdict console : (Instance Console<%>))
+  (define-strdict monitor : (Instance Monitor<%>))
 
   (define color-links : (-> (HashTable Symbol Symbol))
     (let* ([colors.rktl : Path-String (build-path (digimon-stone) "colors.rktl")]
@@ -84,120 +89,80 @@
 
   (define window% : NCurseWindow<%>
     (class object% (super-new)
-      (field [monitor (cast (newwin 0 0 0 0) Window*)])
-      (field [statusbar (cast (newwin 1 0 0 0) Window*)])
-      
-      (define/public (set-status #:clear? [clear? #false] #:color [color #false] #:offset [x 0] #:width [width (getmaxx statusbar)] . contents)
-        (unless (false? clear?) (wclear statusbar))
-        (unless (empty? contents) (mvwaddwstr statusbar 0 x (~a ((inst apply Any String) ~a contents) #:width width)))
-        (unless (false? color) (mvwchgat statusbar 0 x width 'StatusLineNC color))
-        (wnoutrefresh statusbar))
-      
+      (field [stdscr (cast (newwin 0 0 0 0) Window*)]
+             [statusbar (cast (newwin 0 0 0 0) Window*)])
+
       (define/public (resize y x lines cols)
-        (wresize monitor (cast (sub1 lines) Positive-Integer) cols)
-        (mvwin monitor y x)
+        (wresize stdscr (cast (sub1 lines) Positive-Integer) cols)
+        (mvwin stdscr y x)
         (wresize statusbar 1 cols)
         (mvwin statusbar (sub1 (+ y lines)) x)
         (wbkgdset statusbar 'StatusLine))
-      
-      (define/public (refresh #:update? [update? #false])
-        (define smart-refresh : (-> Window* Any) (if update? wrefresh wnoutrefresh))
-        (smart-refresh monitor)
+
+      (define/public (refresh #:with [smart-refresh wnoutrefresh])
+        (touchwin statusbar)
+        (smart-refresh stdscr)
         (smart-refresh statusbar))
 
-      (define/public (on-host scepter-host figureprint)
-        (raise (exn:fail:unsupported "on-host: invoking an abstract method!" (current-continuation-marks))))
-
-      (define/public (on-syslog scepter-host record)
-        (raise (exn:fail:unsupported "on-syslog: invoking an abstract method!" (current-continuation-marks))))
-
-      (define/public (on-sample scepter-host sample)
-        (raise (exn:fail:unsupported "on-sample!: invoking an abstract method!" (current-continuation-marks))))))
+      (define/public (set-status #:clear? [clear? #false] #:color [color #false] #:offset [x 0] #:width [width (getmaxx statusbar)] . contents)
+        (unless (false? clear?) (wclear statusbar))
+        (unless (empty? contents) (mvwaddwstr statusbar 0 x (~a ((inst apply Any String) ~a contents) #:width width)))
+        (unless (false? color) (mvwchgat statusbar 0 x width 'StatusLineNC color)))))
   
-  (define host% : NCurseWindow<%>
+  (define host% : Monitor<%>
     (class window% (super-new)
-      (inherit-field monitor statusbar)
-      (inherit set-status resize refresh on-syslog)
-      
-      (define figure-print : (Boxof (Listof String)) (box null))
-      (define hosts : (HashTable String SymbolTable) (make-hash))
-      
-      (define/override on-host
-        (lambda [sceptor-host figureprint]
-          (set-box! figure-print figureprint)
-          (unless (hash-has-key? hosts sceptor-host)
-            ((inst hash-set! String SymbolTable) hosts sceptor-host (cast (make-hash) SymbolTable))
-            (let check-next ([idx : (Option Integer) (hash-iterate-first hosts)]
-                             [y : Natural 0])
-              (cond [(false? idx) (add-host sceptor-host y)]
-                    [(string=? (hash-iterate-key hosts idx) sceptor-host) (check-next #false y)]
-                    [else (check-next (hash-iterate-next hosts idx) (+ (hash-count (hash-iterate-value hosts idx)) y 1))]))
-            (alert 'MoreMsg "~a: ~a" sceptor-host figureprint))
-          (set-status sceptor-host)
-          (refresh)))
+      (inherit-field stdscr statusbar)
+      (inherit set-status)
 
-      (define/override on-sample
-        (lambda [scepter-host sample]
-          (set-status scepter-host #\space sample)
-          (set-status #:offset (random (string-length scepter-host)) #:width 1 #:color 'SpecialChar)))
+      (init-field scepter-host)
+
+      (define titlebar : Window* (cast (newwin 0 0 0 0) Window*))
+      (define figureprint : (Boxof (Listof String)) (box null))
       
-      (define/private (add-host [hostname : String] [y : Natural]) : Boolean
-        (wmove monitor y 0)
-        (winsertln monitor)
-        (wattrset monitor 'NameSpace)
-        (waddstr monitor hostname))))
-  
-  (define request% : NCurseWindow<%>
+      (define queue-length-max : (Boxof Positive-Integer) (box 1))
+      (define status-queue : (Boxof (Listof System-Status)) (box null))
+      
+      (define/public set-figureprint!
+        (lambda [figure-print]
+          (set-box! figureprint figure-print)
+          (wclear statusbar)))
+      
+      (define/public visualize
+        (lambda [sample]
+          (mvwaddwstr stdscr 0 0 (~a sample))))
+      
+      (define/override (resize y x lines cols)
+        (super resize (add1 y) x (cast (sub1 lines) Positive-Integer) cols)
+        (wresize titlebar 1 cols)
+        (mvwin titlebar y x)
+        (wbkgdset titlebar 'TabLineFill)
+        (mvwaddwstr titlebar 0 0 (~a scepter-host #:width (getmaxx titlebar))))
+
+      (define/override (refresh #:with [smart-refresh wnoutrefresh])
+        (super refresh #:with smart-refresh)
+        (touchwin titlebar)
+        (smart-refresh titlebar))
+
+      (define/private (visualize-loadavg) : Any
+        (void))))
+
+  (define rsyslog% : Console<%>
     (class window% (super-new)
-      (inherit-field monitor statusbar)
-      (inherit set-status resize refresh on-host on-sample)
-      (scrollok monitor #true)
+      (inherit-field stdscr statusbar)
+      (inherit resize refresh set-status)
+      
+      (scrollok stdscr #true)
       
       (define contents : (Boxof (Listof (Pairof String Syslog))) (box null))
-      (define fields : (Listof Symbol) (list 'timestamp 'method 'host 'uri 'client 'user-agent 'referer))
-      
-      (define/override on-syslog : (-> String Syslog Any)
-        (lambda [scepter-host record]
-          (define req : Log:Message (syslog5424-message record))
-          (set-box! contents (cons (cons scepter-host record) (unbox contents)))
-          (when (log:request? req)
-            (display-request scepter-host req))
-          (set-status scepter-host)
-          (refresh)))
-      
-      (define/private (display-request [scepter-host : String] [req : Log:Request]) : Any
-        (define hilinks (color-links))
-        (unless (empty? (cdr (unbox contents))) (waddch monitor #\newline))
-        (for ([field (in-list fields)])
-          (wattrset monitor (hash-ref hilinks field (const (list 0))))
-          (waddstr monitor (~a (request-ref req field)))
-          (wstandend monitor)
-          (waddch monitor #\space)))
-      
-      (define/private (request-ref [req : Log:Request] [key : Symbol]) : (Option String)
-        (case key
-          [(timestamp) (log:request-timestamp req)]
-          [(client) (~geolocation (log:request-client req))]
-          [else (hash-ref (log:request-headers req) key (const #false))]))))
-  
-  (define rsyslog% : NCurseWindow<%>
-    (class window% (super-new)
-      (inherit-field monitor statusbar)
-      (inherit set-status resize refresh on-host on-sample)
-      (scrollok monitor #true)
-      
-      (define contents : (Boxof (Listof (Pairof String Syslog))) (box null))
-      
-      (define/override on-syslog : (-> String Syslog Any)
+
+      (define/public add-syslog : (-> String Syslog Any)
         (lambda [scepter-host record]
           (set-box! contents (cons (cons scepter-host record) (unbox contents)))
-          (wattrset monitor (hash-ref (color-links) (syslog5424-severity record) (const (list 0))))
-          (waddwstr monitor (~syslog scepter-host record))
-          (set-status scepter-host)
-          (refresh)))
+          (wattrset stdscr (hash-ref (color-links) (syslog5424-severity record) (const (list 0))))
+          (waddwstr stdscr (~syslog scepter-host record))))
 
       (define/private (~syslog [scepter-host : String] [record : Syslog]) : String
-        (~a #:max-width (getmaxx monitor)
+        (~a #:max-width (getmaxx stdscr)
             (format "~a~a ~a ~a ~a[~a]: ~a"
                     (if (empty? (cdr (unbox contents))) "" #\newline)
                     (~a (syslog5424-facility record) #:width 8)
@@ -209,6 +174,38 @@
                                      `([,px.ip ,~geolocation]
                                        [,(string #\newline) " "]
                                        [,(string #\tab) "    "])))))))
+  
+  (define request% : Console<%>
+    (class rsyslog% (super-new)
+      (inherit-field stdscr statusbar)
+      (inherit resize refresh set-status)
+      
+      (scrollok stdscr #true)
+      
+      (define contents : (Boxof (Listof (Pairof String Syslog))) (box null))
+      (define fields : (Listof Symbol) (list 'timestamp 'method 'host 'uri 'client 'user-agent 'referer))
+      
+      (define/override add-syslog : (-> String Syslog Any)
+        (lambda [scepter-host record]
+          (define req : Log:Message (syslog5424-message record))
+          (set-box! contents (cons (cons scepter-host record) (unbox contents)))
+          (when (log:request? req)
+            (display-request scepter-host req))))
+      
+      (define/private (display-request [scepter-host : String] [req : Log:Request]) : Any
+        (define hilinks (color-links))
+        (unless (empty? (cdr (unbox contents))) (waddch stdscr #\newline))
+        (for ([field (in-list fields)])
+          (wattrset stdscr (hash-ref hilinks field (const (list 0))))
+          (waddstr stdscr (~a (request-ref req field)))
+          (wstandend stdscr)
+          (waddch stdscr #\space)))
+      
+      (define/private (request-ref [req : Log:Request] [key : Symbol]) : (Option String)
+        (case key
+          [(timestamp) (log:request-timestamp req)]
+          [(client) (~geolocation (log:request-client req))]
+          [else (hash-ref (log:request-headers req) key (const #false))]))))
 
   (define display-statistics : (-> [#:stdbar Window*] [#:prefix String] Any)
     (lambda [#:stdbar [stdbar (:prefabwin 'titlebar)] #:prefix [prefix izuna-title]]
@@ -230,7 +227,7 @@
                                             (parameterize ([date-display-format 'iso-8601])
                                               (date->string (current-date) #true)))))
         (mvwaddstr stdbar 0 0 (string-append prefix status))
-        (wnoutrefresh stdbar))))
+        (wrefresh stdbar))))
   
   (define alert : (-> Symbol String [#:stdbar Window*] Any * Any)
     (lambda [#:stdbar [stdbar (:prefabwin 'cmdlinebar)] higroup fmt . contents]
@@ -241,21 +238,23 @@
                                                        (list (path->string (digimon-zone)) "")))))
       (wrefresh stdbar)))
   
-  (define update-windows-on-screen : (-> Any)
-    (lambda []
+  (define update-windows-on-screen : (-> (Listof String) Any)
+    (lambda [hosts]
       (define mtime : Natural (file-or-directory-modify-seconds (sakuyamon-colors.vim)))
       (when (< (unbox mtime-colors.vim) mtime)
         (:colorscheme! (sakuyamon-colors.vim))
         (set-box! mtime-colors.vim mtime)
-        (on-digivice-resized))
+        (on-digivice-resized hosts))
+      (for ([stdwin (in-list (append ($monitor*) ($console*)))])
+        (send (cast stdwin (Instance NCurseWindow<%>)) refresh #:with wnoutrefresh))
       (doupdate)))
 
   (define on-timer/second : (-> Natural Any)
     (lambda [times]
       (display-statistics)))
 
-  (define on-digivice-resized : (-> Any)
-    (lambda []
+  (define on-digivice-resized : (-> (Listof String) Any)
+    (lambda [hosts]
       (define columns : Positive-Integer (getmaxx (:prefabwin 'stdscr)))
       (define rows : Positive-Integer (getmaxy (:prefabwin 'stdscr)))
       (define host-cols : Positive-Integer (cast (exact-round (* columns 0.16)) Positive-Integer))
@@ -265,101 +264,108 @@
       (for-each wclear (list (:prefabwin 'stdscr) (:prefabwin 'cmdlinebar)))
       (wattrset (:prefabwin 'titlebar) 'Title)
       (display-statistics #:stdbar (:prefabwin 'titlebar) #:prefix izuna-title)
-      (for ([win% : NCurseWindow<%>  (in-list (list host%       request%         rsyslog%))]
-            [scry : Natural          (in-list (list 0           0                request-rows))]
-            [scrx : Natural          (in-list (list 0           (add1 host-cols) (add1 host-cols)))]
-            [scrr : Positive-Integer (in-list (list rows        request-rows     rsyslog-rows))]
-            [scrc : Positive-Integer (in-list (list host-cols   request-cols     request-cols))])
-        (define stdwin : (Instance NCurseWindow<%>) ($stdwin+ (cast (object-name win%) Symbol) (make-object win%)))
-        (send stdwin resize scry scrx scrr scrc)
-        (send stdwin set-status (object-name win%))
-        (send stdwin refresh #:update? #true))
+      (let resize-hosts ([winhosts : (Listof String) hosts]
+                         [y : Nonnegative-Integer 0]
+                         [lines : Natural rows])
+        (unless (null? winhosts)
+          (define monitor : (Instance Monitor<%>) ($monitor+ (car winhosts) (make-object host% (car winhosts))))
+          (define host-rows : Positive-Integer (cast (exact-floor (/ lines (length winhosts))) Positive-Integer))
+          (send monitor resize y 0 host-rows host-cols)
+          (resize-hosts (cdr winhosts) (+ y host-rows) (cast (- lines host-rows) Natural))))
+      (for ([win% : Console<%>       (in-list (list request%         rsyslog%))]
+            [scry : Natural          (in-list (list 0                request-rows))]
+            [scrx : Natural          (in-list (list (add1 host-cols) (add1 host-cols)))]
+            [scrr : Positive-Integer (in-list (list request-rows     rsyslog-rows))]
+            [scrc : Positive-Integer (in-list (list request-cols     request-cols))])
+        (define console : (Instance Console<%>) ($console+ (cast (object-name win%) Symbol) (make-object win%)))
+        (send console resize scry scrx scrr scrc))
       (attrset 'VertSplit)
       (mvvline 0 host-cols (- rows 1))
-      (mvaddch (sub1 rows) host-cols (:altchar 'DARROW #:extra-attrs (list 'underline)))))
+      (mvaddch (sub1 rows) host-cols (:altchar 'DARROW #:extra-attrs (list 'underline)))
+      (for ([stdwin (in-list (append ($monitor*) ($console*)))])
+        (send (cast stdwin (Instance NCurseWindow<%>)) set-status (object-name stdwin))
+        (send (cast stdwin (Instance NCurseWindow<%>)) refresh #:with wnoutrefresh))
+      (doupdate)))
   
   (define on-foxpipe-rsyslog : (-> String Syslog Any)
     (lambda [scepter-host record]
       (define (rich-status [colorpair : Color-Pair] [message : String])
-        (send ($stdwin 'rsyslog%) set-status #:clear? #true #:color colorpair #:width (max (string-length message) 1) message))
+        (send ($console 'rsyslog%) set-status #:clear? #true #:color colorpair #:width (max (string-length message) 1) message))
       (match record
         [(syslog5424 _ _ timestamp host app pid #false) (rich-status 'Ignore (format "~a@~a: ~a[~a]: [Empty Message]" timestamp host app pid))]
         [(syslog5424 _ _ timestamp host "taskgated" _ unsigned-signature) (rich-status 'Folded (format "~a@~a: ~a" timestamp host unsigned-signature))]
-        [_ (send ($stdwin (if (log:request?  (syslog5424-message record)) 'request% 'rsyslog%)) on-syslog scepter-host record)])))
+        [_ (send ($console (if (log:request?  (syslog5424-message record)) 'request% 'rsyslog%)) add-syslog scepter-host record)])))
   
-  (define digivice-recv-match-render-loop : (-> Any)
-    (lambda []
+  (define digivice-recv-match-render-loop : (-> Place (Listof String) Any)
+    (lambda [foxpipe hosts]
       (with-handlers ([exn:fail? (lambda [[e : exn]] (alert 'ErrorMsg "~a" (exn-message e)))])
-        (match (or (getch) (apply sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# ($foxpipe*)))
-          [(? false? on-system-idle) (update-windows-on-screen)]
-          [(cons (? string? host) (vector (? vector? sample))) (send ($stdwin 'host%) on-sample host (cast sample System-Status))]
+        (match (or (getch) (sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# foxpipe))
+          [(? false? on-system-idle) (update-windows-on-screen hosts)]
+          [(cons (? string? host) (vector (? vector? sample))) (send ($monitor host) visualize (cast sample System-Status))]
           [(cons (? string? host) (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
           [(cons (? string? host) (vector message)) (alert 'WarningMsg "Received an unexpected message from ~a: ~s" host message)]
-          [(cons (? string? host) (? flonum? s)) (place-channel-put ($foxpipe host) (format "idled ~as" s))]
-          [(list (? string? host) (? string? figureprint) ...) (send ($stdwin 'host%) on-host host (cast figureprint (Listof String)))]
-          [(list (? string? host) 'notify (? string? fmt) argl ...) (send ($stdwin 'host%) set-status host ": " (apply format fmt argl))]
-          [(list (? string? host) 'fail (? string? fmt) argl ...) (alert 'WarningMsg "~a: ~a" host (apply format fmt argl))]
+          [(cons (? string? host) (? flonum? s)) (place-channel-put foxpipe (format "idled ~as" s)) #| put/get is OK, no thread is (sync)ing |#]
+          [(list (? string? host) (? string? figureprint) ...) (send ($monitor host) set-figureprint! (cast figureprint (Listof String)))]
+          [(list (? string? host) 'notify (? string? fmt) argl ...) (send ($monitor host) set-status (apply format fmt argl))]
+          [(list (? string? host) 'fail (? string? fmt) argl ...) (send ($monitor host) set-status (apply format fmt argl) #:color 'WarningMsg)]
           [(? char? c) (alert 'Ignore "Key pressed: ~s[~a]" c (char->integer c))]
           [(and (or 'SIGQUIT 'SIGINT) signal) (raise-signal-error signal)]
-          [(or 'SIGWINCH) (on-digivice-resized)]))
-      (digivice-recv-match-render-loop)))
+          [(or 'SIGWINCH) (on-digivice-resized hosts)]))
+      (digivice-recv-match-render-loop foxpipe hosts)))
   
-  (call-as-normal-termination
-   (thunk (parameterize ([current-directory (find-system-path 'orig-dir)])
-            ((cast parse-command-line (-> String (Vectorof String) Help-Table (-> Any String String * Void)
-                                          (Listof String) (-> String Void) Void))
-             (format "~a ~a" (#%module) sakuyamon-action)
-             (current-command-line-arguments)
-             `([usage-help ,(format "~a~n" desc)]
-               [once-each
-                [["-c"] ,(lambda [flag [cs.vim : Path-String]] (when (file-exists? cs.vim) (sakuyamon-colors.vim cs.vim)))
-                        ["Use an alternative color scheme <colors.vim>." "colors.vim"]]
-                [["-p"] ,(lambda [flag [port : String]] (sakuyamon-scepter-port (cast (string->number port) Index)))
-                        ["Use an alternative service <port>." "port"]]])
-             (lambda [!flag hostname . other-hosts]
-               ((inst dynamic-wind Void)
-                (thunk (and (ripoffline +1 'titlebar)
-                            (ripoffline -1 'cmdlinebar)
-                            (initscr)))
-                (thunk (with-handlers ([exn:fail? (lambda [[e : exn]] (endwin) (displayln (exn-message e)))])
-                         (unless (and (:prefabwin 'titlebar) (:prefabwin 'cmdlinebar) (:prefabwin 'stdscr)
-                                      (curs_set 0) (raw) (noecho) (timeout 0) (intrflush #true) (keypad #true))
-                           (error "NCurses is unavailable!"))
-                         (when (has_colors)
-                           (start_color)
-                           (use_default_colors))
-                         (update-windows-on-screen) ; will load the up-to-date colorscheme
-                         (define timer (timer-thread on-timer/second 1.0))
-                         (for ([scepter-host : String (in-list (cons hostname other-hosts))])
-                           (place-channel-put ($foxpipe+ scepter-host (dynamic-place (cast `(submod ,(#%file) foxpipe) Module-Path) 'realize))
-                                              ((inst hasheq Symbol Any)
-                                               'sshd-host scepter-host
-                                               'host-seen-by-sshd "localhost"
-                                               'service-seen-by-sshd (sakuyamon-scepter-port)
-                                               'plaintransport? (and (or (member scepter-host '("localhost" "::1"))
-                                                                         (regexp-match? #px"^127\\." scepter-host)) #true))))
-                         (with-handlers ([exn:break? void]) ;;; All Signals are escaped to allow user killing blocked places
-                           (digivice-recv-match-render-loop))
-                         (noraw) ;;; ncurses will not stop user signals
-                         (alert 'MoreMsg "Terminating Foxpipes")
-                         (for-each (lambda [[this : Place]] (place-break this 'terminate)) ($foxpipe*))
-                         (with-handlers ([exn:break? void])
-                           (let wait-foxpipe ()
-                             (unless (zero? ($foxpipe#))
-                               (define who : String
-                                 (apply sync/enable-break (hash-map %foxpipe (lambda [[host : String] [foxpipe : Place]]
-                                                                               (wrap-evt (place-dead-evt foxpipe)
-                                                                                         ((inst const String) host))))))
-                               (alert 'Comment "Foxpipe@~a has collapsed." who)
-                               (!foxpipe- who)
-                               (wait-foxpipe))))
-                         (for-each place-kill ($foxpipe*))
-                         (break-thread timer)))
-                (thunk (endwin))))
-             (list "hostname" "2nd hostname")
-             (lambda [--help]
-               (display (string-replace --help #px"  -- : .+?-h --'\\s*" ""))
-               (exit 0)))))))
+  (parameterize ([current-directory (find-system-path 'orig-dir)])
+    ((cast parse-command-line (-> String (Vectorof String) Help-Table (-> Any String String * Void)
+                                  (Listof String) (-> String Void) Void))
+     (format "~a ~a" (#%module) sakuyamon-action)
+     (current-command-line-arguments)
+     `([usage-help ,(format "~a~n" desc)]
+       [once-each
+        [["-c"] ,(lambda [flag [cs.vim : Path-String]] (when (file-exists? cs.vim) (sakuyamon-colors.vim cs.vim)))
+                ["Use an alternative color scheme <colors.vim>." "colors.vim"]]
+        [["-p"] ,(lambda [flag [port : String]] (sakuyamon-scepter-port (cast (string->number port) Index)))
+                ["Use an alternative service <port>." "port"]]])
+     (lambda [!flag hostname . other-hosts]
+       (call-as-normal-termination
+        #:atinit (thunk (ripoffline +1 'titlebar)
+                        (ripoffline -1 'cmdlinebar)
+                        (initscr)
+                       
+                        (unless (and (:prefabwin 'titlebar) (:prefabwin 'cmdlinebar) (:prefabwin 'stdscr)
+                                     (curs_set 0) (raw) (noecho) (timeout 0) (intrflush #true) (keypad #true))
+                          (error "NCurses is unavailable!"))
+                       
+                        (when (has_colors)
+                          (start_color)
+                          (use_default_colors)))
+        #:atexit (thunk (endwin))
+        (thunk (define hosts : (Listof String) (cons hostname other-hosts))
+               (define $? : (Parameterof Integer) (make-parameter 130 #| SIGINT + 128|#))
+               (update-windows-on-screen hosts) ; will load the up-to-date colorscheme
+               (define timer : Thread (timer-thread 1.0 on-timer/second))
+               (define foxpipe : Place (dynamic-place (cast `(submod ,(#%file) foxpipe) Module-Path) 'realize))
+               (place-channel-put foxpipe hosts)
+               (place-channel-put foxpipe (sakuyamon-scepter-port))
+               (with-handlers ([exn:break? void]) ;;; All Signals are escaped to allow user killing blocked places
+                 (digivice-recv-match-render-loop foxpipe hosts))
+               
+               (noraw) ;;; ncurses will not stop user signals
+               (alert 'MoreMsg "Terminating Foxpipes")
+               (place-break foxpipe 'terminate)
+               (with-handlers ([exn:break? void])
+                 (let wait-foxpipe ([rest-after-this-pass (sub1 (length (cons hostname other-hosts)))])
+                   (match (sync/enable-break foxpipe)
+                     [(? string? who) (alert 'Comment "Foxpipe@~a has collapsed." who)]
+                     [_ (raise-signal-error 'SIGTERM)])
+                   (if (zero? rest-after-this-pass)
+                       ($? (place-wait foxpipe))
+                       (wait-foxpipe (sub1 rest-after-this-pass)))))
+               (place-kill foxpipe)
+               (break-thread timer)
+               (exit ($?)))))
+     (list "hostname" "2nd hostname")
+     (lambda [--help]
+       (display (string-replace --help #px"  -- : .+?-h --'\\s*" ""))
+       (exit 0)))))
 
 #|===========================================================================================================================|#
 
@@ -374,34 +380,33 @@
   (require/typed file/sha1
                  [bytes->hex-string (-> Bytes String)])
 
-  (define ssh-session : (Parameterof Foxpipe-Session*/Null) (make-parameter #false))
-
-  (define realize : Place-Main
+  (define kudagitsune : (-> Place-Channel Any)
     (lambda [izunac]
-      (with-handlers ([exn:break? void])
-        (define/extract-symtable (place-channel-get izunac)
-          [sshd-host : String]
-          [host-seen-by-sshd : String]
-          [service-seen-by-sshd : Index]
-          [plaintransport? : Boolean]
-          [username : String = (current-tamer)]
-          [passphrase : String = ""]
-          [rsa.pub : Path-String = (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")]
-          [id_rsa : Path-String = (build-path (find-system-path 'home-dir) ".ssh" "id_rsa")])
+      (define/extract-symtable (thread-receive)
+        [sshd-host : String]
+        [host-seen-by-sshd : String]
+        [service-seen-by-sshd : Index]
+        [plaintransport? : Boolean]
+        [username : String = (current-tamer)]
+        [passphrase : String = ""]
+        [rsa.pub : Path-String = (build-path (find-system-path 'home-dir) ".ssh" "id_rsa.pub")]
+        [id_rsa : Path-String = (build-path (find-system-path 'home-dir) ".ssh" "id_rsa")])
 
-        (define (on-collapsed [signal : exn]) : Void
-          (define session : Foxpipe-Session*/Null (ssh-session))
-          (when (exn:fail? signal)
-            (place-channel-put izunac (list sshd-host 'fail (exn-message signal))))
-          (custodian-shutdown-all (current-custodian))
-          (when (foxpipe-session*? session)
-            (foxpipe_collapse session (~a signal)))
-          (when (exn:break? signal)
-            (libssh2_exit)
-            (exit 0)))
-        
+      (define ssh-session : (Parameterof Foxpipe-Session*/Null) (make-parameter #false))
+
+      (let/ec thread-exit : Symbol
         (let catch-send-clear-loop : Void ()
           (parameterize ([current-custodian (make-custodian)])
+            (define (on-collapsed [signal : exn]) : Void
+              (define session : Foxpipe-Session*/Null (ssh-session))
+              (when (exn:fail? signal)
+                (place-channel-put izunac (list sshd-host 'fail (exn-message signal))))
+              (custodian-shutdown-all (current-custodian))
+              (when (foxpipe-session*? session)
+                (foxpipe_collapse session (~a signal)))
+              (when (exn:break? signal)
+                (thread-exit 'nothing)))
+            
             (with-handlers ([exn? on-collapsed])
               (match-define-values ((list session) cputime wallclock gctime)
                                    ((inst time-apply Foxpipe-Session*/Null Any)
@@ -416,7 +421,7 @@
                                                (foxpipe_authenticate session username rsa.pub id_rsa passphrase)))
                                            (ssh-session))
                                     null))
-              (define maxinterval : Positive-Real (+ (sakuyamon-foxpipe-sampling-interval) (/ (+ cputime gctime) 1000.0)))
+              (define maxinterval : Positive-Real (+ (sakuyamon-foxpipe-sampling-interval) (/ (+ cputime gctime wallclock) 1000.0)))
               (define-values (/dev/tcpin /dev/tcpout)
                 (cond [(foxpipe-session*? session) (foxpipe_direct_channel session host-seen-by-sshd service-seen-by-sshd)]
                       [else (let-values ([(whocares) (place-channel-put izunac (list sshd-host 'notify "connecting"))]
@@ -425,11 +430,40 @@
                               (values in out))]))
               (let recv-match-send-loop : Void ()
                 (match (sync/timeout/enable-break maxinterval /dev/tcpin)
-                  [(? false?) (let ([reason (place-channel-put/get izunac (cons sshd-host maxinterval))])
-                                (unless (false? reason) (error 'foxpipe "has to collapse: ~a!" reason)))]
+                  [(? false?) (let ([reason (place-channel-put/get izunac (cons sshd-host maxinterval))]) ;;; no thread is (sync)ing the place channel,
+                                (unless (false? reason) (error 'foxpipe "has to collapse: ~a!" reason)))] ;;; so put/get will work as expected.
                   [(? input-port?) (match (read /dev/tcpin)
                                      [(? eof-object?) (error 'foxpipe "remote server disconnected!")]
                                      [msgvector (place-channel-put izunac (cons sshd-host msgvector))])])
                 (recv-match-send-loop))))
           (sync/timeout/enable-break (+ (cast (random) Positive-Real) 1.0) never-evt)
-          (catch-send-clear-loop))))))
+          (catch-send-clear-loop)))))
+  
+  (define realize : Place-Main
+    (lambda [izunac]
+      (define-strdict foxpipe : Thread)
+      
+      (define scepter-hosts : (Listof String) (cast (place-channel-get izunac) (Listof String)))
+      (define scepter-port : Index (cast (place-channel-get izunac) Index))
+
+      (libssh2_init)
+      (for ([scepter-host : String (in-list scepter-hosts)])
+        (thread-send ($foxpipe+ scepter-host (thread (thunk (kudagitsune izunac))))
+                     ((inst hasheq Symbol Any)
+                      'sshd-host scepter-host
+                      'host-seen-by-sshd "localhost"
+                      'service-seen-by-sshd scepter-port
+                      'plaintransport? (and (or (member scepter-host '("localhost" "::1"))
+                                                (regexp-match? #px"^127\\." scepter-host)) #true))))
+      (with-handlers ([exn:break? void])
+        (sync/enable-break never-evt))
+      (for-each break-thread ($foxpipe*))
+      (let wait-foxpipe ()
+        (define who : String
+          (apply sync/enable-break
+                 (hash-map %foxpipe (lambda [[host : String] [this : Thread]] ((inst wrap-evt Any String) (thread-dead-evt this) (const host))))))
+          (place-channel-put izunac who)
+          ($foxpipe- who)
+        (unless (zero? ($foxpipe#))
+          (wait-foxpipe)))
+      (libssh2_exit))))

@@ -127,15 +127,10 @@
 
 ;;; Windows/Pads and Input/Output functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; For the sake of simplicity, I only deal with pads.                            ;;;
-;;;                                                                               ;;;
-;;; Shrinking terminal will cause windows resizing propertionlessly, while after  ;;;
-;;;  that reenlarging terminal will cause windows resizing in propertion to the   ;;;
-;;;  changed but wrong size.                                                      ;;;
 ;;; The subwindow and subpad suck                                                 ;;;
-;;;  it must be deleted first when deleting its parent;                           ;;;
+;;;  they must be deleted first when deleting their parent;                       ;;;
 ;;;  scrolling is unavaliable (as well as pads);                                  ;;;
-;;;  its size cannot be changed manually.                                         ;;;
+;;;  their size cannot be changed manually.                                       ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-ncurses newpad (_fun [nrows : _int] [ncols : _int] -> _window*/null) #:wrap (allocator delwin))
 (define-ncurses newwin (_fun [nrows : _int] [ncols : _int] [y : _int] [x : _int]
@@ -195,6 +190,8 @@
 (define-ncurses-winapi refresh (_fun -> _ok/err))
 (define-ncurses-winapi setscrreg (_fun [top : _int] [bot : _int] -> _ok/err))
 (define-ncurses wresize (_fun _window* [rows : _int] [cols : _int] -> _ok/err))
+(define-ncurses touchwin (_fun _window* -> _ok/err))
+(define-ncurses untouchwin (_fun _window* -> _ok/err))
 (define-ncurses wnoutrefresh (_fun _window* -> _ok/err))
 (define-ncurses doupdate (_fun -> _ok/err))
 
@@ -399,6 +396,8 @@
                          [prefresh (-> Window* Natural Natural Natural Natural Natural Natural Boolean)]
                          [pnoutrefresh (-> Window* Natural Natural Natural Natural Natural Natural Boolean)]
                          [wresize (Window* Positive-Integer Positive-Integer -> Boolean)]
+                         [touchwin (Window* -> Boolean)]
+                         [untouchwin (Window* -> Boolean)]
                          [wnoutrefresh (Window* -> Boolean)]
                          [doupdate (-> Boolean)]
                          [has_colors (-> Boolean)]
@@ -458,7 +457,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module* main typed/racket
   (require "digicore.rkt")
+  
   (require (submod ".." typed/ffi))
+  (require (submod "posix.rkt" typed/ffi))
 
   (require/typed racket
                  [#:opaque Plumber plumber?]
@@ -470,8 +471,8 @@
   
   (require/typed (submod ".." digitama)
                  [:highlight (HashTable Symbol ChType)])
-  
-  (ripoffline +1 (list (lambda [titlebar cols] (waddwstr titlebar (~a "> racket digitama/termctl.rkt" #:width cols))) 'reverse))
+
+  (ripoffline +1 (list (lambda [titlebar cols] (waddwstr titlebar (~a "> racket digitama/termctl.rkt" #\[ (getpid) #\] #:width cols))) 'reverse))
   (ripoffline -1 'statusbar)
   (void (initscr)
         (plumber-add-flush! (current-plumber)
