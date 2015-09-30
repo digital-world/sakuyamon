@@ -34,7 +34,6 @@
 
 #ifdef __macosx__
 #include <sys/sysctl.h>
-#include <kern/clock.h>
 #endif
 
 #ifdef __linux__
@@ -59,7 +58,7 @@ void rsyslog(int priority, const char *topic, const char *message) {
 }
 
 /** System Monitor **/
-#ifdef __illumos__
+#ifndef __linux__
 static time_t boot_time = 0;
 #endif
 
@@ -128,7 +127,18 @@ int system_statistics(long *ncores, double *avg01, double *avg05, double *avg15,
 #endif
 
 #ifdef __macosx__
-        clock_get_uptime(uptime);
+        if (boot_time == 0) {
+            struct timeval boottime;
+            size_t size;
+
+            size = sizeof(boottime);
+            status = sysctlbyname("kern.boottime", &boottime, &size, NULL, 0);
+            if ((status == -1) || (boottime.tv_sec == 0)) goto job_done;
+
+            boot_time = boottime.tv_sec;
+        }
+        
+        (*uptime) = time(NULL) - boot_time;
 #endif
 
 #ifdef __linux__
@@ -137,10 +147,11 @@ int system_statistics(long *ncores, double *avg01, double *avg05, double *avg15,
     }
 
     /* memory status */ {
+        long kb = 1024L;
+
 #ifdef __illumos__
         struct anoninfo swapinfo;
         long pagesize, mtotal, mfree, stotal, sfree;
-        long kb = 1024L;
         
         pagesize = getpagesize();
         mtotal = sysconf(_SC_PHYS_PAGES);
@@ -154,21 +165,46 @@ int system_statistics(long *ncores, double *avg01, double *avg05, double *avg15,
         if (status == -1) goto job_done;
 
         /**
-         * Note: The Virtual Memory of Illumos is different from other Unices.
          * This algorithm relates to `swap -s`, see 'Solaris Performance and Tools'.
          **/
         (*swaptotal) = swapinfo.ani_max / kb * pagesize;
         (*swapfree) = (swapinfo.ani_max - swapinfo.ani_resv) / kb * pagesize;
 #endif
 
-#if __macosx__
-        intptr_t mib[2];
-        size_t size;
+#ifdef __macosx__
+        struct xsw_usage swapinfo;
+        long ram_raw, free_raw, speculative_raw;
+        size_t size, pagesize;
 
-        mib[0] = CTL_HW;
-        mib[1] = HW_MEMSIZE;
-        status = sysctl(mib, 2, ramtotal, &size, NULL, 0);
+        pagesize = getpagesize();
+        size = sizeof(long);
+        status = sysctlbyname("hw.memsize", &ram_raw, &size, NULL, 0);
         if (status == -1) goto job_done;
+        size = sizeof(long);
+        status = sysctlbyname("vm.page_free_count", &free_raw, &size, NULL, 0);
+        if (status == -1) goto job_done;
+        size = sizeof(long);
+        status = sysctlbyname("vm.page_speculative_count", &speculative_raw, &size, NULL, 0);
+        if (status == -1) goto job_done;
+
+        (*ramtotal) = ram_raw / kb;
+        
+        /**
+         * see `vm_stat`.c
+         * TODO: These concepts are full of mystery.
+         **/
+        (*ramfree) = (free_raw - speculative_raw) / kb * pagesize;
+        
+        size = sizeof(struct xsw_usage);
+        status = sysctlbyname("vm.swapusage", &swapinfo, &size, NULL, 0);
+        if (status == -1) goto job_done;
+        
+        /**
+         * TODO: I don't know whether the result should multiple swapinfo.xsu_pagesize.
+         * No documents say it, but `sysctl`.c does not do.
+         */
+        (*swaptotal) = swapinfo.xsu_total / kb;
+        (*swapfree) = swapinfo.xsu_avail / kb;
 #endif
 
 #ifdef __linux__
