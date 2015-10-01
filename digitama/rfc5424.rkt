@@ -56,10 +56,18 @@
 
 (define string->request : (-> String Log:Request)
   (lambda [hstr]
+    (define ~date : (-> Integer String) (lambda [d] (~r d #:min-width 2 #:pad-string "0")))
     (match (read (open-input-string hstr))
       [(? hash? hreq) (let ([headers (make-hash ((inst hash-map Symbol Any (Pairof Symbol String))
                                                  (cast hreq (HashTable Symbol Any))
-                                                 (lambda [[key : Symbol] [val : Any]] (cons key (~a val)))))])
+                                                 (lambda [[key : Symbol] [val : Any]]
+                                                   (cons key
+                                                         (cond [(not (eq? key 'logging-timestamp)) (~a val)]
+                                                               [else (let ([ts (seconds->date (exact-round (* 0.001 (cast val Real))))])
+                                                                       (format "~a-~a-~a ~a:~a:~a" (date-year ts)
+                                                                               (~date (date-month ts)) (~date (date-day ts))
+                                                                               (~date (date-hour ts)) (~date (date-minute ts))
+                                                                               (~date (date-second ts))))])))))])
                         (log:request (hash-ref headers 'logging-timestamp)
                                      (hash-ref headers 'method)
                                      (hash-ref headers 'uri)

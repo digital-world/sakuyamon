@@ -76,7 +76,6 @@
                                             (make-default-path->servlet #:timeouts-default-servlet tds
                                                                         #:make-servlet-namespace fns)))
 
-        (define ~date (curry ~r #:min-width 2 #:pad-string "0"))
         (define {~host host} (string->symbol (string-downcase (if (bytes? host) (bytes->string/utf-8 host) host))))
         (define ~method (compose1 string-upcase bytes->string/utf-8))
 
@@ -86,13 +85,7 @@
         
         (define {syslog-request req}
           ((compose1 (curry rsyslog 'notice 'request) ~s make-hash)
-           (list* (let ([now (current-date)])
-                    (cons 'logging-timestamp
-                          (format "~a: ~a-~a-~a ~a:~a:~a.~a"
-                                  (date*-time-zone-name now) (date-year now)
-                                  (~date (date-month now)) (~date (date-day now))
-                                  (~date (date-hour now)) (~date (date-minute now))
-                                  (~date (date-second now)) (date*-nanosecond now))))
+           (list* (cons 'logging-timestamp (current-inexact-milliseconds))
                   (cons 'method (~method (request-method req)))
                   (cons 'uri (url->string (request-uri req)))
                   (cons 'client (request-client-ip req))
