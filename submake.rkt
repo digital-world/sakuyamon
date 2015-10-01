@@ -34,7 +34,7 @@
 
 (define targets
   (case (digimon-system)
-    [{solaris} (list sakuyamon.smf foxpipe.smf sakuyamon.rsyslog sakuyamon.logadm)]
+    [{illumos} (list sakuyamon.smf foxpipe.smf sakuyamon.rsyslog sakuyamon.logadm)]
     [{macosx} (list sakuyamon.plist foxpipe.plist sakuyamon.asl)]
     [{linux} (list sakuyamon.service foxpipe.service sakuyamon.rsyslog sakuyamon.logrotate)]))
 
@@ -72,7 +72,7 @@
              [sakuyamon.rsyslog [/stone/sakuyamon.rsyslog (quote-source-file) (find-executable-path "racket")]
                                 (and (sudo.make sakuyamon.rsyslog /stone/sakuyamon.rsyslog "root:root")
                                      (case (digimon-system)
-                                       [{solaris} (system "svcadm restart system-log:rsyslog")]
+                                       [{illumos} (system "svcadm restart system-log:rsyslog")]
                                        [{linux} (system "systemctl restart rsyslog")]))]
              [sakuyamon.logadm [/stone/sakuyamon.logadm (quote-source-file) (find-executable-path "racket")]
                                (sudo.make sakuyamon.logadm /stone/sakuyamon.logadm "root:sys")]

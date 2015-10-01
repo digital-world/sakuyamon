@@ -124,27 +124,30 @@ static intptr_t channel_fill_buffer(foxpipe_channel_t *foxpipe) {
 }
 
 static intptr_t channel_close_within_custodian(foxpipe_channel_t *foxpipe) {
+    size_t status;
+
     /**
      * The function name just indicates that
      * Racket code is free to leave the channel to the custodian.
      */
 
-    if (foxpipe->read_total >= 0) {
+    status = sizeof(foxpipe->read_buffer) / sizeof(char);
+    if (foxpipe->read_total <= status) {
         libssh2_channel_close(foxpipe->channel);
-        foxpipe->read_total = -1;
+        foxpipe->read_total = status + 1;
         goto half_done;
-    } else if (foxpipe->read_total == -1) {
+    } else if (foxpipe->read_total == status + 1) {
         libssh2_channel_wait_closed(foxpipe->channel);
         libssh2_channel_free(foxpipe->channel);
-        foxpipe->read_total = -2;
+        foxpipe->read_total = status + 2;
         goto full_done;
     }
 
-half_done:
-    return 0;
-
 full_done:
     return 1;
+
+half_done:
+    return 0;
 }
 
 static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer,
@@ -427,10 +430,9 @@ foxpipe_session_t *foxpipe_construct(const char *sshd_host, short sshd_port, tim
             /* The racket GC cannot work with libssh2 whose structures' shape is unknown. */
             sshclient = libssh2_session_init();
             if (sshclient != NULL) {
-                session = (foxpipe_session_t *)malloc(sizeof(foxpipe_session_t));
+                session = (foxpipe_session_t *)scheme_malloc_atomic(sizeof(foxpipe_session_t));
                 session->sshclient = sshclient;
                 session->clientfd = clientfd;
-                libssh2_session_set_timeout(sshclient, timeout_ms);
                 goto job_done;
             }
         }
@@ -475,21 +477,18 @@ intptr_t foxpipe_collapse(foxpipe_session_t *session, intptr_t reason_code, cons
     size_t libssh2_longest_reason_size;
     char *reason;
 
-    if (session->clientfd > 0) {
-        reason = (char *)description;
+    reason = (char *)description;
      
-        libssh2_longest_reason_size = sizeof(libssh2_longest_buffer) / sizeof(char);
-        if (strlen(description) > libssh2_longest_reason_size) {
-            reason = libssh2_longest_buffer;
-            strncpy(reason, description, libssh2_longest_reason_size);
-            reason[libssh2_longest_reason_size] = '\0';
-        }
-
-        libssh2_session_disconnect_ex(session->sshclient, reason_code, reason, "");
-        libssh2_session_free(session->sshclient);
-        socket_shutdown(session->clientfd, SHUT_RDWR);
-        session->clientfd = 0;
+    libssh2_longest_reason_size = sizeof(libssh2_longest_buffer) / sizeof(char);
+    if (strlen(description) > libssh2_longest_reason_size) {
+        reason = libssh2_longest_buffer;
+        strncpy(reason, description, libssh2_longest_reason_size);
+        reason[libssh2_longest_reason_size] = '\0';
     }
+
+    libssh2_session_disconnect_ex(session->sshclient, reason_code, reason, "");
+    libssh2_session_free(session->sshclient);
+    socket_shutdown(session->clientfd, SHUT_RDWR);
 
     return 0;
 }
@@ -515,7 +514,7 @@ intptr_t foxpipe_direct_channel(foxpipe_session_t *session,
     if (channel != NULL) {
         foxpipe_channel_t *object;
 
-        object = (foxpipe_channel_t*)malloc(sizeof(foxpipe_channel_t));
+        object = (foxpipe_channel_t*)scheme_malloc_atomic(sizeof(foxpipe_channel_t));
         object->session = session;
         object->channel = channel;
         object->read_offset = 0;

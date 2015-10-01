@@ -303,10 +303,9 @@
       (with-handlers ([exn:fail? (lambda [[e : exn]] (alert 'ErrorMsg "~a" (exn-message e)))])
         (match (or (getch) (sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# foxpipe))
           [(? false? on-system-idle) (update-windows-on-screen hosts)]
+          [(cons (? string? host) (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
           [(cons (? string? host) (vector (cons (? symbol? systype) (? sysinfo? sample)))) (send ($monitor host) visualize systype sample)]
           [(cons (? string? host) (vector (cons (? symbol? errname) (? string? errmsg)))) (send ($monitor host) set-status errmsg #:color 'ErrorMsg)]
-          [(cons (? string? host) (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
-          [(cons (? string? host) (vector message)) (alert 'WarningMsg "Received an unexpected message from ~a: ~s" host message)]
           [(cons (? string? host) (? flonum? s)) (place-channel-put foxpipe (format "idled ~as" s)) #| put/get is OK, no thread is (sync)ing |#]
           [(list (? string? host) (? string? figureprint) ...) (send ($monitor host) set-figureprint! (cast figureprint (Listof String)))]
           [(list (? string? host) 'notify (? string? fmt) argl ...) (send ($monitor host) set-status (apply format fmt argl))]

@@ -31,7 +31,7 @@ systemctl_restart() {
 }
 
 case "$1" in
-    solaris)
+    illumos)
         svcadm_restart $2;
         ;;
     macosx)

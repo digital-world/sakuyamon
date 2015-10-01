@@ -1,12 +1,4 @@
 /* System Headers */
-#if defined(__sun) && defined(__SVR4)
-#define __illumos__
-#endif
-
-#if defined(__APPLE__) && defined(__MACH__)
-#define __macosx__
-#endif
-
 #ifdef __linux__
 #define _BSD_SOURCE
 #endif
@@ -30,7 +22,7 @@
 #include <sys/time.h>
 
 #ifdef __illumos__
-#include <kstat.h> /* ld: ([solaris] . (kstat)) */
+#include <kstat.h> /* ld: ([illumos] . (kstat)) */
 #include <sys/loadavg.h>
 #include <sys/swap.h>
 #include <sys/sysinfo.h>

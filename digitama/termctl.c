@@ -1,10 +1,11 @@
 /* System Headers */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define _XOPEN_SOURCE_EXTENDED
-#if defined(__sun) && defined(__SVR4)
-#define _POSIX_C_SOURCE 199506L
+
+#ifdef __illumos__
 #include <ncurses/ncurses.h> /* ld: (ncurses) */
 #else
 #include <ncurses.h>

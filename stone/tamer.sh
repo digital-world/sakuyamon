@@ -83,7 +83,7 @@ modtamer() {
 }
 
 case "$1" in
-    solaris)
+    illumos)
         roletamer $2 tamer;
         ;;
     macosx)
