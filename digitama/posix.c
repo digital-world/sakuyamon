@@ -55,10 +55,15 @@ void rsyslog(int priority, const char *topic, const char *message) {
 }
 
 /** System Monitor **/
+#define ROUND(x, m) (((long)round((x) * m)) / (m * 1.0))
 #define kb (1024) /* use MB directly may lose precision */
 
 static int ncores = 0;
 static long ramsize_kb = 0L;
+
+static hrtime_t link_snaptime = 0L;
+static long link_rbytes = 0L;
+static long link_obytes = 0L;
 
 #ifndef __linux__
 static time_t boot_time = 0;
@@ -70,7 +75,8 @@ static struct kstat_ctl *kstatistics = NULL;
 
 int system_statistics(time_t *timestamp, time_t *uptime,
                       long *nprocessors, double *avg01, double *avg05, double *avg15,
-                      long *ramtotal, long *ramfree, long *swaptotal, long *swapfree) {
+                      long *ramtotal, long *ramfree, long *swaptotal, long *swapfree,
+                      long *rbytes, double *rkbps, long *obytes, double *okbps) {
     intptr_t status, pagesize;
 
 #ifdef __macosx__
@@ -114,7 +120,7 @@ int system_statistics(time_t *timestamp, time_t *uptime,
 
             dt = (kstat_named_t *)kstat_data_lookup(sysmisc, "boot_time");
             if (dt == NULL) goto job_done;
-            boot_time = dt->value.ul;
+            boot_time = dt->value.ui32;
         }
 
         if (ramsize_kb == 0) {
@@ -175,16 +181,14 @@ int system_statistics(time_t *timestamp, time_t *uptime,
     }
 
     /* system load average */ {
-#define ROUND_2lf(x) (((long)round((x) * 100)) / 100.0)
         double sysloadavg[3];
 
         status = getloadavg(sysloadavg, sizeof(sysloadavg) / sizeof(double));
         if (status == -1) goto job_done;
 
-        (*avg01) = ROUND_2lf(sysloadavg[0]);
-        (*avg05) = ROUND_2lf(sysloadavg[1]);
-        (*avg15) = ROUND_2lf(sysloadavg[2]);
-#undef ROUND_2lf
+        (*avg01) = ROUND(sysloadavg[0], 100);
+        (*avg05) = ROUND(sysloadavg[1], 100);
+        (*avg15) = ROUND(sysloadavg[2], 100);
     }
 
     /* cpu and processes statistics */ {
@@ -247,6 +251,38 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         (*ramfree) = info.freeram / kb * info.mem_unit;
         (*swaptotal) = info.totalswap / kb * info.mem_unit;
         (*swapfree) = info.freeswap / kb * info.mem_unit;
+#endif
+    }
+
+    /* network statistics */ {
+#ifdef __illumos__
+        kstat_t *syslink;
+        kstat_named_t *recv, *send;
+        double delta_time;
+
+        /**
+         * TODO: if there are more physic netword interfaces.
+         */
+        syslink = kstat_lookup(kstatistics, "link", 0, NULL);
+        if (syslink == NULL) goto job_done;
+        status = kstat_read(kstatistics, syslink, NULL);
+        if (status == -1) goto job_done;
+
+        recv = (kstat_named_t *)kstat_data_lookup(syslink, "rbytes64");
+        if (recv == NULL) goto job_done;
+        send = (kstat_named_t *)kstat_data_lookup(syslink, "obytes64");
+        if (send == NULL) goto job_done;
+
+        (*rbytes) = recv->value.ul;
+        (*obytes) = send->value.ul;
+
+        delta_time = (syslink->ks_snaptime - link_snaptime) / 1000.0 / 1000.0 / 1000.0;
+        (*rkbps) = ROUND(((*rbytes) - link_rbytes) / delta_time / kb, 1000);
+        (*okbps) = ROUND(((*obytes) - link_obytes) / delta_time / kb, 1000);
+        
+        link_snaptime = syslink->ks_snaptime;
+        link_rbytes = (*rbytes);
+        link_obytes = (*obytes);
 #endif
     }
 

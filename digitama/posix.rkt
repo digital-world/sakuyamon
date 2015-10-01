@@ -19,7 +19,10 @@
 
 ;;; system-monitor
 ; cstruct is c pointer which cannot be used as racket prefab structure.
-(struct sysinfo (timestamp uptime ncores loadavg/01min loadavg/05min loadavg/15min ram/total ram/free swap/total swap/free)
+(struct sysinfo (timestamp uptime
+                           ncores loadavg/01min loadavg/05min loadavg/15min
+                           ram/total ram/free swap/total swap/free
+                           bytes/recv bytes/recv/kbps bytes/send bytes/send/kbps)
   #:prefab)
                          
 (define-digitama system_statistics
@@ -33,8 +36,13 @@
         [ramfree : (_ptr o _long)]
         [swaptotal : (_ptr o _long)]
         [swapfree : (_ptr o _long)]
+        [bytes/recv : (_ptr o _long)]
+        [bytes/recv/kbps : (_ptr o _double)]
+        [bytes/send : (_ptr o _long)]
+        [bytes/send/kbps : (_ptr o _double)]
         -> [$? : _int]
-        -> (cond [(zero? $?) (sysinfo timestamp uptime ncores lavg1 lavg5 lavg15 ramtotal ramfree swaptotal swapfree)]
+        -> (cond [(zero? $?) (sysinfo timestamp uptime ncores lavg1 lavg5 lavg15 ramtotal ramfree swaptotal swapfree
+                                      bytes/recv bytes/recv/kbps bytes/send bytes/send/kbps)]
                  [else (raise-foreign-error 'system_statistics $?)])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -57,7 +65,11 @@
                            [ram/total : Positive-Integer]
                            [ram/free : Positive-Integer]
                            [swap/total : Natural]
-                           [swap/free : Natural])]
+                           [swap/free : Natural]
+                           [bytes/recv : Natural]
+                           [bytes/recv/kbps : Real]
+                           [bytes/send : Natural]
+                           [bytes/send/kbps : Real])]
                          [rsyslog (-> Symbol Symbol String Void)]
                          [system_statistics (-> sysinfo)]))
 
@@ -65,8 +77,7 @@
 (module* main typed/racket
   (require (submod ".." typed/ffi))
 
-  (displayln "system status:")
   (with-handlers ([exn:break? void])
     (for ([i (in-naturals 1)])
       (printf "~a: ~a~n" i (system_statistics))
-      (sleep 5))))
+      (sleep 1))))
