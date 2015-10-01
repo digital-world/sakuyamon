@@ -1,7 +1,5 @@
 /* System Headers */
 #if defined(__sun) && defined(__SVR4)
-#define _POSIX_C_SOURCE 199506L
-#define __EXTENSIONS__
 #define __illumos__
 #endif
 
