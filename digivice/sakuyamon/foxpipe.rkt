@@ -68,7 +68,8 @@
   (define on-timer/push-system-samples : (-> Natural Any)
     (lambda [times]
       (unless (zero? (hash-count izunas))
-        (push-back (cons (digimon-system) system_statistics)))))
+        (push-back (with-handlers ([exn? (lambda [[e : exn]] (cons (object-name e) (exn-message e)))])
+                     (cons (digimon-system) (system_statistics)))))))
 
   (define serve-forever : (-> (Evtof (List Natural String Natural)) (Evtof (List Input-Port Output-Port)) Void)
     (lambda [/dev/udp /dev/tcp]

@@ -304,6 +304,7 @@
         (match (or (getch) (sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# foxpipe))
           [(? false? on-system-idle) (update-windows-on-screen hosts)]
           [(cons (? string? host) (vector (cons (? symbol? systype) (? sysinfo? sample)))) (send ($monitor host) visualize systype sample)]
+          [(cons (? string? host) (vector (cons (? symbol? errname) (? string? errmsg)))) (send ($monitor host) set-status errmsg #:color 'ErrorMsg)]
           [(cons (? string? host) (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
           [(cons (? string? host) (vector message)) (alert 'WarningMsg "Received an unexpected message from ~a: ~s" host message)]
           [(cons (? string? host) (? flonum? s)) (place-channel-put foxpipe (format "idled ~as" s)) #| put/get is OK, no thread is (sync)ing |#]
@@ -434,8 +435,9 @@
                 (match (sync/timeout/enable-break maxinterval /dev/tcpin)
                   [(? false?) (let ([reason (place-channel-put/get izunac (cons sshd-host maxinterval))]) ;;; no thread is (sync)ing the place channel,
                                 (unless (false? reason) (error 'foxpipe "has to collapse: ~a!" reason)))] ;;; so put/get will work as expected.
-                  [(? input-port?) (match (read /dev/tcpin)
+                  [(? input-port?) (match (with-handlers ([exn? values]) (read /dev/tcpin))
                                      [(? eof-object?) (error 'foxpipe "remote server disconnected!")]
+                                     [(? exn? e) (place-channel-put izunac (cons sshd-host (vector (cons (object-name e) (exn-message e)))))]
                                      [msgvector (place-channel-put izunac (cons sshd-host msgvector))])])
                 (recv-match-send-loop))))
           (sync/timeout/enable-break (+ (cast (random) Positive-Real) 1.0) never-evt)
