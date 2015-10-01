@@ -19,21 +19,22 @@
 
 ;;; system-monitor
 ; cstruct is c pointer which cannot be used as racket prefab structure.
-(struct sysinfo (nprocessors loadavg/min loadavg/5min loadavg/15min uptime ram/total ram/free swap/total swap/free)
+(struct sysinfo (timestamp uptime ncores loadavg/01min loadavg/05min loadavg/15min ram/total ram/free swap/total swap/free)
   #:prefab)
                          
 (define-digitama system_statistics
-  (_fun [ncores : (_ptr o _long)]
+  (_fun [timestamp : (_ptr o _long)]
+        [uptime : (_ptr o _long)]
+        [ncores : (_ptr o _int)]
         [lavg1 : (_ptr o _double)]
         [lavg5 : (_ptr o _double)]
         [lavg15 : (_ptr o _double)]
-        [uptime : (_ptr o _long)]
         [ramtotal : (_ptr o _long)]
         [ramfree : (_ptr o _long)]
         [swaptotal : (_ptr o _long)]
         [swapfree : (_ptr o _long)]
         -> [$? : _int]
-        -> (cond [(zero? $?) (sysinfo ncores lavg1 lavg5 lavg15 uptime ramtotal ramfree swaptotal swapfree)]
+        -> (cond [(zero? $?) (sysinfo timestamp uptime ncores lavg1 lavg5 lavg15 ramtotal ramfree swaptotal swapfree)]
                  [else (raise-foreign-error 'system_statistics $?)])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -47,11 +48,12 @@
   
   (require/typed/provide (submod "..")
                          [#:struct sysinfo
-                          ([nprocessors : Positive-Integer]
-                           [loadavg/min : Real]
-                           [loadavg/5min : Real]
-                           [loadavg/15min : Real]
+                          ([timestamp : Positive-Integer]
                            [uptime : Positive-Integer]
+                           [ncores : Positive-Integer]
+                           [loadavg/01min : Real]
+                           [loadavg/05min : Real]
+                           [loadavg/15min : Real]
                            [ram/total : Positive-Integer]
                            [ram/free : Positive-Integer]
                            [swap/total : Natural]
