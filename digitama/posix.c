@@ -9,10 +9,15 @@
 #define __macosx__
 #endif
 
+#ifdef __linux__
+#define _BSD_SOURCE
+#endif
+
 #include <stdio.h>
-#include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
 #include <ctype.h>
 #include <fcntl.h>
 #include <time.h>
@@ -20,7 +25,7 @@
 #include <limits.h>
 #include <unistd.h>
 #include <syslog.h>
-#include <utmpx.h>
+#include <math.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -180,20 +185,16 @@ int system_statistics(time_t *timestamp, time_t *uptime,
     }
 
     /* system load average */ {
-#ifndef __linux__
+#define ROUND_2lf(x) (((long)round((x) * 100)) / 100.0)
         double sysloadavg[3];
 
         status = getloadavg(sysloadavg, sizeof(sysloadavg) / sizeof(double));
         if (status == -1) goto job_done;
 
-        (*avg01) = sysloadavg[0];
-        (*avg05) = sysloadavg[1];
-        (*avg15) = sysloadavg[2];
-#else
-        (*avg01) = info.loads[0];
-        (*avg05) = info.loads[1];
-        (*avg15) = info.loads[2];
-#endif
+        (*avg01) = ROUND_2lf(sysloadavg[0]);
+        (*avg05) = ROUND_2lf(sysloadavg[1]);
+        (*avg15) = ROUND_2lf(sysloadavg[2]);
+#undef ROUND_2lf
     }
 
     /* cpu and processes statistics */ {
