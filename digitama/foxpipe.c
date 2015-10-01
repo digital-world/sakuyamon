@@ -57,6 +57,7 @@ typedef struct foxpipe_channel {
     char read_buffer[2048];
     size_t read_offset;
     size_t read_total;
+    int status;
 } foxpipe_channel_t;
 
 static int socket_connect(int clientfd, struct sockaddr *remote, socklen_t addrlen, time_t timeout_ms) {
@@ -106,6 +107,8 @@ static int socket_shutdown(intptr_t socketfd, int howto) {
     do { 
       status = shutdown(socketfd, 0);
     } while ((status == -1) && (errno == EINTR));
+
+    return status;
 }
 
 static intptr_t channel_fill_buffer(foxpipe_channel_t *foxpipe) {
@@ -123,31 +126,20 @@ static intptr_t channel_fill_buffer(foxpipe_channel_t *foxpipe) {
     return read;
 }
 
-static intptr_t channel_close_within_custodian(foxpipe_channel_t *foxpipe) {
-    size_t status;
-
+static void channel_close_within_custodian(foxpipe_channel_t *foxpipe) {
     /**
      * The function name just indicates that
      * Racket code is free to leave the channel to the custodian.
      */
 
-    status = sizeof(foxpipe->read_buffer) / sizeof(char);
-    if (foxpipe->read_total <= status) {
+    if (foxpipe->status > 0) {
         libssh2_channel_close(foxpipe->channel);
-        foxpipe->read_total = status + 1;
-        goto half_done;
-    } else if (foxpipe->read_total == status + 1) {
+        foxpipe->status = 0;
+    } else if (foxpipe->status == 0) {
         libssh2_channel_wait_closed(foxpipe->channel);
         libssh2_channel_free(foxpipe->channel);
-        foxpipe->read_total = status + 2;
-        goto full_done;
+        foxpipe->status = -1;
     }
-
-full_done:
-    return 1;
-
-half_done:
-    return 0;
 }
 
 static intptr_t channel_read_bytes(Scheme_Input_Port *in, char *buffer,
@@ -246,7 +238,7 @@ static intptr_t channel_read_ready(Scheme_Input_Port *p) {
      */
 
     read = 1; /* default status, even if the port has been closed */
-    if (foxpipe->read_total >= 0) { /* Port has not been closed */
+    if (foxpipe->status > 0) { /* Port has not been closed */
         if (foxpipe->read_offset < foxpipe->read_total) {
             read = foxpipe->read_total - foxpipe->read_offset;
         } else {
@@ -519,6 +511,7 @@ intptr_t foxpipe_direct_channel(foxpipe_session_t *session,
         object->channel = channel;
         object->read_offset = 0;
         object->read_total = 0;
+        object->status = 1;
 
         (*sshin) = (Scheme_Object *)scheme_make_input_port(scheme_make_port_type("<libssh2-channel-input-port>"),
                                                             (void *)object, /* input port data object */
