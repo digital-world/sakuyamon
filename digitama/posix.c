@@ -15,7 +15,6 @@
 #include <limits.h>
 #include <unistd.h>
 #include <syslog.h>
-#include <math.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -31,6 +30,11 @@
 
 #ifdef __macosx__
 #include <sys/sysctl.h>
+#include <sys/socket.h>
+#include <net/if.h>
+#include <net/if_mib.h>
+#include <net/if_var.h>
+#include <net/if_types.h>
 #endif
 
 #ifdef __linux__
@@ -55,15 +59,19 @@ void rsyslog(int priority, const char *topic, const char *message) {
 }
 
 /** System Monitor **/
-#define ROUND(x, m) (((long)round((x) * m)) / (m * 1.0))
 #define kb (1024) /* use MB directly may lose precision */
 
 static int ncores = 0;
 static long ramsize_kb = 0L;
 
-static hrtime_t link_snaptime = 0L;
-static long link_rbytes = 0L;
-static long link_obytes = 0L;
+#ifdef __illumos__
+static hrtime_t nic_snaptime = 0L;
+#else
+static uintmax_t nic_snaptime = 0L;
+#endif
+
+static size_t nic_ibytes = 0L;
+static size_t nic_obytes = 0L;
 
 #ifndef __linux__
 static time_t boot_time = 0;
@@ -75,8 +83,8 @@ static struct kstat_ctl *kstatistics = NULL;
 
 int system_statistics(time_t *timestamp, time_t *uptime,
                       long *nprocessors, double *avg01, double *avg05, double *avg15,
-                      long *ramtotal, long *ramfree, long *swaptotal, long *swapfree,
-                      long *rbytes, double *rkbps, long *obytes, double *okbps) {
+                      size_t *ramtotal, size_t *ramfree, size_t *swaptotal, size_t *swapfree,
+                      size_t *nic_in, double *nic_ikbps, size_t *nic_out, double *nic_okbps) {
     intptr_t status, pagesize;
 
 #ifdef __macosx__
@@ -186,9 +194,9 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         status = getloadavg(sysloadavg, sizeof(sysloadavg) / sizeof(double));
         if (status == -1) goto job_done;
 
-        (*avg01) = ROUND(sysloadavg[0], 100);
-        (*avg05) = ROUND(sysloadavg[1], 100);
-        (*avg15) = ROUND(sysloadavg[2], 100);
+        (*avg01) = sysloadavg[0];
+        (*avg05) = sysloadavg[1];
+        (*avg15) = sysloadavg[2];
     }
 
     /* cpu and processes statistics */ {
@@ -255,10 +263,11 @@ int system_statistics(time_t *timestamp, time_t *uptime,
     }
 
     /* network statistics */ {
+        double delta_time;
+
 #ifdef __illumos__
         kstat_t *syslink;
         kstat_named_t *recv, *send;
-        double delta_time;
 
         /**
          * TODO: if there are more physic netword interfaces.
@@ -273,16 +282,74 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         send = (kstat_named_t *)kstat_data_lookup(syslink, "obytes64");
         if (send == NULL) goto job_done;
 
-        (*rbytes) = recv->value.ul;
-        (*obytes) = send->value.ul;
+        (*nic_in) = recv->value.ul;
+        (*nic_out) = send->value.ul;
 
-        delta_time = (syslink->ks_snaptime - link_snaptime) / 1000.0 / 1000.0 / 1000.0;
-        (*rkbps) = ROUND(((*rbytes) - link_rbytes) / delta_time / kb, 1000);
-        (*okbps) = ROUND(((*obytes) - link_obytes) / delta_time / kb, 1000);
+        delta_time = (syslink->ks_snaptime - nic_snaptime) / 1000.0 / 1000.0 / 1000.0;
+        (*nic_ikbps) = ((*nic_in) - nic_ibytes) / delta_time / kb;
+        (*nic_okbps) = ((*nic_out) - nic_obytes) / delta_time / kb;
         
-        link_snaptime = syslink->ks_snaptime;
-        link_rbytes = (*rbytes);
-        link_obytes = (*obytes);
+        nic_snaptime = syslink->ks_snaptime;
+        nic_ibytes = (*nic_in);
+        nic_obytes = (*nic_out);
+#endif
+
+#ifdef __macosx__
+        struct ifmibdata ifinfo;
+        struct timeval snaptime;
+        uintmax_t snaptime_us;
+        size_t size, ifindex /*, ifcount */;
+        int ifmib[6];
+
+        size = sizeof(size_t);
+        ifmib[0] = CTL_NET;
+        ifmib[1] = PF_LINK;
+        ifmib[2] = NETLINK_GENERIC;
+
+        /**
+         * ifmib[3] = IFMIB_SYSTEM;
+         * ifmib[4] = IFMIB_IFCOUNT;
+         * status = sysctl(ifmib, 5, &ifcount, &size, NULL, 0);
+         * if (status == -1) goto job_done;
+         * 
+         * This should be the standard way,
+         * but weird, the `for` statement does not stop when ifindex < ifcount.
+         */
+
+        (*nic_in) = 0L;
+        (*nic_out) = 0L;
+
+        ifmib[3] = IFMIB_IFDATA;
+        ifmib[5] = IFDATA_GENERAL;
+        for (ifindex = 1 /* see `man ifmib` */; ifindex /* < ifcount */; ifindex ++) {
+            size = sizeof(struct ifmibdata);
+            ifmib[4] = ifindex;
+
+            status = sysctl(ifmib, 6, &ifinfo, &size, NULL, 0);
+            if (status == -1) {
+                if (errno == ENOENT) {
+                    /* this should not happen unless the weird bug appears. */
+                    errno = 0;
+                    break;
+                }
+                goto job_done;
+            } 
+
+            if (ifinfo.ifmd_data.ifi_type == IFT_ETHER) {
+                (*nic_in) += ifinfo.ifmd_data.ifi_ibytes;
+                (*nic_out) += ifinfo.ifmd_data.ifi_obytes;
+            }
+        }
+
+        gettimeofday(&snaptime, NULL);
+        snaptime_us = (snaptime.tv_sec * 1000 * 1000) + snaptime.tv_usec;
+        delta_time = (snaptime_us - nic_snaptime) / 1000.0 / 1000.0;
+        (*nic_ikbps) = ((*nic_in) - nic_ibytes) / delta_time / kb;
+        (*nic_okbps) = ((*nic_out) - nic_obytes) / delta_time / kb;
+        
+        nic_snaptime = snaptime_us;
+        nic_ibytes = (*nic_in);
+        nic_obytes = (*nic_out);
 #endif
     }
 
