@@ -142,7 +142,7 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         if (boot_time == 0) {
             struct timeval boottime;
 
-            size = sizeof(time_t);
+            size = sizeof(struct timeval);
             status = sysctlbyname("kern.boottime", &boottime, &size, NULL, 0);
             if ((status == -1) || (boottime.tv_sec == 0)) goto job_done;
 
