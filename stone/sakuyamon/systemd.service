@@ -8,7 +8,7 @@
 @(require setup/dirs)
 
 [Unit]
-Description=@(info-ref 'pkg-desc)
+Description=@(info-pkg-desc)
 After=network.target
 
 [Service]

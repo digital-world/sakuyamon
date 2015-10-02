@@ -12,14 +12,18 @@
   [[sakuyamon-digimon-terminus? sakuyamon-terminus-digimon?] : Boolean = #false]
 
   [[sakuyamon-ssl? sakuyamon-config-ssl?] : Boolean = #false]
-  [[sakuyamon-port sakuyamon-terminus-port] : (Option Index) = #false]
+  [[sakuyamon-port sakuyamon-config-port] : (Option Index) = #false]
   [[sakuyamon-max-waiting sakuyamon-config-max-waiting] : Positive-Index = 511]
   [[sakuyamon-connection-timeout sakuyamon-config-connnection-timeout] : Positive-Index = 30]
 
   [sakuyamon-timeout-default-servlet : Positive-Integer = 30]
-  [sakuyamon-timeout-servlet-connection : Positive-Integer = 86400])
+  [sakuyamon-timeout-servlet-connection : Positive-Integer = 86400]
 
-(define-parameter/extract-info (digimon-zone)
   [sakuyamon-foxpipe-port : Index = 514]
   [sakuyamon-foxpipe-max-waiting : Positive-Integer = 4]
-  [sakuyamon-foxpipe-sampling-interval : Positive-Real = 0.618])
+  [sakuyamon-foxpipe-sampling-interval : Positive-Real = 0.618]
+  
+  ; for configfiles
+  [[info-collection collection] : String]
+  [[info-pkg-desc pkg-desc] : String])
+
