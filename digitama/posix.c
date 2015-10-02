@@ -358,12 +358,10 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         (*nic_in) = 0L;
         (*nic_out) = 0L;
         for (ifthis = ifinfo; ifthis != NULL; ifthis = ifthis->ifa_next) {
-            ifstat = (struct rtnl_link_stats64 *)ifthis->ifa_data;
+            ifstat = (struct rtnl_link_stats *)ifthis->ifa_data;
 
             if ((ifstat != NULL) && !(ifthis->ifa_flags & IFF_LOOPBACK) && (ifthis->ifa_flags & IFF_RUNNING)
                     && (ifinfo->ifa_addr->sa_family == AF_PACKET)) {
-                printf("%s: %u|%u\n", ifthis->ifa_name, ifstat->rx_bytes, ifstat->tx_bytes);
-
                 (*nic_in) += (uintmax_t)ifstat->rx_bytes;
                 (*nic_out) += (uintmax_t)ifstat->tx_bytes;
             }
