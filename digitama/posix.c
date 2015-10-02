@@ -39,6 +39,9 @@
 
 #ifdef __linux__
 #include <sys/sysinfo.h>
+#include <net/if.h>
+#include <linux/if_link.h>
+#include <ifaddrs.h>
 #endif
 
 /** Syslog Logs **/
@@ -84,7 +87,7 @@ static struct kstat_ctl *kstatistics = NULL;
 int system_statistics(time_t *timestamp, time_t *uptime,
                       long *nprocessors, double *avg01, double *avg05, double *avg15,
                       size_t *ramtotal, size_t *ramfree, size_t *swaptotal, size_t *swapfree,
-                      size_t *nic_in, double *nic_ikbps, size_t *nic_out, double *nic_okbps) {
+                      uintmax_t *nic_in, double *nic_ikbps, uintmax_t *nic_out, double *nic_okbps) {
     intptr_t status, pagesize;
 
 #ifdef __macosx__
@@ -263,6 +266,7 @@ int system_statistics(time_t *timestamp, time_t *uptime,
     }
 
     /* network statistics */ {
+        uintmax_t snaptime_int;
         double delta_time;
 
 #ifdef __illumos__
@@ -270,7 +274,7 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         kstat_named_t *recv, *send;
 
         /**
-         * TODO: if there are more physic netword interfaces.
+         * TODO: if there are more physic network adapters.
          */
         syslink = kstat_lookup(kstatistics, "link", 0, NULL);
         if (syslink == NULL) goto job_done;
@@ -285,19 +289,13 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         (*nic_in) = recv->value.ul;
         (*nic_out) = send->value.ul;
 
+        snaptime_int = syslink->ks_snaptime;
         delta_time = (syslink->ks_snaptime - nic_snaptime) / 1000.0 / 1000.0 / 1000.0;
-        (*nic_ikbps) = ((*nic_in) - nic_ibytes) / delta_time / kb;
-        (*nic_okbps) = ((*nic_out) - nic_obytes) / delta_time / kb;
-        
-        nic_snaptime = syslink->ks_snaptime;
-        nic_ibytes = (*nic_in);
-        nic_obytes = (*nic_out);
 #endif
 
 #ifdef __macosx__
         struct ifmibdata ifinfo;
         struct timeval snaptime;
-        uintmax_t snaptime_us;
         size_t size, ifindex /*, ifcount */;
         int ifmib[6];
 
@@ -318,7 +316,6 @@ int system_statistics(time_t *timestamp, time_t *uptime,
 
         (*nic_in) = 0L;
         (*nic_out) = 0L;
-
         ifmib[3] = IFMIB_IFDATA;
         ifmib[5] = IFDATA_GENERAL;
         for (ifindex = 1 /* see `man ifmib` */; ifindex /* < ifcount */; ifindex ++) {
@@ -342,15 +339,44 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         }
 
         gettimeofday(&snaptime, NULL);
-        snaptime_us = (snaptime.tv_sec * 1000 * 1000) + snaptime.tv_usec;
-        delta_time = (snaptime_us - nic_snaptime) / 1000.0 / 1000.0;
+        snaptime_int = (snaptime.tv_sec * 1000 * 1000) + snaptime.tv_usec;
+        delta_time = (snaptime_int - nic_snaptime) / 1000.0 / 1000.0;
+#endif
+
+#ifdef __linux__
+        struct ifaddrs *ifinfo, *ifthis;
+        struct rtnl_link_stats *ifstat;
+        struct timeval snaptime;
+
+        status = getifaddrs(&ifinfo);
+        if (status == -1) goto job_done;
+
+        gettimeofday(&snaptime, NULL);
+        snaptime_int = (snaptime.tv_sec * 1000 * 1000) + snaptime.tv_usec;
+        delta_time = (snaptime_int - nic_snaptime) / 1000.0 / 1000.0;
+
+        (*nic_in) = 0L;
+        (*nic_out) = 0L;
+        for (ifthis = ifinfo; ifthis != NULL; ifthis = ifthis->ifa_next) {
+            ifstat = (struct rtnl_link_stats64 *)ifthis->ifa_data;
+
+            if ((ifstat != NULL) && !(ifthis->ifa_flags & IFF_LOOPBACK) && (ifthis->ifa_flags & IFF_RUNNING)
+                    && (ifinfo->ifa_addr->sa_family == AF_PACKET)) {
+                printf("%s: %u|%u\n", ifthis->ifa_name, ifstat->rx_bytes, ifstat->tx_bytes);
+
+                (*nic_in) += (uintmax_t)ifstat->rx_bytes;
+                (*nic_out) += (uintmax_t)ifstat->tx_bytes;
+            }
+        }
+        freeifaddrs(ifinfo);
+#endif
+
         (*nic_ikbps) = ((*nic_in) - nic_ibytes) / delta_time / kb;
         (*nic_okbps) = ((*nic_out) - nic_obytes) / delta_time / kb;
         
-        nic_snaptime = snaptime_us;
+        nic_snaptime = snaptime_int;
         nic_ibytes = (*nic_in);
         nic_obytes = (*nic_out);
-#endif
     }
 
 job_done:

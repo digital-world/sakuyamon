@@ -36,9 +36,9 @@
         [ramfree : (_ptr o _size)]
         [swaptotal : (_ptr o _size)]
         [swapfree : (_ptr o _size)]
-        [bytes/recv : (_ptr o _size)]
+        [bytes/recv : (_ptr o _uintmax)]
         [bytes/recv/kbps : (_ptr o _double)]
-        [bytes/send : (_ptr o _size)]
+        [bytes/send : (_ptr o _uintmax)]
         [bytes/send/kbps : (_ptr o _double)]
         -> [$? : _int]
         -> (cond [(zero? $?) (sysinfo timestamp uptime ncores lavg1 lavg5 lavg15 ramtotal ramfree swaptotal swapfree
