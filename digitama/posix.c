@@ -22,10 +22,12 @@
 
 #ifdef __illumos__
 #include <kstat.h> /* ld: ([illumos] . (kstat)) */
+#include <libzfs.h> /* ld: ([illumos] . (zfs)) */
+#include <libnvpair.h>
 #include <sys/loadavg.h>
-#include <sys/swap.h>
 #include <sys/sysinfo.h>
-#include <vm/anon.h>
+#include <sys/swap.h>
+#include <sys/fs/zfs.h>
 #endif
 
 #ifdef __macosx__
@@ -53,8 +55,8 @@ void rsyslog(int priority, const char *topic, const char *message) {
     } else {
         facility = LOG_USER;
     }
-                         
-    
+
+
     openlog("sakuyamon", LOG_PID | LOG_CONS, facility);
     setlogmask(LOG_UPTO(LOG_DEBUG));
     syslog(priority, "%s: %s\n", topic, message);
@@ -64,31 +66,85 @@ void rsyslog(int priority, const char *topic, const char *message) {
 /** System Monitor **/
 #define kb (1024) /* use MB directly may lose precision */
 
-static int ncores = 0;
-static long ramsize_kb = 0L;
-
-#ifdef __illumos__
-static hrtime_t nic_snaptime = 0L;
-#else
-static uintmax_t nic_snaptime = 0L;
-#endif
-
-static size_t nic_ibytes = 0L;
-static size_t nic_obytes = 0L;
-
 #ifndef __linux__
 static time_t boot_time = 0;
 #endif
 
 #ifdef __illumos__
 static struct kstat_ctl *kstatistics = NULL;
+static struct libzfs_handle *zfs = NULL;
+static hrtime_t snaptime = 0ULL;
+#endif
+
+static int ncores = 0;
+static size_t ramsize_kb = 0ULL;
+
+static size_t disk_ikb = 0ULL;
+static size_t disk_okb = 0ULL;
+static size_t nic_ikb = 0ULL;
+static size_t nic_okb = 0ULL;
+
+#ifdef __illumos__
+typedef struct zpool_iostat {
+    int zpcount;
+    int zperror;
+    size_t total;
+    size_t used;
+    size_t nread;
+    size_t nwritten;
+} zpool_iostat_t;
+
+static int fold_zpool_iostat(zpool_handle_t *zthis, void *attachment) {
+    zpool_iostat_t *iothis;
+    boolean_t missing;
+
+    iothis = (struct zpool_iostat *)attachment;
+    zpool_refresh_stats(zthis, &missing);
+    if (missing == B_TRUE) {
+        /* TODO: Maybe its not an error. */
+        iothis->zperror += 1;
+    } else {
+        nvlist_t *config, *zptree;
+        int status, length;
+
+        /**
+         * see `zpool`_main.c
+         *
+         * libzfs is not a public API, meanwhile its internal data structure manages
+         * both the latest status and the last status for calculating read/write rate.
+         * So we just ignore the old status since we also manage it own out own.
+         **/
+        config = zpool_get_config(zthis, NULL);
+        status = nvlist_lookup_nvlist(config, ZPOOL_CONFIG_VDEV_TREE, &zptree);
+        if (status != 0) {
+            iothis->zperror += 1;
+        } else {
+            vdev_stat_t *ioinfo;
+
+            status = nvlist_lookup_uint64_array(zptree, ZPOOL_CONFIG_VDEV_STATS, (uint64_t **)&ioinfo, &length);
+            if (status != 0) {
+                iothis->zperror += 1;
+            } else {
+                iothis->zpcount += 1;
+                iothis->total += ioinfo->vs_space;
+                iothis->used += ioinfo->vs_alloc;
+                iothis->nread += ioinfo->vs_bytes[ZIO_TYPE_READ];
+                iothis->nwritten += ioinfo->vs_bytes[ZIO_TYPE_WRITE];
+            }
+        }
+    }
+
+    return 0;
+}
 #endif
 
 int system_statistics(time_t *timestamp, time_t *uptime,
-                      long *nprocessors, double *avg01, double *avg05, double *avg15,
-                      size_t *ramtotal, size_t *ramfree, size_t *swaptotal, size_t *swapfree,
-                      uintmax_t *nic_in, double *nic_ikbps, uintmax_t *nic_out, double *nic_okbps) {
+        long *nprocessors, double *avg01, double *avg05, double *avg15,
+        size_t *ramtotal, size_t *ramfree, size_t *swaptotal, size_t *swapfree,
+        size_t *fstotal, size_t *fsfree, double *disk_ikbps, double *disk_okbps,
+        uintmax_t *nic_in, double *nic_ikbps, uintmax_t *nic_out, double *nic_okbps) {
     intptr_t status, pagesize;
+    double duration_s;
 
 #ifdef __macosx__
     size_t size;
@@ -96,18 +152,26 @@ int system_statistics(time_t *timestamp, time_t *uptime,
 
 #ifdef __linux__
     struct sysinfo info;
-    
+
     status = sysinfo(&info);
     if (status == -1) goto job_done;
 #endif
 
 #ifdef __illumos__
+    struct kstat *kthis;
+
     if (kstatistics == NULL) {
         kstatistics = kstat_open();
         if (kstatistics == NULL) goto job_done;
     } else {
         status = kstat_chain_update(kstatistics);
         if (status == -1) goto job_done;
+    }
+
+    if (zfs == NULL) {
+        /* (zpool_iter) will always fold the chain in real time */
+        zfs = libzfs_init();
+        if (zfs == NULL) goto job_done;
     }
 #endif
 
@@ -120,29 +184,31 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         }
 
 #ifdef __illumos__
+        kthis = kstat_lookup(kstatistics, "unix", 0, "system_misc");
+        if (kthis == NULL) goto job_done;
+        status = kstat_read(kstatistics, kthis, NULL);
+        if (status == -1) goto job_done;
+
         if (boot_time == 0) {
-            kstat_t *sysmisc;
-            kstat_named_t *dt;
+            kstat_named_t *nthis;
 
-            sysmisc = kstat_lookup(kstatistics, "unix", 0, "system_misc");
-            if (sysmisc == NULL) goto job_done;
-            status = kstat_read(kstatistics, sysmisc, NULL);
-            if (status == -1) goto job_done;
-
-            dt = (kstat_named_t *)kstat_data_lookup(sysmisc, "boot_time");
-            if (dt == NULL) goto job_done;
-            boot_time = dt->value.ui32;
+            nthis = (kstat_named_t *)kstat_data_lookup(kthis, "boot_time");
+            if (nthis == NULL) goto job_done;
+            boot_time = nthis->value.ui32;
         }
 
         if (ramsize_kb == 0) {
             size_t ram_raw;
-            
-            /* a little larger than kstat:unix:system_pages:physmem */
+
+            /* zone specific */
             ram_raw = sysconf(_SC_PHYS_PAGES);
             if (ram_raw < 0) goto job_done;
-            
+
             ramsize_kb = ram_raw / kb * pagesize;
         }
+
+        duration_s = (kthis->ks_snaptime - snaptime) / 1000.0 / 1000.0 / 1000.0;
+        snaptime = kthis->ks_snaptime;
 #endif
 
 #ifdef __macosx__
@@ -162,7 +228,7 @@ int system_statistics(time_t *timestamp, time_t *uptime,
             size = sizeof(size_t);
             status = sysctlbyname("hw.memsize", &ram_raw, &size, NULL, 0);
             if (status == -1) goto job_done;
-            
+
             ramsize_kb = ram_raw / kb;
         }
 #endif
@@ -174,15 +240,18 @@ int system_statistics(time_t *timestamp, time_t *uptime,
 #endif
     }
 
-    /* output predefined constants */ {
+    /* simple output */ {
         errno = 0;
 
+        (*timestamp) = time(NULL);
         (*nprocessors) = ncores;
         (*ramtotal) = ramsize_kb;
-    }
-
-    /* timestamp and uptime */ {
-        (*timestamp) = time(NULL);
+        (*swaptotal) = 0ULL;
+        (*swapfree) = 0ULL;
+        (*fstotal) = 0ULL;
+        (*fsfree) = 0ULL;
+        (*nic_in) = 0ULL;
+        (*nic_out) = 0ULL;
 
 #ifdef __linux__
         (*uptime) = info.uptime;
@@ -191,8 +260,13 @@ int system_statistics(time_t *timestamp, time_t *uptime,
 #endif
     }
 
-    /* system load average */ {
+    /* cpu and processes statistics */ {
         double sysloadavg[3];
+
+        /**
+         * TODO: Meanwhile the load average is good enough to
+         *       show the status of usage and saturation.
+         **/
 
         status = getloadavg(sysloadavg, sizeof(sysloadavg) / sizeof(double));
         if (status == -1) goto job_done;
@@ -202,32 +276,44 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         (*avg15) = sysloadavg[2];
     }
 
-    /* cpu and processes statistics */ {
-        /**
-         * TODO: Meanwhile the load average is good enough to
-         *       show the status of usage and saturation.
-         **/
-    }
-
     /* memory statistics */ {
 #ifdef __illumos__
-        struct anoninfo swapinfo;
-        size_t mfree, stotal, sfree;
+        struct swaptable *stinfo;
+        struct swapent *swap;
+        int swapcount, stindex;
 
-        /* smaller than kstat:unix:system_pages:availrmem */
-        /* a little larger than kstat:unix:system_pages:pagesfree/freemem */
-        mfree = sysconf(_SC_AVPHYS_PAGES);
-        if (mfree < 0) goto job_done;
-        status = swapctl(SC_AINFO, &swapinfo);
-        if (status == -1) goto job_done;
-
-        (*ramfree) = mfree / kb * pagesize;
+        /* zone specific */
+        status = sysconf(_SC_AVPHYS_PAGES);
+        if (status < 0) goto job_done;
+        (*ramfree) = status / kb * pagesize;
 
         /**
-         * This algorithm relates to `swap -s`, see 'Solaris Performance and Tools'.
+         * The term swap in illumos relates to both anon pages and swapfs,
+         * Here we only need swapfs just as it is in other Unices.
+         * see `swap`.c
          **/
-        (*swaptotal) = swapinfo.ani_max / kb * pagesize;
-        (*swapfree) = (swapinfo.ani_max - swapinfo.ani_resv) / kb * pagesize;
+
+        swapcount = swapctl(SC_GETNSWP, NULL);
+        if (swapcount == -1) goto job_done;
+        if (swapcount > 0) {
+            /* this elegant initialization is full of tricks [maybe stackoverflow]. */
+            char storage[sizeof(int) + swapcount * sizeof(swapent_t)];
+            char path[swapcount][MAXPATHLEN];
+
+            stinfo = (struct swaptable *)&storage;
+            stinfo->swt_n = swapcount;
+            for (stindex = 0, swap = stinfo->swt_ent; stindex < swapcount; stindex ++, swap ++) {
+                swap->ste_path = (char *)&path[stindex];
+            }
+            /* end of [maybe stackoverflow] */
+            
+            status = swapctl(SC_LIST, stinfo);
+            if (status == -1) goto job_done;
+            for (stindex = 0, swap = stinfo->swt_ent; stindex < swapcount; stindex ++, swap ++) {
+                (*swaptotal) += swap->ste_pages * pagesize / kb;
+                (*swapfree) += swap->ste_free * pagesize / kb;
+            }
+        }
 #endif
 
 #ifdef __macosx__
@@ -243,17 +329,10 @@ int system_statistics(time_t *timestamp, time_t *uptime,
         size = sizeof(struct xsw_usage);
         status = sysctlbyname("vm.swapusage", &swapinfo, &size, NULL, 0);
         if (status == -1) goto job_done;
-        
-        /**
-         * see `vm_stat`.c
-         * TODO: These concepts are full of mystery.
-         **/
+
+        /*  see `vm_stat`.c */
         (*ramfree) = (free_raw - speculative_raw) / kb * pagesize;
-        
-        /**
-         * see `sysctl`.c.
-         * NOTE: there is no need to multiple pagesize.
-         */
+        /* see `sysctl`.c.  NOTE: there is no need to multiple pagesize. */
         (*swaptotal) = swapinfo.xsu_total / kb;
         (*swapfree) = swapinfo.xsu_avail / kb;
 #endif
@@ -265,37 +344,60 @@ int system_statistics(time_t *timestamp, time_t *uptime,
 #endif
     }
 
-    /* network statistics */ {
-        uintmax_t snaptime_int;
-        double delta_time;
+    /* disk statistics */ {
+        uintmax_t disk_in, disk_out;
 
 #ifdef __illumos__
-        kstat_t *syslink;
-        kstat_named_t *recv, *send;
+        zpool_iostat_t zpiostat;
 
         /**
-         * TODO: if there are more physic network adapters.
-         */
-        syslink = kstat_lookup(kstatistics, "link", 0, NULL);
-        if (syslink == NULL) goto job_done;
-        status = kstat_read(kstatistics, syslink, NULL);
-        if (status == -1) goto job_done;
+         * ZFS is one of the killer features of Illumos-based Operation System, and
+         * the swapfs is also under control by zfs. TODO: For collecting simple samples,
+         * to see if we still have to check the raw disk status.
+         **/
 
-        recv = (kstat_named_t *)kstat_data_lookup(syslink, "rbytes64");
-        if (recv == NULL) goto job_done;
-        send = (kstat_named_t *)kstat_data_lookup(syslink, "obytes64");
-        if (send == NULL) goto job_done;
+        memset(&zpiostat, 0, sizeof(zpool_iostat_t));
+        zpool_iter(zfs, fold_zpool_iostat, &zpiostat);
+        if ((zpiostat.zpcount == 0) && (zpiostat.zperror > 0)) goto job_done;
 
-        (*nic_in) = recv->value.ul;
-        (*nic_out) = send->value.ul;
+        (*fstotal) = zpiostat.total / kb;
+        (*fsfree) = (zpiostat.total - zpiostat.used) / kb;
+        disk_in = zpiostat.nread / kb;
+        disk_out = zpiostat.nwritten / kb;
 
-        snaptime_int = syslink->ks_snaptime;
-        delta_time = (syslink->ks_snaptime - nic_snaptime) / 1000.0 / 1000.0 / 1000.0;
+        /* libzfs has its own error handler and might not care about errno */
+        errno = 0;
+#endif
+
+        (*disk_ikbps) = (disk_in - disk_ikb) / duration_s;
+        (*disk_okbps) = (disk_out - disk_okb) / duration_s;
+
+        disk_ikb = disk_in;
+        disk_okb = disk_out;
+    }
+
+    /* network statistics */ {
+#ifdef __illumos__
+        kstat_named_t *received, *sent;
+
+        for (kthis = kstatistics->kc_chain; kthis !=NULL; kthis = kthis->ks_next) {
+            if (strncmp(kthis->ks_module, "link", 5) == 0) { /* ks_class == "net" */
+                status = kstat_read(kstatistics, kthis, NULL);
+                if (status == -1) goto job_done;
+
+                received = (kstat_named_t *)kstat_data_lookup(kthis, "rbytes64");
+                if (received == NULL) goto job_done;
+                sent = (kstat_named_t *)kstat_data_lookup(kthis, "obytes64");
+                if (sent == NULL) goto job_done;
+
+                (*nic_in) += received->value.ul / kb;
+                (*nic_out) += sent->value.ul / kb;
+            }
+        }
 #endif
 
 #ifdef __macosx__
         struct ifmibdata ifinfo;
-        struct timeval snaptime;
         size_t size, ifindex /*, ifcount */;
         int ifmib[6];
 
@@ -314,8 +416,6 @@ int system_statistics(time_t *timestamp, time_t *uptime,
          * but weird, the `for` statement does not stop when ifindex < ifcount.
          */
 
-        (*nic_in) = 0L;
-        (*nic_out) = 0L;
         ifmib[3] = IFMIB_IFDATA;
         ifmib[5] = IFDATA_GENERAL;
         for (ifindex = 1 /* see `man ifmib` */; ifindex /* < ifcount */; ifindex ++) {
@@ -333,48 +433,36 @@ int system_statistics(time_t *timestamp, time_t *uptime,
             } 
 
             if (ifinfo.ifmd_data.ifi_type == IFT_ETHER) {
-                (*nic_in) += ifinfo.ifmd_data.ifi_ibytes;
-                (*nic_out) += ifinfo.ifmd_data.ifi_obytes;
+                (*nic_in) += ifinfo.ifmd_data.ifi_ibytes / kb;
+                (*nic_out) += ifinfo.ifmd_data.ifi_obytes / kb;
             }
         }
-
-        gettimeofday(&snaptime, NULL);
-        snaptime_int = (snaptime.tv_sec * 1000 * 1000) + snaptime.tv_usec;
-        delta_time = (snaptime_int - nic_snaptime) / 1000.0 / 1000.0;
 #endif
 
 #ifdef __linux__
         struct ifaddrs *ifinfo, *ifthis;
         struct rtnl_link_stats *ifstat;
-        struct timeval snaptime;
 
         status = getifaddrs(&ifinfo);
         if (status == -1) goto job_done;
 
-        gettimeofday(&snaptime, NULL);
-        snaptime_int = (snaptime.tv_sec * 1000 * 1000) + snaptime.tv_usec;
-        delta_time = (snaptime_int - nic_snaptime) / 1000.0 / 1000.0;
-
-        (*nic_in) = 0L;
-        (*nic_out) = 0L;
         for (ifthis = ifinfo; ifthis != NULL; ifthis = ifthis->ifa_next) {
             ifstat = (struct rtnl_link_stats *)ifthis->ifa_data;
 
             if ((ifstat != NULL) && !(ifthis->ifa_flags & IFF_LOOPBACK) && (ifthis->ifa_flags & IFF_RUNNING)
                     && (ifinfo->ifa_addr->sa_family == AF_PACKET)) {
-                (*nic_in) += (uintmax_t)ifstat->rx_bytes;
-                (*nic_out) += (uintmax_t)ifstat->tx_bytes;
+                (*nic_in) += (uintmax_t)ifstat->rx_bytes / kb;
+                (*nic_out) += (uintmax_t)ifstat->tx_bytes / kb;
             }
         }
         freeifaddrs(ifinfo);
 #endif
 
-        (*nic_ikbps) = ((*nic_in) - nic_ibytes) / delta_time / kb;
-        (*nic_okbps) = ((*nic_out) - nic_obytes) / delta_time / kb;
-        
-        nic_snaptime = snaptime_int;
-        nic_ibytes = (*nic_in);
-        nic_obytes = (*nic_out);
+        (*nic_ikbps) = ((*nic_in) - nic_ikb) / duration_s;
+        (*nic_okbps) = ((*nic_out) - nic_okb) / duration_s;
+
+        nic_ikb = (*nic_in);
+        nic_okb = (*nic_out);
     }
 
 job_done:

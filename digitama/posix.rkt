@@ -22,7 +22,8 @@
 (struct sysinfo (timestamp uptime
                            ncores loadavg/01min loadavg/05min loadavg/15min
                            ram/total ram/free swap/total swap/free
-                           bytes/recv bytes/recv/kbps bytes/send bytes/send/kbps)
+                           fs/total fs/free disk/rkbps disk/wkbps
+                           nic/received nic/rkbps nic/sent nic/skbps)
   #:prefab)
                          
 (define-digitama system_statistics
@@ -36,13 +37,17 @@
         [ramfree : (_ptr o _size)]
         [swaptotal : (_ptr o _size)]
         [swapfree : (_ptr o _size)]
-        [bytes/recv : (_ptr o _uintmax)]
-        [bytes/recv/kbps : (_ptr o _double)]
-        [bytes/send : (_ptr o _uintmax)]
-        [bytes/send/kbps : (_ptr o _double)]
+        [fstotal : (_ptr o _size)]
+        [fsfree : (_ptr o _uintmax)]
+        [disk-rkbps : (_ptr o _double)]
+        [disk-wkbps : (_ptr o _double)]
+        [nic-rkb : (_ptr o _uintmax)]
+        [nic-rkbps : (_ptr o _double)]
+        [nic-skb : (_ptr o _uintmax)]
+        [nic-skbps : (_ptr o _double)]
         -> [$? : _int]
         -> (cond [(zero? $?) (sysinfo timestamp uptime ncores lavg1 lavg5 lavg15 ramtotal ramfree swaptotal swapfree
-                                      bytes/recv bytes/recv/kbps bytes/send bytes/send/kbps)]
+                                      fstotal fsfree disk-rkbps disk-wkbps nic-rkb nic-rkbps nic-skb nic-skbps)]
                  [else (raise-foreign-error 'system_statistics $?)])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -66,10 +71,14 @@
                            [ram/free : Positive-Integer]
                            [swap/total : Natural]
                            [swap/free : Natural]
-                           [bytes/recv : Natural]
-                           [bytes/recv/kbps : Real]
-                           [bytes/send : Natural]
-                           [bytes/send/kbps : Real])]
+                           [fs/total : Natural]
+                           [fs/free : Natural]
+                           [disk/rkbps : Real]
+                           [disk/wkbps : Real]
+                           [nic/received : Natural]
+                           [nic/rkbps : Real]
+                           [nic/sent : Natural]
+                           [nic/skbps : Real])]
                          [rsyslog (-> Symbol Symbol String Void)]
                          [system_statistics (-> sysinfo)]))
 
@@ -77,7 +86,8 @@
 (module* main typed/racket
   (require (submod ".." typed/ffi))
 
+  (void (system_statistics))
   (with-handlers ([exn:break? void])
     (for ([i (in-naturals 1)])
-      (printf "~a: ~a~n" i (system_statistics))
+      (printf "~a| ~a~n" (~a i #:min-width 4) (system_statistics))
       (sleep 1))))

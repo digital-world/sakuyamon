@@ -113,6 +113,9 @@
                               (when (zero? (geteuid))
                                 (syslog-perror "Misconfigured: Privilege Has Not Dropped!")
                                 (exit 'ECONFIG))
+
+                              ;;; initialize constants in native space and see if we have privilleges
+                              (void (system_statistics))
                               
                               (match-let-values ([(_ port _ _) (udp-addresses foxpipe #true)])
                                 (foxlog 'notice "waiting rsyslog packets on ~a." port))
