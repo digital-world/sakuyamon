@@ -86,8 +86,6 @@ static size_t nic_okb = 0ULL;
 
 #ifdef __illumos__
 typedef struct zpool_iostat {
-    int zpcount;
-    int zperror;
     size_t total;
     size_t used;
     size_t nread;
@@ -100,10 +98,7 @@ static int fold_zpool_iostat(zpool_handle_t *zthis, void *attachment) {
 
     iothis = (struct zpool_iostat *)attachment;
     zpool_refresh_stats(zthis, &missing);
-    if (missing == B_TRUE) {
-        /* TODO: Maybe its not an error. */
-        iothis->zperror += 1;
-    } else {
+    if (missing == B_FALSE) {
         nvlist_t *config, *zptree;
         int status, length;
 
@@ -116,16 +111,11 @@ static int fold_zpool_iostat(zpool_handle_t *zthis, void *attachment) {
          **/
         config = zpool_get_config(zthis, NULL);
         status = nvlist_lookup_nvlist(config, ZPOOL_CONFIG_VDEV_TREE, &zptree);
-        if (status != 0) {
-            iothis->zperror += 1;
-        } else {
+        if (status == 0) {
             vdev_stat_t *ioinfo;
 
             status = nvlist_lookup_uint64_array(zptree, ZPOOL_CONFIG_VDEV_STATS, (uint64_t **)&ioinfo, &length);
-            if (status != 0) {
-                iothis->zperror += 1;
-            } else {
-                iothis->zpcount += 1;
+            if (status == 0) {
                 iothis->total += ioinfo->vs_space;
                 iothis->used += ioinfo->vs_alloc;
                 iothis->nread += ioinfo->vs_bytes[ZIO_TYPE_READ];
@@ -138,11 +128,12 @@ static int fold_zpool_iostat(zpool_handle_t *zthis, void *attachment) {
 }
 #endif
 
-int system_statistics(time_t *timestamp, time_t *uptime,
+char *system_statistics(time_t *timestamp, time_t *uptime,
         long *nprocessors, double *avg01, double *avg05, double *avg15,
         size_t *ramtotal, size_t *ramfree, size_t *swaptotal, size_t *swapfree,
         size_t *fstotal, size_t *fsfree, double *disk_ikbps, double *disk_okbps,
         uintmax_t *nic_in, double *nic_ikbps, uintmax_t *nic_out, double *nic_okbps) {
+    char *alterrmsg;
     intptr_t status, pagesize;
     double duration_s;
 
@@ -242,6 +233,7 @@ int system_statistics(time_t *timestamp, time_t *uptime,
 
     /* simple output */ {
         errno = 0;
+        alterrmsg = NULL;
 
         (*timestamp) = time(NULL);
         (*nprocessors) = ncores;
@@ -358,15 +350,16 @@ int system_statistics(time_t *timestamp, time_t *uptime,
 
         memset(&zpiostat, 0, sizeof(zpool_iostat_t));
         zpool_iter(zfs, fold_zpool_iostat, &zpiostat);
-        if ((zpiostat.zpcount == 0) && (zpiostat.zperror > 0)) goto job_done;
+        errno = libzfs_errno(zfs);
+        if (errno != 0) {
+            alterrmsg = (char *)libzfs_error_description(zfs);
+            goto job_done;
+        }
 
         (*fstotal) = zpiostat.total / kb;
         (*fsfree) = (zpiostat.total - zpiostat.used) / kb;
         disk_in = zpiostat.nread / kb;
         disk_out = zpiostat.nwritten / kb;
-
-        /* libzfs has its own error handler and might not care about errno */
-        errno = 0;
 #endif
 
         (*disk_ikbps) = (disk_in - disk_ikb) / duration_s;
@@ -466,7 +459,7 @@ int system_statistics(time_t *timestamp, time_t *uptime,
     }
 
 job_done:
-    return errno;
+    return alterrmsg;
 }
 
 /* 

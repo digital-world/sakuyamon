@@ -27,7 +27,8 @@
   #:prefab)
                          
 (define-digitama system_statistics
-  (_fun [timestamp : (_ptr o _long)]
+  (_fun #:save-errno 'posix
+        [timestamp : (_ptr o _long)]
         [uptime : (_ptr o _long)]
         [ncores : (_ptr o _int)]
         [lavg1 : (_ptr o _double)]
@@ -45,10 +46,11 @@
         [nic-rkbps : (_ptr o _double)]
         [nic-skb : (_ptr o _uintmax)]
         [nic-skbps : (_ptr o _double)]
-        -> [$? : _int]
-        -> (cond [(zero? $?) (sysinfo timestamp uptime ncores lavg1 lavg5 lavg15 ramtotal ramfree swaptotal swapfree
-                                      fstotal fsfree disk-rkbps disk-wkbps nic-rkb nic-rkbps nic-skb nic-skbps)]
-                 [else (raise-foreign-error 'system_statistics $?)])))
+        -> [alterrmsg : _string]
+        -> (cond [(zero? (saved-errno)) (sysinfo timestamp uptime ncores lavg1 lavg5 lavg15 ramtotal ramfree swaptotal swapfree
+                                                 fstotal fsfree disk-rkbps disk-wkbps nic-rkb nic-rkbps nic-skb nic-skbps)]
+                 [(string? alterrmsg) (raise-foreign-error 'system_statistics (saved-errno) #:strerror (lambda [libzfs-errno] alterrmsg))]
+                 [else (raise-foreign-error 'system_statistics (saved-errno))])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module* typed/ffi typed/racket
