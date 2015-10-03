@@ -37,6 +37,8 @@
 #include <net/if_mib.h>
 #include <net/if_var.h>
 #include <net/if_types.h>
+#include <mach/mach_host.h>
+#include <mach/vm_statistics.h>
 #endif
 
 #ifdef __linux__
@@ -74,6 +76,10 @@ static time_t boot_time = 0;
 static struct kstat_ctl *kstatistics = NULL;
 static struct libzfs_handle *zfs = NULL;
 static hrtime_t snaptime = 0ULL;
+#endif
+
+#ifdef __macosx__
+static uintmax_t snaptime = 0ULL;
 #endif
 
 static int ncores = 0;
@@ -195,7 +201,7 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
             ram_raw = sysconf(_SC_PHYS_PAGES);
             if (ram_raw < 0) goto job_done;
 
-            ramsize_kb = ram_raw / kb * pagesize;
+            ramsize_kb = ram_raw * pagesize / kb;
         }
 
         duration_s = (kthis->ks_snaptime - snaptime) / 1000.0 / 1000.0 / 1000.0;
@@ -222,11 +228,22 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
 
             ramsize_kb = ram_raw / kb;
         }
+        
+        {
+            struct timeval now;
+            uintmax_t now_us;
+
+            gettimeofday(&now, NULL);
+            
+            now_us = now.tv_sec * 1000 * 1000 + now.tv_usec;
+            duration_s = (now_us - snaptime) / 1000.0 / 1000.0;
+            snaptime = now_us;
+        }
 #endif
 
 #ifdef __linux__
         if (ramsize_kb == 0) {
-            ramsize_kb = info.totalram / kb * info.mem_unit;
+            ramsize_kb = info.totalram * info.mem_unit / kb;
         }
 #endif
     }
@@ -268,7 +285,7 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         (*avg15) = sysloadavg[2];
     }
 
-    /* memory statistics */ {
+    /* memory and swapfs statistics */ {
 #ifdef __illumos__
         struct swaptable *stinfo;
         struct swapent *swap;
@@ -277,7 +294,7 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         /* zone specific */
         status = sysconf(_SC_AVPHYS_PAGES);
         if (status < 0) goto job_done;
-        (*ramfree) = status / kb * pagesize;
+        (*ramfree) = status * pagesize / kb;
 
         /**
          * The term swap in illumos relates to both anon pages and swapfs,
@@ -309,30 +326,35 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
 #endif
 
 #ifdef __macosx__
+        struct vm_statistics vminfo;
+        mach_msg_type_number_t count;
         struct xsw_usage swapinfo;
-        size_t free_raw, speculative_raw;
+        
+        bzero(&vminfo, sizeof(vminfo));
+        count = HOST_VM_INFO_COUNT;
+        status = host_statistics(mach_host_self(), HOST_VM_INFO, (host_info64_t)&vminfo, &count);
+        if (status != KERN_SUCCESS) goto job_done;
+        /**
+         * see vm_statistics.h
+	     * NB: speculative pages are already accounted for in "free_count",
+	     * so "speculative_count" is the number of "free" pages that are
+	     * used to hold data that was read speculatively from disk but
+	     * haven't actually been used by anyone so far.
+         **/
+        (*ramfree) = (vminfo.free_count - vminfo.speculative_count) * pagesize / kb;
 
-        size = sizeof(size_t);
-        status = sysctlbyname("vm.page_free_count", &free_raw, &size, NULL, 0);
-        if (status == -1) goto job_done;
-        size = sizeof(size_t);
-        status = sysctlbyname("vm.page_speculative_count", &speculative_raw, &size, NULL, 0);
-        if (status == -1) goto job_done;
         size = sizeof(struct xsw_usage);
         status = sysctlbyname("vm.swapusage", &swapinfo, &size, NULL, 0);
         if (status == -1) goto job_done;
-
-        /*  see `vm_stat`.c */
-        (*ramfree) = (free_raw - speculative_raw) / kb * pagesize;
         /* see `sysctl`.c.  NOTE: there is no need to multiple pagesize. */
         (*swaptotal) = swapinfo.xsu_total / kb;
         (*swapfree) = swapinfo.xsu_avail / kb;
 #endif
 
 #ifdef __linux__
-        (*ramfree) = info.freeram / kb * info.mem_unit;
-        (*swaptotal) = info.totalswap / kb * info.mem_unit;
-        (*swapfree) = info.freeswap / kb * info.mem_unit;
+        (*ramfree) = info.freeram * info.mem_unit / kb;
+        (*swaptotal) = info.totalswap * info.mem_unit / kb;
+        (*swapfree) = info.freeswap * info.mem_unit / kb;
 #endif
     }
 
