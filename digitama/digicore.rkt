@@ -21,7 +21,7 @@
 
   [sakuyamon-foxpipe-port : Index = 514]
   [sakuyamon-foxpipe-max-waiting : Positive-Integer = 4]
-  [sakuyamon-foxpipe-sampling-interval : Positive-Real = 0.618]
+  [sakuyamon-foxpipe-sampling-interval : Positive-Real = 1.618]
   
   ; for configfiles
   [[info-collection collection] : String]

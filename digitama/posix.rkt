@@ -88,8 +88,16 @@
 (module* main typed/racket
   (require (submod ".." typed/ffi))
 
-  (void (system_statistics))
+  (require "digicore.rkt")
+
+  (void (time (system_statistics)))
+  (define boottime : Real (current-inexact-milliseconds))
+  (define task : Thread
+    (timer-thread 1.0 (lambda [times] (printf "~a| ~a~n"
+                                              (~r (/ (- (current-inexact-milliseconds) boottime) 1000.0)
+                                                  #:precision '(= 6)
+                                                  #:min-width 12)
+                                              (system_statistics)))))
   (with-handlers ([exn:break? void])
-    (for ([i (in-naturals 1)])
-      (printf "~a| ~a~n" (~a i #:min-width 4) (system_statistics))
-      (sleep 1))))
+    (sync/enable-break never-evt))
+  (break-thread task))
