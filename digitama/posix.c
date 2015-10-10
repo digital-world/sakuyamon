@@ -21,8 +21,8 @@
 #include <sys/time.h>
 
 #ifdef __illumos__
-#include <kstat.h> /* ld: ([illumos] . (kstat)) */
-#include <libzfs.h> /* ld: ([illumos] . (zfs)) */
+#include <kstat.h> /* ld:illumos: (kstat) */
+#include <libzfs.h> /* ld:illumos: (zfs) */
 #include <libnvpair.h>
 #include <sys/loadavg.h>
 #include <sys/sysinfo.h>
@@ -39,6 +39,16 @@
 #include <net/if_types.h>
 #include <mach/mach_host.h>
 #include <mach/vm_statistics.h>
+#define IOKIT 1 /* for io_name_t */
+#include <sys/param.h>
+#include <sys/ucred.h>
+#include <sys/mount.h>
+#include <CoreFoundation/CoreFoundation.h>
+#include <IOKit/IOKitLib.h> /* ld:framework: (CoreFoundation Foundation IOKit) */
+#include <IOKit/storage/IOBlockStorageDriver.h>
+#include <IOKit/storage/IOMedia.h>
+#include <IOKit/IOReturn.h>
+#include <IOKit/IOBSD.h>
 #endif
 
 #ifdef __linux__
@@ -68,10 +78,6 @@ void rsyslog(int priority, const char *topic, const char *message) {
 /** System Monitor **/
 #define kb (1024) /* use MB directly may lose precision */
 
-#ifndef __linux__
-static time_t boot_time = 0;
-#endif
-
 #ifdef __illumos__
 static struct kstat_ctl *kstatistics = NULL;
 static struct libzfs_handle *zfs = NULL;
@@ -80,6 +86,13 @@ static hrtime_t snaptime = 0ULL;
 
 #ifdef __macosx__
 static uintmax_t snaptime = 0ULL;
+static mach_port_t localhost, iostat;
+#endif
+
+#ifdef __linux__
+static uintmax_t snaptime = 0ULL;
+#else
+static time_t boot_time = 0;
 #endif
 
 static int ncores = 0;
@@ -144,7 +157,7 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
     double duration_s;
 
 #ifdef __macosx__
-    size_t size;
+    size_t sysdatum_size;
 #endif
 
 #ifdef __linux__
@@ -175,11 +188,6 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
     /* static initialize */ {
         pagesize = getpagesize();
 
-        if (ncores <= 0) {
-            ncores = sysconf(_SC_NPROCESSORS_ONLN);
-            if (ncores == -1) goto job_done;
-        }
-
 #ifdef __illumos__
         kthis = kstat_lookup(kstatistics, "unix", 0, "system_misc");
         if (kthis == NULL) goto job_done;
@@ -194,7 +202,15 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
             boot_time = nthis->value.ui32;
         }
 
-        if (ramsize_kb == 0) {
+        /* illumos zone can change cpu or core online */ {
+            kstat_named_t *nthis;
+
+            nthis = (kstat_named_t *)kstat_data_lookup(kthis, "ncpus");
+            if (nthis == NULL) goto job_done;
+            ncores = nthis->value.ui32;
+        }
+
+        /* illumos zone can change physical memory online */ {
             size_t ram_raw;
 
             /* zone specific */
@@ -212,21 +228,40 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         if (boot_time == 0) {
             struct timeval boottime;
 
-            size = sizeof(struct timeval);
-            status = sysctlbyname("kern.boottime", &boottime, &size, NULL, 0);
+            sysdatum_size = sizeof(struct timeval);
+            status = sysctlbyname("kern.boottime", &boottime, &sysdatum_size, NULL, 0);
             if ((status == -1) || (boottime.tv_sec == 0)) goto job_done;
 
             boot_time = boottime.tv_sec;
         }
 
+        if (ncores == 0) {
+            size_t ncpu;
+
+            sysdatum_size = sizeof(size_t);
+            status = sysctlbyname("hw.ncpu", &ncpu, &sysdatum_size, NULL, 0);
+            if (status == -1) goto job_done;
+
+            ncores = ncpu;
+        }
+
         if (ramsize_kb == 0) {
             size_t ram_raw;
 
-            size = sizeof(size_t);
-            status = sysctlbyname("hw.memsize", &ram_raw, &size, NULL, 0);
+            sysdatum_size = sizeof(size_t);
+            status = sysctlbyname("hw.memsize", &ram_raw, &sysdatum_size, NULL, 0);
             if (status == -1) goto job_done;
 
             ramsize_kb = ram_raw / kb;
+        }
+
+        if (localhost == 0) {
+            localhost = mach_host_self();
+        }
+
+        if (iostat == 0) {
+            errno = IOMasterPort(bootstrap_port, &iostat);
+            if (errno != KERN_SUCCESS) goto job_done;
         }
         
         {
@@ -242,6 +277,11 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
 #endif
 
 #ifdef __linux__
+        if (ncores <= 0) {
+            ncores = sysconf(_SC_NPROCESSORS_ONLN);
+            if (ncores == -1) goto job_done;
+        }
+
         if (ramsize_kb == 0) {
             ramsize_kb = info.totalram * info.mem_unit / kb;
         }
@@ -332,8 +372,8 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         
         bzero(&vminfo, sizeof(vminfo));
         count = HOST_VM_INFO_COUNT;
-        status = host_statistics(mach_host_self(), HOST_VM_INFO, (host_info64_t)&vminfo, &count);
-        if (status != KERN_SUCCESS) goto job_done;
+        errno = host_statistics(localhost, HOST_VM_INFO, (host_info64_t)&vminfo, &count);
+        if (errno != KERN_SUCCESS) goto job_done;
         /**
          * see vm_statistics.h
 	     * NB: speculative pages are already accounted for in "free_count",
@@ -343,8 +383,8 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
          **/
         (*ramfree) = (vminfo.free_count - vminfo.speculative_count) * pagesize / kb;
 
-        size = sizeof(struct xsw_usage);
-        status = sysctlbyname("vm.swapusage", &swapinfo, &size, NULL, 0);
+        sysdatum_size = sizeof(struct xsw_usage);
+        status = sysctlbyname("vm.swapusage", &swapinfo, &sysdatum_size, NULL, 0);
         if (status == -1) goto job_done;
         /* see `sysctl`.c.  NOTE: there is no need to multiple pagesize. */
         (*swaptotal) = swapinfo.xsu_total / kb;
@@ -366,7 +406,7 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
 
         /**
          * ZFS is one of the killer features of Illumos-based Operation System, and
-         * the swapfs is also under control by zfs. TODO: For collecting simple samples,
+         * the swapfs is also under control by zfs. TODO: In the cloud hosts,
          * to see if we still have to check the raw disk status.
          **/
 
@@ -382,6 +422,66 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         (*fsfree) = (zpiostat.total - zpiostat.used) / kb;
         disk_in = zpiostat.nread / kb;
         disk_out = zpiostat.nwritten / kb;
+#endif
+
+#ifdef __macosx__
+        struct statfs *mntable;
+        io_registry_entry_t dthis, driver;
+        io_iterator_t drivestats;
+        int64_t value, mntsize, mntidx;
+        CFDictionaryRef properties, statistics;
+        CFMutableDictionaryRef iomedia;
+        CFNumberRef key;
+
+        mntsize = getmntinfo(&mntable, MNT_NOWAIT); /* do not free mntable, it is in static space */
+        if (mntsize == 0) goto job_done;
+
+        for (mntidx = 0; mntidx < mntsize; mntidx ++) {
+            if (strncmp(mntable[mntidx].f_fstypename, "mtmfs" /* time machine */, 6) == 0) continue;
+            if (strncmp(mntable[mntidx].f_fstypename, "devfs", 6) == 0) continue;
+            if (strncmp(mntable[mntidx].f_fstypename, "autofs", 7) == 0) continue;
+
+            (*fstotal) += mntable[mntidx].f_blocks * mntable[mntidx].f_bsize / kb;
+            (*fsfree) += mntable[mntidx].f_bfree * mntable[mntidx].f_bsize / kb;
+        } 
+
+        iomedia = IOServiceMatching(kIOMediaClass);
+        CFDictionaryAddValue(iomedia, CFSTR(kIOMediaWholeKey), kCFBooleanTrue);
+        errno = IOServiceGetMatchingServices(iostat, iomedia, &drivestats);
+        if (errno != KERN_SUCCESS) goto job_done;
+
+        /* see `iostat`.c */
+        while ((dthis = IOIteratorNext(drivestats)) != 0 /* not NULL */) {
+            errno = IORegistryEntryGetParentEntry(dthis, kIOServicePlane, &driver);
+            if (errno != KERN_SUCCESS) goto job_next;
+            if (!(IOObjectConformsTo(driver, "IOBlockStorageDriver"))) goto job_skip;
+
+            errno = IORegistryEntryCreateCFProperties(driver, (CFMutableDictionaryRef *)&properties, kCFAllocatorDefault, kNilOptions);
+            if (errno != KERN_SUCCESS) goto job_skip;
+
+            statistics = CFDictionaryGetValue(properties, CFSTR(kIOBlockStorageDriverStatisticsKey));
+            if (statistics == NULL) goto job_skip;
+                                
+            key = (CFNumberRef)CFDictionaryGetValue(statistics, CFSTR(kIOBlockStorageDriverStatisticsBytesReadKey));
+            if (key != NULL) {
+                CFNumberGetValue(key, kCFNumberSInt64Type, &value);
+                disk_in += value / kb;
+            }
+
+            key = (CFNumberRef)CFDictionaryGetValue(statistics, CFSTR(kIOBlockStorageDriverStatisticsBytesWrittenKey));
+            if (key != NULL) {
+                CFNumberGetValue(key, kCFNumberSInt64Type, &value);
+                disk_out += value / kb;
+            }
+
+job_next:
+            IOObjectRelease(driver);
+job_skip:
+            IOObjectRelease(dthis);
+        }
+        IOObjectRelease(drivestats);
+
+        if (errno != 0) goto job_done;
 #endif
 
         (*disk_ikbps) = (disk_in - disk_ikb) / duration_s;
@@ -413,10 +513,10 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
 
 #ifdef __macosx__
         struct ifmibdata ifinfo;
-        size_t size, ifindex /*, ifcount */;
+        size_t ifindex /*, ifcount */;
         int ifmib[6];
 
-        size = sizeof(size_t);
+        sysdatum_size = sizeof(size_t);
         ifmib[0] = CTL_NET;
         ifmib[1] = PF_LINK;
         ifmib[2] = NETLINK_GENERIC;
@@ -424,7 +524,7 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         /**
          * ifmib[3] = IFMIB_SYSTEM;
          * ifmib[4] = IFMIB_IFCOUNT;
-         * status = sysctl(ifmib, 5, &ifcount, &size, NULL, 0);
+         * status = sysctl(ifmib, 5, &ifcount, &sysdatum_size, NULL, 0);
          * if (status == -1) goto job_done;
          * 
          * This should be the standard way,
@@ -434,10 +534,10 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         ifmib[3] = IFMIB_IFDATA;
         ifmib[5] = IFDATA_GENERAL;
         for (ifindex = 1 /* see `man ifmib` */; ifindex /* < ifcount */; ifindex ++) {
-            size = sizeof(struct ifmibdata);
+            sysdatum_size = sizeof(struct ifmibdata);
             ifmib[4] = ifindex;
 
-            status = sysctl(ifmib, 6, &ifinfo, &size, NULL, 0);
+            status = sysctl(ifmib, 6, &ifinfo, &sysdatum_size, NULL, 0);
             if (status == -1) {
                 if (errno == ENOENT) {
                     /* this should not happen unless the weird bug appears. */

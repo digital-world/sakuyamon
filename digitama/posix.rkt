@@ -90,14 +90,16 @@
 
   (require "digicore.rkt")
 
+  (define thmain : Thread (current-thread))
   (void (time (system_statistics)))
   (define boottime : Real (current-inexact-milliseconds))
   (define task : Thread
-    (timer-thread 1.0 (lambda [times] (printf "~a| ~a~n"
-                                              (~r (/ (- (current-inexact-milliseconds) boottime) 1000.0)
-                                                  #:precision '(= 6)
-                                                  #:min-width 12)
-                                              (system_statistics)))))
+    (timer-thread 1.0 (lambda [times] (with-handlers ([exn? (lambda [e] (break-thread thmain))])
+                                        (printf "~a| ~a~n"
+                                                (~r (/ (- (current-inexact-milliseconds) boottime) 1000.0)
+                                                    #:precision '(= 6)
+                                                    #:min-width 12)
+                                                (system_statistics))))))
   (with-handlers ([exn:break? void])
     (sync/enable-break never-evt))
   (break-thread task))
