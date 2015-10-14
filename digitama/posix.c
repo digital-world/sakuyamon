@@ -53,9 +53,12 @@
 
 #ifdef __linux__
 #include <sys/sysinfo.h>
+#include <sys/statvfs.h>
 #include <net/if.h>
 #include <linux/if_link.h>
 #include <ifaddrs.h>
+#include <dirent.h>
+#include <mntent.h>
 #endif
 
 /** Syslog Logs **/
@@ -285,6 +288,17 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         if (ramsize_kb == 0) {
             ramsize_kb = info.totalram * info.mem_unit / kb;
         }
+        
+        {
+            struct timespec now;
+            uintmax_t now_us;
+
+            clock_gettime(CLOCK_REALTIME, &now);
+            
+            now_us = now.tv_sec * 1000 * 1000 * 1000 + now.tv_nsec;
+            duration_s = (now_us - snaptime) / 1000.0 / 1000.0 / 1000.0;
+            snaptime = now_us;
+        }
 #endif
     }
 
@@ -442,13 +456,16 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
             if (strncmp(mntable[mntidx].f_fstypename, "autofs", 7) == 0) continue;
 
             (*fstotal) += mntable[mntidx].f_blocks * mntable[mntidx].f_bsize / kb;
-            (*fsfree) += mntable[mntidx].f_bfree * mntable[mntidx].f_bsize / kb;
+            (*fsfree) += mntable[mntidx].f_bavail * mntable[mntidx].f_bsize / kb;
         } 
 
         iomedia = IOServiceMatching(kIOMediaClass);
         CFDictionaryAddValue(iomedia, CFSTR(kIOMediaWholeKey), kCFBooleanTrue);
         errno = IOServiceGetMatchingServices(iostat, iomedia, &drivestats);
         if (errno != KERN_SUCCESS) goto job_done;
+
+        disk_in = 0;
+        disk_out = 0;
 
         /* see `iostat`.c */
         while ((dthis = IOIteratorNext(drivestats)) != 0 /* not NULL */) {
@@ -481,6 +498,62 @@ job_skip:
         }
         IOObjectRelease(drivestats);
 
+        if (errno != 0) goto job_done;
+#endif
+
+#ifdef __linux__
+        int major, minor;
+        char sysfs_device[MAXNAMLEN + 1], dev_name[MAXNAMLEN + 1], procfs_line[256];
+        uintmax_t rissued, rmerged, rsector, rtimems;
+        uintmax_t wissued, wmerged, wsector, wtimems;
+        uintmax_t io_ing, iotimems, ioweightedms;
+        FILE *mntable, *diskstats;
+        struct mntent *fs;
+        struct statvfs fsinfo;
+
+        mntable = fopen(_PATH_MNTTAB, "r");
+        if (mntable == NULL) goto job_continue;
+
+        diskstats = fopen("/proc/diskstats", "r");
+        if (diskstats == NULL) goto job_continue;
+
+        while ((fs = getmntent(mntable)) != NULL) {
+            if (strncmp(fs->mnt_type, "swap", 5) == 0) continue;
+            if (strncmp(fs->mnt_type, "proc", 5) == 0) continue;
+            if (strncmp(fs->mnt_type, "auto", 5) == 0) continue;
+
+            status = statvfs(fs->mnt_dir, &fsinfo);
+            if (status == -1) goto job_continue;
+
+            (*fstotal) = fsinfo.f_blocks * fsinfo.f_frsize / kb;
+            (*fsfree) = fsinfo.f_bavail * fsinfo.f_frsize / kb;
+        }
+
+        disk_in = 0;
+        disk_out = 0;
+
+        while (fgets(procfs_line, sizeof(procfs_line) / sizeof(char) - 1, diskstats) != NULL) {
+            sscanf(procfs_line, "%d %d %s %ju %ju %ju %ju %ju %ju %ju %ju %ju %ju %ju",
+                                &major, &minor, dev_name,
+                                &rissued, &rmerged, &rsector, &rtimems,
+                                &wissued, &wmerged, &wsector, &wtimems,
+                                &io_ing, &iotimems, &ioweightedms);
+
+            snprintf(sysfs_device, MAXNAMLEN, "/sys/block/%s/device/", dev_name);
+            status = access(sysfs_device, F_OK);
+            if (status == -1) {
+                /* non-physical storage or partitions */
+                errno = 0;
+            } else {
+                /* TODO: check to see if the sector size is always 512 regardless hw_sector_size */
+                disk_in += rsector * 512 / kb;
+                disk_out += wsector * 512 / kb;
+            }
+        }
+
+job_continue:
+        if (mntable != NULL) fclose(mntable);
+        if (diskstats != NULL) fclose(diskstats);
         if (errno != 0) goto job_done;
 #endif
 
