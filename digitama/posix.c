@@ -80,7 +80,7 @@ void rsyslog(int priority, const char *topic, const char *message) {
 
 /** System Monitor **/
 typedef struct ffi_prefab_ksysinfo {
-    uintmax_t snaptime;
+    intmax_t snaptime;
     time_t uptime;
     size_t ncores;
     double lavg01;
@@ -106,6 +106,7 @@ typedef struct ffi_prefab_ksysinfo {
 static struct kstat_ctl *kstatistics = NULL;
 static struct libzfs_handle *zfs = NULL;
 static hrtime_t snaptime = 0ULL;
+static hrtime_t hradjustment = 0ULL;
 #endif
 
 #ifdef __macosx__
@@ -222,6 +223,20 @@ char *system_statistics(ksysinfo_t *kinfo) {
             boot_time = nthis->value.ui32;
         }
 
+        if (hradjustment == 0) {
+            struct timeval now;
+            intmax_t now_ns;
+
+            /**
+             * kthis->ks_snaptime, gethrtime, clock_gettime(CLOCK_HIGHRES, ...)
+             * their results is not measured from the traditional UTC midnight.
+             * This is good for benchmarking rather than administrating.
+             */
+
+            gettimeofday(&now, NULL);
+            hradjustment = now.tv_sec * 1E9 + now.tv_usec * 1E3 - kthis->ks_snaptime;
+        }
+
         /* illumos zone can change cpu or core online */ {
             kstat_named_t *nthis;
 
@@ -240,8 +255,8 @@ char *system_statistics(ksysinfo_t *kinfo) {
             ramsize_kb = ram_raw * pagesize / kb;
         }
 
-        duration_s = (kthis->ks_snaptime - snaptime) * 1E-9;
-        snaptime = kthis->ks_snaptime;
+        duration_s = (kthis->ks_snaptime + hradjustment - snaptime) * 1E-9;
+        snaptime = kthis->ks_snaptime + hradjustment;
 #endif
 
 #ifdef __macosx__
@@ -286,13 +301,13 @@ char *system_statistics(ksysinfo_t *kinfo) {
         
         {
             struct timeval now;
-            uintmax_t now_us;
+            intmax_t now_ns;
 
             gettimeofday(&now, NULL);
             
-            now_us = now.tv_sec * 1E9 + now.tv_usec * 1E3;
-            duration_s = (now_us - snaptime) * 1E-9;
-            snaptime = now_us;
+            now_ns = now.tv_sec * 1E9 + now.tv_usec * 1E3;
+            duration_s = (now_ns - snaptime) * 1E-9;
+            snaptime = now_ns;
         }
 #endif
 
@@ -308,13 +323,13 @@ char *system_statistics(ksysinfo_t *kinfo) {
         
         {
             struct timespec now;
-            uintmax_t now_us;
+            intmax_t now_ns;
 
             clock_gettime(CLOCK_REALTIME, &now);
             
-            now_us = now.tv_sec * 1E9 + now.tv_nsec;
-            duration_s = (now_us - snaptime) * 1E-9;
-            snaptime = now_us;
+            now_ns = now.tv_sec * 1E9 + now.tv_nsec;
+            duration_s = (now_ns - snaptime) * 1E-9;
+            snaptime = now_ns;
         }
 #endif
     }
@@ -331,8 +346,7 @@ char *system_statistics(ksysinfo_t *kinfo) {
 #ifdef __linux__
         kinfo->uptime = info.uptime;
 #else
-        kinfo->uptime = (uintmax_t)(snaptime / 1E9) - boot_time;
-        printf("%ju %ju %ju\n", snaptime, boot_time, kinfo->uptime);
+        kinfo->uptime = (uintmax_t)(kinfo->snaptime / 1E9) - boot_time;
 #endif
     }
 
