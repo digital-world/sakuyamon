@@ -52,14 +52,9 @@
 
   (define thmain : Thread (current-thread))
   (void (time (system_statistics)))
-  (define boottime : Real (current-inexact-milliseconds))
   (define task : Thread
     (timer-thread 1.0 (lambda [times] (with-handlers ([exn? (lambda [e] (break-thread thmain))])
-                                        (printf "~a| ~a~n"
-                                                (~r (/ (- (current-inexact-milliseconds) boottime) 1000.0)
-                                                    #:precision '(= 6)
-                                                    #:min-width 12)
-                                                (*ksysinfo (system_statistics)))))))
+                                        (displayln (*ksysinfo (system_statistics)))))))
   (with-handlers ([exn:break? void])
     (sync/enable-break never-evt))
   (break-thread task))
