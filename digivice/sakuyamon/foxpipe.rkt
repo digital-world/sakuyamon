@@ -67,9 +67,10 @@
   
   (define on-timer/push-system-samples : (-> Natural Any)
     (lambda [times]
+      (define force-refreshed-sample : ksysinfo_t* (system_statistics))
       (unless (zero? (hash-count izunas))
         (push-back (with-handlers ([exn? (lambda [[e : exn]] (cons (object-name e) (exn-message e)))])
-                     (cons (digimon-system) (system_statistics)))))))
+                     (cons (digimon-system) (*ksysinfo force-refreshed-sample)))))))
 
   (define serve-forever : (-> (Evtof (List Natural String Natural)) (Evtof (List Input-Port Output-Port)) Void)
     (lambda [/dev/udp /dev/tcp]

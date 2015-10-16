@@ -79,6 +79,27 @@ void rsyslog(int priority, const char *topic, const char *message) {
 }
 
 /** System Monitor **/
+typedef struct ffi_prefab_ksysinfo {
+    uintmax_t snaptime;
+    time_t uptime;
+    size_t ncores;
+    double lavg01;
+    double lavg05;
+    double lavg15;
+    size_t ramtotal;
+    size_t ramfree;
+    size_t swaptotal;
+    size_t swapfree;
+    size_t fstotal;
+    size_t fsfree;
+    double disk_rkbps;
+    double disk_wkbps;
+    uintmax_t nic_received;
+    double nic_rkbps;
+    uintmax_t nic_sent;
+    double nic_wkbps;
+} ksysinfo_t;
+
 #define kb (1024) /* use MB directly may lose precision */
 
 #ifdef __illumos__
@@ -98,13 +119,13 @@ static uintmax_t snaptime = 0ULL;
 static time_t boot_time = 0;
 #endif
 
-static int ncores = 0;
+static size_t ncores = 0;
 static size_t ramsize_kb = 0ULL;
 
-static size_t disk_ikb = 0ULL;
-static size_t disk_okb = 0ULL;
-static size_t nic_ikb = 0ULL;
-static size_t nic_okb = 0ULL;
+static size_t disk_rkb = 0ULL;
+static size_t disk_wkb = 0ULL;
+static size_t nic_rkb = 0ULL;
+static size_t nic_wkb = 0ULL;
 
 #ifdef __illumos__
 typedef struct zpool_iostat {
@@ -150,11 +171,7 @@ static int fold_zpool_iostat(zpool_handle_t *zthis, void *attachment) {
 }
 #endif
 
-char *system_statistics(time_t *timestamp, time_t *uptime,
-        long *nprocessors, double *avg01, double *avg05, double *avg15,
-        size_t *ramtotal, size_t *ramfree, size_t *swaptotal, size_t *swapfree,
-        size_t *fstotal, size_t *fsfree, double *disk_ikbps, double *disk_okbps,
-        uintmax_t *nic_in, double *nic_ikbps, uintmax_t *nic_out, double *nic_okbps) {
+char *system_statistics(ksysinfo_t *kinfo) {
     char *alterrmsg;
     intptr_t status, pagesize;
     double duration_s;
@@ -223,7 +240,7 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
             ramsize_kb = ram_raw * pagesize / kb;
         }
 
-        duration_s = (kthis->ks_snaptime - snaptime) / 1000.0 / 1000.0 / 1000.0;
+        duration_s = (kthis->ks_snaptime - snaptime) * 1E-9;
         snaptime = kthis->ks_snaptime;
 #endif
 
@@ -273,8 +290,8 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
 
             gettimeofday(&now, NULL);
             
-            now_us = now.tv_sec * 1000 * 1000 + now.tv_usec;
-            duration_s = (now_us - snaptime) / 1000.0 / 1000.0;
+            now_us = now.tv_sec * 1E9 + now.tv_usec * 1E3;
+            duration_s = (now_us - snaptime) * 1E-9;
             snaptime = now_us;
         }
 #endif
@@ -295,8 +312,8 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
 
             clock_gettime(CLOCK_REALTIME, &now);
             
-            now_us = now.tv_sec * 1000 * 1000 * 1000 + now.tv_nsec;
-            duration_s = (now_us - snaptime) / 1000.0 / 1000.0 / 1000.0;
+            now_us = now.tv_sec * 1E9 + now.tv_nsec;
+            duration_s = (now_us - snaptime) * 1E-9;
             snaptime = now_us;
         }
 #endif
@@ -306,20 +323,16 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         errno = 0;
         alterrmsg = NULL;
 
-        (*timestamp) = time(NULL);
-        (*nprocessors) = ncores;
-        (*ramtotal) = ramsize_kb;
-        (*swaptotal) = 0ULL;
-        (*swapfree) = 0ULL;
-        (*fstotal) = 0ULL;
-        (*fsfree) = 0ULL;
-        (*nic_in) = 0ULL;
-        (*nic_out) = 0ULL;
+        memset(kinfo, 0, sizeof(ksysinfo_t));
+        kinfo->snaptime = snaptime;
+        kinfo->ncores = ncores;
+        kinfo->ramtotal = ramsize_kb;
 
 #ifdef __linux__
-        (*uptime) = info.uptime;
+        kinfo->uptime = info.uptime;
 #else
-        (*uptime) = (*timestamp) - boot_time;
+        kinfo->uptime = (uintmax_t)(snaptime / 1E9) - boot_time;
+        printf("%ju %ju %ju\n", snaptime, boot_time, kinfo->uptime);
 #endif
     }
 
@@ -334,9 +347,9 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         status = getloadavg(sysloadavg, sizeof(sysloadavg) / sizeof(double));
         if (status == -1) goto job_done;
 
-        (*avg01) = sysloadavg[0];
-        (*avg05) = sysloadavg[1];
-        (*avg15) = sysloadavg[2];
+        kinfo->lavg01 = sysloadavg[0];
+        kinfo->lavg05 = sysloadavg[1];
+        kinfo->lavg15 = sysloadavg[2];
     }
 
     /* memory and swapfs statistics */ {
@@ -348,7 +361,7 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
         /* zone specific */
         status = sysconf(_SC_AVPHYS_PAGES);
         if (status < 0) goto job_done;
-        (*ramfree) = status * pagesize / kb;
+        kinfo->ramfree = status * pagesize / kb;
 
         /**
          * The term swap in illumos relates to both anon pages and swapfs,
@@ -373,8 +386,8 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
             status = swapctl(SC_LIST, stinfo);
             if (status == -1) goto job_done;
             for (stindex = 0, swap = stinfo->swt_ent; stindex < swapcount; stindex ++, swap ++) {
-                (*swaptotal) += swap->ste_pages * pagesize / kb;
-                (*swapfree) += swap->ste_free * pagesize / kb;
+                kinfo->swaptotal += swap->ste_pages * pagesize / kb;
+                kinfo->swapfree += swap->ste_free * pagesize / kb;
             }
         }
 #endif
@@ -395,20 +408,20 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
 	     * used to hold data that was read speculatively from disk but
 	     * haven't actually been used by anyone so far.
          **/
-        (*ramfree) = (vminfo.free_count - vminfo.speculative_count) * pagesize / kb;
+        kinfo->ramfree = (vminfo.free_count - vminfo.speculative_count) * pagesize / kb;
 
         sysdatum_size = sizeof(struct xsw_usage);
         status = sysctlbyname("vm.swapusage", &swapinfo, &sysdatum_size, NULL, 0);
         if (status == -1) goto job_done;
         /* see `sysctl`.c.  NOTE: there is no need to multiple pagesize. */
-        (*swaptotal) = swapinfo.xsu_total / kb;
-        (*swapfree) = swapinfo.xsu_avail / kb;
+        kinfo->swaptotal = swapinfo.xsu_total / kb;
+        kinfo->swapfree = swapinfo.xsu_avail / kb;
 #endif
 
 #ifdef __linux__
-        (*ramfree) = info.freeram * info.mem_unit / kb;
-        (*swaptotal) = info.totalswap * info.mem_unit / kb;
-        (*swapfree) = info.freeswap * info.mem_unit / kb;
+        kinfo->ramfree = info.freeram * info.mem_unit / kb;
+        kinfo->swaptotal = info.totalswap * info.mem_unit / kb;
+        kinfo->swapfree = info.freeswap * info.mem_unit / kb;
 #endif
     }
 
@@ -432,8 +445,8 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
             goto job_done;
         }
 
-        (*fstotal) = zpiostat.total / kb;
-        (*fsfree) = (zpiostat.total - zpiostat.used) / kb;
+        kinfo->fstotal = zpiostat.total / kb;
+        kinfo->fsfree = (zpiostat.total - zpiostat.used) / kb;
         disk_in = zpiostat.nread / kb;
         disk_out = zpiostat.nwritten / kb;
 #endif
@@ -455,8 +468,8 @@ char *system_statistics(time_t *timestamp, time_t *uptime,
             if (strncmp(mntable[mntidx].f_fstypename, "devfs", 6) == 0) continue;
             if (strncmp(mntable[mntidx].f_fstypename, "autofs", 7) == 0) continue;
 
-            (*fstotal) += mntable[mntidx].f_blocks * mntable[mntidx].f_bsize / kb;
-            (*fsfree) += mntable[mntidx].f_bavail * mntable[mntidx].f_bsize / kb;
+            kinfo->fstotal += mntable[mntidx].f_blocks * mntable[mntidx].f_bsize / kb;
+            kinfo->fsfree += mntable[mntidx].f_bavail * mntable[mntidx].f_bsize / kb;
         } 
 
         iomedia = IOServiceMatching(kIOMediaClass);
@@ -525,8 +538,8 @@ job_skip:
             status = statvfs(fs->mnt_dir, &fsinfo);
             if (status == -1) goto job_continue;
 
-            (*fstotal) = fsinfo.f_blocks * fsinfo.f_frsize / kb;
-            (*fsfree) = fsinfo.f_bavail * fsinfo.f_frsize / kb;
+            kinfo->fstotal = fsinfo.f_blocks * fsinfo.f_frsize / kb;
+            kinfo->fsfree = fsinfo.f_bavail * fsinfo.f_frsize / kb;
         }
 
         disk_in = 0;
@@ -557,11 +570,11 @@ job_continue:
         if (errno != 0) goto job_done;
 #endif
 
-        (*disk_ikbps) = (disk_in - disk_ikb) / duration_s;
-        (*disk_okbps) = (disk_out - disk_okb) / duration_s;
+        kinfo->disk_rkbps = (disk_in - disk_rkb) / duration_s;
+        kinfo->disk_wkbps = (disk_out - disk_wkb) / duration_s;
 
-        disk_ikb = disk_in;
-        disk_okb = disk_out;
+        disk_rkb = disk_in;
+        disk_wkb = disk_out;
     }
 
     /* network statistics */ {
@@ -578,8 +591,8 @@ job_continue:
                 sent = (kstat_named_t *)kstat_data_lookup(kthis, "obytes64");
                 if (sent == NULL) goto job_done;
 
-                (*nic_in) += received->value.ul / kb;
-                (*nic_out) += sent->value.ul / kb;
+                kinfo->nic_received += received->value.ul / kb;
+                kinfo->nic_sent += sent->value.ul / kb;
             }
         }
 #endif
@@ -621,8 +634,8 @@ job_continue:
             } 
 
             if (ifinfo.ifmd_data.ifi_type == IFT_ETHER) {
-                (*nic_in) += ifinfo.ifmd_data.ifi_ibytes / kb;
-                (*nic_out) += ifinfo.ifmd_data.ifi_obytes / kb;
+                kinfo->nic_received += ifinfo.ifmd_data.ifi_ibytes / kb;
+                kinfo->nic_sent += ifinfo.ifmd_data.ifi_obytes / kb;
             }
         }
 #endif
@@ -639,18 +652,18 @@ job_continue:
 
             if ((ifstat != NULL) && !(ifthis->ifa_flags & IFF_LOOPBACK) && (ifthis->ifa_flags & IFF_RUNNING)
                     && (ifinfo->ifa_addr->sa_family == AF_PACKET)) {
-                (*nic_in) += (uintmax_t)ifstat->rx_bytes / kb;
-                (*nic_out) += (uintmax_t)ifstat->tx_bytes / kb;
+                kinfo->nic_received += (uintmax_t)ifstat->rx_bytes / kb;
+                kinfo->nic_sent += (uintmax_t)ifstat->tx_bytes / kb;
             }
         }
         freeifaddrs(ifinfo);
 #endif
 
-        (*nic_ikbps) = ((*nic_in) - nic_ikb) / duration_s;
-        (*nic_okbps) = ((*nic_out) - nic_okb) / duration_s;
+        kinfo->nic_rkbps = (kinfo->nic_received - nic_rkb) / duration_s;
+        kinfo->nic_wkbps = (kinfo->nic_sent - nic_wkb) / duration_s;
 
-        nic_ikb = (*nic_in);
-        nic_okb = (*nic_out);
+        nic_rkb = kinfo->nic_received;
+        nic_wkb = kinfo->nic_sent;
     }
 
 job_done:

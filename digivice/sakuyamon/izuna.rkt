@@ -25,7 +25,7 @@
   (define-type Monitor<%> (Class #:implements NCurseWindow<%>
                                  (init-field [scepter-host String])
                                  [set-figureprint! (-> (Listof String) Any)]
-                                 [visualize (-> Symbol System-Status Any)]))
+                                 [visualize (-> Symbol ksysinfo Any)]))
 
   (define-type Console<%> (Class #:implements NCurseWindow<%>
                                  [add-syslog (-> String Syslog Any)]))
@@ -121,7 +121,7 @@
       (define figureprint : (Boxof (Listof String)) (box null))
       
       (define queue-length-max : (Boxof Positive-Integer) (box 1))
-      (define status-queue : (Boxof (Listof System-Status)) (box null))
+      (define status-queue : (Boxof (Listof ksysinfo)) (box null))
       
       (define/public set-figureprint!
         (lambda [figure-print]
@@ -304,7 +304,7 @@
         (match (or (getch) (sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# foxpipe))
           [(? false? on-system-idle) (update-windows-on-screen hosts)]
           [(cons (? string? host) (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
-          [(cons (? string? host) (vector (cons (? symbol? systype) (? sysinfo? sample)))) (send ($monitor host) visualize systype sample)]
+          [(cons (? string? host) (vector (cons (? symbol? systype) (? ksysinfo? sample)))) (send ($monitor host) visualize systype sample)]
           [(cons (? string? host) (vector (cons (? symbol? errname) (? string? errmsg)))) (send ($monitor host) set-status errmsg #:color 'ErrorMsg)]
           [(cons (? string? host) (? flonum? s)) (place-channel-put foxpipe (format "idled ~as" s)) #| put/get is OK, no thread is (sync)ing |#]
           [(list (? string? host) (? string? figureprint) ...) (send ($monitor host) set-figureprint! (cast figureprint (Listof String)))]
