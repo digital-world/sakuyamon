@@ -476,11 +476,13 @@ char *system_statistics(ksysinfo_t *kinfo) {
         CFMutableDictionaryRef iomedia;
         CFNumberRef key;
 
+        /* Time Machine Storage will be taking into account when backing up */
+
         mntsize = getmntinfo(&mntable, MNT_NOWAIT); /* do not free mntable, it is in static space */
         if (mntsize == 0) goto job_done;
 
         for (mntidx = 0; mntidx < mntsize; mntidx ++) {
-            if (strncmp(mntable[mntidx].f_fstypename, "mtmfs" /* time machine */, 6) == 0) continue;
+            if (strncmp(mntable[mntidx].f_fstypename, "mtmfs", 6) == 0) continue;
             if (strncmp(mntable[mntidx].f_fstypename, "devfs", 6) == 0) continue;
             if (strncmp(mntable[mntidx].f_fstypename, "autofs", 7) == 0) continue;
 

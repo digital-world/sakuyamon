@@ -44,15 +44,13 @@
   ; /+-----------+----------------------------------------+\
   ;  | title% [this is a ripped off line]                 |
   ;  +-----------+----------------------------------------+
-  ;  | host1     | request%                               |
-  ;  |           |                                        |
-  ;  +-----------+                                        |
-  ;  | host2...n |                                        |
-  ;  |           |                                        |
-  ;  |           +----------------------------------------+
-  ;  |           | rsyslog%                               |
+  ;  | host1     | host2...n                              |
   ;  |           |                                        |
   ;  |           |                                        |
+  ;  +-----------+----------------------------------------|
+  ;  | rsyslog%                                           |
+  ;  |                                                    |
+  ;  |                                                    |
   ;  +-----------+----------------------------------------+
   ;  | commandline% [this is a ripped off line]           |
   ; \+----------------------------------------------------+/
@@ -81,8 +79,13 @@
                             (cast (car.eval (with-input-from-file colors.rktl read)) (HashTable Symbol Symbol)))))
         (unbox links))))
 
-  (define ~t : (-> Natural Natural String) (lambda [n w] (~r #:min-width w #:pad-string "0" n)))
-  (define ~% : (-> Flonum String) (lambda [%] (~r (* 100.0 (max 0 %)) #:precision '(= 2))))
+  (define ~t : (-> Natural Natural String)
+    (lambda [n w]
+      (~r #:min-width w #:pad-string "0" n)))
+  
+  (define ~% : (-> Flonum [#:precision (U Integer (List '= Integer))] String)
+    (lambda [% #:precision [prcs '(= 2)]]
+      (~r (* 100.0 (max 0 %)) #:precision prcs)))
 
   (define ~uptime : (-> Natural String)
     (lambda [s]
@@ -150,9 +153,9 @@
           (wclear stdscr)
           (mvwaddstr titlebar 0 0 (~a scepter-host (~a #:align 'right #:width (max 0 (- (getmaxx titlebar) (string-length scepter-host)))
                                                        (format "~a: ~a" systype (~uptime (ksysinfo-uptime sample))))))
-          (visualize-slotbar "DSK" (ksysinfo-fstotal sample) (ksysinfo-fsfree sample))
-          (visualize-slotbar "RAM" (ksysinfo-ramtotal sample) (ksysinfo-ramfree sample))
-          (visualize-slotbar "SWP" (ksysinfo-swaptotal sample) (ksysinfo-swapfree sample))))
+          (visualize-slotbar "DSK" (ksysinfo-fstotal sample) (ksysinfo-fsfree sample) 0.70 0.85)
+          (visualize-slotbar "RAM" (ksysinfo-ramtotal sample) (ksysinfo-ramfree sample) 0.70 0.85)
+          (visualize-slotbar "SWP" (ksysinfo-swaptotal sample) (ksysinfo-swapfree sample) 0.70 0.85)))
       
       (define/override (resize y x lines cols)
         (super resize (add1 y) x (cast (sub1 lines) Positive-Integer) cols)
@@ -169,20 +172,30 @@
       (define/private (visualize-loadavg) : Any
         (void))
 
-      (define/private (visualize-slotbar [tag : String] [total : Natural] [free : Natural]) : Any
-        (define sloty : Natural (getcury stdscr))
+      (define/private (visualize-slotbar [tag : String] [total : Natural] [free : Natural] [threshold-low : Flonum] [threshold-high : Flonum]) : Any
         (define used% : Flonum (- 1.0 (/ free total)))
+        (define label : String (format "~a/~a(~a%)"
+                                       (~size (max 0 (- total free)) 'KB #:precision '(= 1))
+                                       (~size total 'KB #:precision '(= 1))
+                                       (~% used% #:precision 0)))
+        (define sloty : Natural (getcury stdscr))
         (define slotx : Natural (add1 (string-length tag)))
         (define slotsize : Natural (max 0 (- (getmaxx stdscr) slotx 1)))
-        (define label : String (~a (~% used%) #\% #\/ (~size total 'KB #:precision '(= 1))))
-        (define barsize : Natural (cast (min (- slotsize (string-length label)) (exact-round (* slotsize used%))) Natural))
+        (define usedsize : Natural (cast (exact-round (* slotsize used%)) Natural))
+        (define barsize : Natural (cast (min (- slotsize (string-length label)) usedsize) Natural))
         (wattrset stdscr 'StorageClass)
         (mvwaddstr stdscr sloty 0 tag)
         (wattrset stdscr 'MatchParen)
         (mvwaddstr stdscr sloty (cast (sub1 slotx) Nonnegative-Integer)
                    (~a #\[ (make-string barsize #\*) (~a label #:width (max 0 (- slotsize barsize)) #:align 'right) #\]))
         (mvwchgat stdscr sloty slotx slotsize 'Label 'Label)
-        (mvwchgat stdscr sloty slotx barsize 'MoreMsg 'MoreMsg)
+        (mvwchgat stdscr sloty slotx usedsize 'MoreMsg 'MoreMsg)
+        (when (> used% threshold-low)
+          (define lowsize : Natural (cast (exact-round (* slotsize threshold-low)) Natural))
+          (mvwchgat stdscr sloty (+ slotx lowsize) (max (- usedsize lowsize) 0) 'WarningMsg 'WarningMsg)
+          (when (> used% threshold-high)
+            (define highsize : Natural (cast (exact-round (* slotsize threshold-high)) Natural))
+            (mvwchgat stdscr sloty (+ slotx highsize) (max (- usedsize highsize) 0) 'ErrorMsg 'ErrorMsg)))
         (wmove stdscr (add1 sloty) 0))))
 
   (define rsyslog% : Console<%>
