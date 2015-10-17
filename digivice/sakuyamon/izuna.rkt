@@ -156,43 +156,31 @@
       (scrollok stdscr #true)
       
       (define contents : (Boxof (Listof (Pairof String Syslog))) (box null))
-
+      (define fields : (Listof Symbol) (list 'timestamp 'method 'host 'uri 'client 'user-agent 'referer))
+    
       (define/public add-syslog : (-> String Syslog Any)
         (lambda [scepter-host record]
           (set-box! contents (cons (cons scepter-host record) (unbox contents)))
-          (wattrset stdscr (hash-ref (color-links) (syslog5424-severity record) (const (list 0))))
-          (waddwstr stdscr (~syslog scepter-host record))))
+          (match record
+            [(syslog5424 _ _ timestamp host app pid #false) (rich-status 'Ignore "~a@~a: ~a[~a]: [Empty Message]" timestamp host app pid)]
+            [(syslog5424 _ _ timestamp host "taskgated" _ unsigned-signature) (rich-status 'Folded "~a@~a: ~a" timestamp host unsigned-signature)]
+            [(syslog5424 _ _ timestamp host _ _ (? log:request? req)) (display-request scepter-host req)]
+            [standard-rsyslog (display-rsyslog scepter-host standard-rsyslog)])))
 
-      (define/private (~syslog [scepter-host : String] [record : Syslog]) : String
-        (~a #:max-width (getmaxx stdscr)
-            (format "~a~a ~a ~a ~a[~a]: ~a"
-                    (if (empty? (cdr (unbox contents))) "" #\newline)
-                    (~a (syslog5424-facility record) #:width 8)
-                    (syslog5424-timestamp record)
-                    scepter-host
-                    (syslog5424-sender record)
-                    (syslog5424-pid record)
-                    (regexp-replaces (~a (syslog5424-message record))
-                                     `([,px.ip ,~geolocation]
-                                       [,(string #\newline) " "]
-                                       [,(string #\tab) "    "])))))))
-  
-  (define request% : Console<%>
-    (class rsyslog% (super-new)
-      (inherit-field stdscr statusbar)
-      (inherit resize refresh set-status)
-      
-      (scrollok stdscr #true)
-      
-      (define contents : (Boxof (Listof (Pairof String Syslog))) (box null))
-      (define fields : (Listof Symbol) (list 'timestamp 'method 'host 'uri 'client 'user-agent 'referer))
-      
-      (define/override add-syslog : (-> String Syslog Any)
-        (lambda [scepter-host record]
-          (define req : Log:Message (syslog5424-message record))
-          (set-box! contents (cons (cons scepter-host record) (unbox contents)))
-          (when (log:request? req)
-            (display-request scepter-host req))))
+      (define/private (display-rsyslog [scepter-host : String] [record : Syslog]) : Any
+        (wattrset stdscr (hash-ref (color-links) (syslog5424-severity record) (const (list 0))))
+        (waddwstr stdscr (~a #:max-width (getmaxx stdscr)
+                             (format "~a~a ~a ~a ~a[~a]: ~a"
+                                     (if (empty? (cdr (unbox contents))) "" #\newline)
+                                     (~a (syslog5424-facility record) #:width 8)
+                                     (syslog5424-timestamp record)
+                                     scepter-host
+                                     (syslog5424-sender record)
+                                     (syslog5424-pid record)
+                                     (regexp-replaces (~a (syslog5424-message record))
+                                                      `([,px.ip ,~geolocation]
+                                                        [,(string #\newline) " "]
+                                                        [,(string #\tab) "    "]))))))
       
       (define/private (display-request [scepter-host : String] [req : Log:Request]) : Any
         (define hilinks (color-links))
@@ -207,7 +195,11 @@
         (case key
           [(timestamp) (log:request-timestamp req)]
           [(client) (~geolocation (log:request-client req))]
-          [else (hash-ref (log:request-headers req) key (const #false))]))))
+          [else (hash-ref (log:request-headers req) key (const #false))]))
+
+      (define/private (rich-status [colorpair : Color-Pair] [fmt : String] . [argl : Any *]) : Any
+        (define message : String (apply format fmt argl))
+        (set-status #:clear? #true #:color colorpair #:width (max (string-length message) 1) message))))
 
   (define display-statistics : (-> [#:stdbar Window*] [#:prefix String] Any)
     (lambda [#:stdbar [stdbar (:prefabwin 'titlebar)] #:prefix [prefix izuna-title]]
@@ -259,51 +251,32 @@
     (lambda [hosts]
       (define columns : Positive-Integer (getmaxx (:prefabwin 'stdscr)))
       (define rows : Positive-Integer (getmaxy (:prefabwin 'stdscr)))
-      (define host-cols : Positive-Integer (cast (exact-round (* columns 0.16)) Positive-Integer))
-      (define rsyslog-rows : Positive-Integer (cast (exact-round (* rows 0.24)) Positive-Integer))
-      (define request-cols : Positive-Integer (cast (- columns host-cols 1) Positive-Integer))
-      (define request-rows : Positive-Integer (cast (- rows rsyslog-rows) Positive-Integer))
+      (define host-rows : Positive-Integer (cast (exact-round (* rows 0.48)) Positive-Integer))
+      (define rsyslog-rows : Positive-Integer (cast (- rows host-rows) Positive-Integer))
       (for-each wclear (list (:prefabwin 'stdscr) (:prefabwin 'cmdlinebar)))
       (wattrset (:prefabwin 'titlebar) 'Title)
       (display-statistics #:stdbar (:prefabwin 'titlebar) #:prefix izuna-title)
       (let resize-hosts ([winhosts : (Listof String) hosts]
-                         [y : Nonnegative-Integer 0]
-                         [lines : Natural rows])
+                         [x : Nonnegative-Integer 0]
+                         [cols : Natural columns])
         (unless (null? winhosts)
           (define monitor : (Instance Monitor<%>) ($monitor+ (car winhosts) (make-object host% (car winhosts))))
-          (define host-rows : Positive-Integer (cast (exact-floor (/ lines (length winhosts))) Positive-Integer))
-          (send monitor resize y 0 host-rows host-cols)
-          (resize-hosts (cdr winhosts) (+ y host-rows) (cast (- lines host-rows) Natural))))
-      (for ([win% : Console<%>       (in-list (list request%         rsyslog%))]
-            [scry : Natural          (in-list (list 0                request-rows))]
-            [scrx : Natural          (in-list (list (add1 host-cols) (add1 host-cols)))]
-            [scrr : Positive-Integer (in-list (list request-rows     rsyslog-rows))]
-            [scrc : Positive-Integer (in-list (list request-cols     request-cols))])
-        (define console : (Instance Console<%>) ($console+ (cast (object-name win%) Symbol) (make-object win%)))
-        (send console resize scry scrx scrr scrc))
-      (attrset 'VertSplit)
-      (mvvline 0 host-cols (- rows 1))
-      (mvaddch (sub1 rows) host-cols (:altchar 'DARROW #:extra-attrs (list 'underline)))
+          (define host-cols : Positive-Integer (cast (exact-floor (/ cols (length winhosts))) Positive-Integer))
+          (send monitor resize 0 x host-rows host-cols)
+          (resize-hosts (cdr winhosts) (+ x host-cols) (cast (- cols host-cols) Natural))))
+      (define console : (Instance Console<%>) ($console+ 'rsyslog (make-object rsyslog%)))
+      (send console resize host-rows 0 rsyslog-rows columns)
       (for ([stdwin (in-list (append ($monitor*) ($console*)))])
         (send (cast stdwin (Instance NCurseWindow<%>)) set-status (object-name stdwin))
         (send (cast stdwin (Instance NCurseWindow<%>)) refresh #:with wnoutrefresh))
       (doupdate)))
-  
-  (define on-foxpipe-rsyslog : (-> String Syslog Any)
-    (lambda [scepter-host record]
-      (define (rich-status [colorpair : Color-Pair] [message : String])
-        (send ($console 'rsyslog%) set-status #:clear? #true #:color colorpair #:width (max (string-length message) 1) message))
-      (match record
-        [(syslog5424 _ _ timestamp host app pid #false) (rich-status 'Ignore (format "~a@~a: ~a[~a]: [Empty Message]" timestamp host app pid))]
-        [(syslog5424 _ _ timestamp host "taskgated" _ unsigned-signature) (rich-status 'Folded (format "~a@~a: ~a" timestamp host unsigned-signature))]
-        [_ (send ($console (if (log:request?  (syslog5424-message record)) 'request% 'rsyslog%)) add-syslog scepter-host record)])))
   
   (define digivice-recv-match-render-loop : (-> Place (Listof String) Any)
     (lambda [foxpipe hosts]
       (with-handlers ([exn:fail? (lambda [[e : exn]] (alert 'ErrorMsg "~a" (exn-message e)))])
         (match (or (getch) (sync/timeout/enable-break 0.26149 #| Meissel–Mertens Constant |# foxpipe))
           [(? false? on-system-idle) (update-windows-on-screen hosts)]
-          [(cons (? string? host) (vector (? string? message))) (on-foxpipe-rsyslog host (string->syslog message))]
+          [(cons (? string? host) (vector (? string? message))) (send ($console 'rsyslog) add-syslog host (string->syslog message))]
           [(cons (? string? host) (vector (cons (? symbol? systype) (? ksysinfo? sample)))) (send ($monitor host) visualize systype sample)]
           [(cons (? string? host) (vector (cons (? symbol? errname) (? string? errmsg)))) (send ($monitor host) set-status errmsg #:color 'ErrorMsg)]
           [(cons (? string? host) (? flonum? s)) (place-channel-put foxpipe (format "idled ~as" s)) #| put/get is OK, no thread is (sync)ing |#]
