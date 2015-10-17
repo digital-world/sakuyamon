@@ -4,15 +4,15 @@
 @require{digicore.rkt}
 @require{../../DigiGnome/digitama/posix.rkt}
 
-@require-prefab-cstruct{posix.c}
-
-(require (submod "." prefab:posix.c))
-
 (provide (except-out (all-defined-out) define-posix define-digitama static:sysinfo))
 (provide (all-from-out "../../DigiGnome/digitama/posix.rkt"))
 
 (define-ffi-definer define-posix (ffi-lib #false #:global? #true))
 (define-ffi-definer define-digitama (digimon-ffi-lib "posix" #:global? #true))
+
+@module-prefab:cstruct/no-auto-update{posix.c}
+
+(require (submod "." prefab:posix.c))
 
 ;;; syslog
 (define-digitama rsyslog

@@ -98,6 +98,7 @@ typedef struct ffi_prefab_ksysinfo {
     double nic_rkbps;
     uintmax_t nic_sent;
     double nic_wkbps;
+    double duration;
 } ksysinfo_t;
 
 #define kb (1024) /* use MB directly may lose precision */
@@ -342,6 +343,7 @@ char *system_statistics(ksysinfo_t *kinfo) {
         kinfo->snaptime = snaptime;
         kinfo->ncores = ncores;
         kinfo->ramtotal = ramsize_kb;
+        kinfo->duration = duration_s;
 
 #ifdef __linux__
         kinfo->uptime = info.uptime;
@@ -584,8 +586,8 @@ job_continue:
         if (errno != 0) goto job_done;
 #endif
 
-        kinfo->disk_rkbps = (disk_in - disk_rkb) / duration_s;
-        kinfo->disk_wkbps = (disk_out - disk_wkb) / duration_s;
+        kinfo->disk_rkbps = (disk_in - disk_rkb) / kinfo->duration;
+        kinfo->disk_wkbps = (disk_out - disk_wkb) / kinfo->duration;
 
         disk_rkb = disk_in;
         disk_wkb = disk_out;
@@ -673,8 +675,8 @@ job_continue:
         freeifaddrs(ifinfo);
 #endif
 
-        kinfo->nic_rkbps = (kinfo->nic_received - nic_rkb) / duration_s;
-        kinfo->nic_wkbps = (kinfo->nic_sent - nic_wkb) / duration_s;
+        kinfo->nic_rkbps = (kinfo->nic_received - nic_rkb) / kinfo->duration;
+        kinfo->nic_wkbps = (kinfo->nic_sent - nic_wkb) / kinfo->duration;
 
         nic_rkb = kinfo->nic_received;
         nic_wkb = kinfo->nic_sent;
