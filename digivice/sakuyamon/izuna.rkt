@@ -81,6 +81,23 @@
                             (cast (car.eval (with-input-from-file colors.rktl read)) (HashTable Symbol Symbol)))))
         (unbox links))))
 
+  (define ~t : (-> Natural Natural String) (lambda [n w] (~r #:min-width w #:pad-string "0" n)))
+  (define ~% : (-> Flonum String) (lambda [%] (~r (* 100.0 (max 0 %)) #:precision '(= 2))))
+
+  (define ~uptime : (-> Natural String)
+    (lambda [s]
+      (let*-values ([(d s) (quotient/remainder s 86400)]
+                    [(h s) (quotient/remainder s 3600)]
+                    [(m s) (quotient/remainder s 60)])
+        (format "~a+~a:~a:~a" d (~t h 2) (~t m 2) (~t s 2)))))
+
+  (define ~size : (-> Nonnegative-Real Symbol [#:precision (U Integer (List '= Integer))] String)
+    (lambda [size unit #:precision [prcs '(= 3)]]
+      (let try-next-unit : String ([s size] [us (cast (member unit (list 'Bytes 'KB 'MB 'GB 'TB)) (Listof Symbol))])
+        (cond [(and (symbol=? (car us) 'Bytes) (< s 1024.0)) (~n_w (cast s Nonnegative-Integer) "Byte")]
+              [(or (< s 1024.0) (zero? (sub1 (length us)))) (format "~a~a" (~r s #:precision prcs) (car us))]
+              [else (try-next-unit (/ s 1024.0) ((inst cdr Symbol Symbol) us))]))))
+  
   (define ~geolocation : (-> String String * String)
     (lambda [ip . whocares]
       (match (what-is-my-address ip)
@@ -107,7 +124,7 @@
 
       (define/public (set-status #:clear? [clear? #false] #:color [color #false] #:offset [x 0] #:width [width (getmaxx statusbar)] . contents)
         (unless (false? clear?) (wclear statusbar))
-        (unless (empty? contents) (mvwaddwstr statusbar 0 x (~a ((inst apply Any String) ~a contents) #:width width)))
+        (unless (empty? contents) (mvwaddstr statusbar 0 x (~a ((inst apply Any String) ~a contents) #:width width)))
         (unless (false? color) (mvwchgat statusbar 0 x width 'StatusLineNC color)))))
   
   (define host% : Monitor<%>
@@ -130,23 +147,43 @@
       
       (define/public visualize
         (lambda [systype sample]
-          (mvwaddwstr stdscr 0 0 (~a systype))
-          (mvwaddwstr stdscr 1 0 (~a sample))))
+          (wclear stdscr)
+          (mvwaddstr titlebar 0 0 (~a scepter-host (~a #:align 'right #:width (max 0 (- (getmaxx titlebar) (string-length scepter-host)))
+                                                       (format "~a: ~a" systype (~uptime (ksysinfo-uptime sample))))))
+          (visualize-slotbar "DSK" (ksysinfo-fstotal sample) (ksysinfo-fsfree sample))
+          (visualize-slotbar "RAM" (ksysinfo-ramtotal sample) (ksysinfo-ramfree sample))
+          (visualize-slotbar "SWP" (ksysinfo-swaptotal sample) (ksysinfo-swapfree sample))))
       
       (define/override (resize y x lines cols)
         (super resize (add1 y) x (cast (sub1 lines) Positive-Integer) cols)
         (wresize titlebar 1 cols)
         (mvwin titlebar y x)
         (wbkgdset titlebar 'TabLineFill)
-        (mvwaddwstr titlebar 0 0 (~a scepter-host #:width (getmaxx titlebar))))
+        (mvwaddstr titlebar 0 0 (~a scepter-host #:width (getmaxx titlebar))))
 
       (define/override (refresh #:with [smart-refresh wnoutrefresh])
-        (super refresh #:with smart-refresh)
         (touchwin titlebar)
-        (smart-refresh titlebar))
+        (smart-refresh titlebar)
+        (super refresh #:with smart-refresh))
 
       (define/private (visualize-loadavg) : Any
-        (void))))
+        (void))
+
+      (define/private (visualize-slotbar [tag : String] [total : Natural] [free : Natural]) : Any
+        (define sloty : Natural (getcury stdscr))
+        (define used% : Flonum (- 1.0 (/ free total)))
+        (define slotx : Natural (add1 (string-length tag)))
+        (define slotsize : Natural (max 0 (- (getmaxx stdscr) slotx 1)))
+        (define label : String (~a (~% used%) #\% #\/ (~size total 'KB #:precision '(= 1))))
+        (define barsize : Natural (cast (min (- slotsize (string-length label)) (exact-round (* slotsize used%))) Natural))
+        (wattrset stdscr 'StorageClass)
+        (mvwaddstr stdscr sloty 0 tag)
+        (wattrset stdscr 'MatchParen)
+        (mvwaddstr stdscr sloty (cast (sub1 slotx) Nonnegative-Integer)
+                   (~a #\[ (make-string barsize #\*) (~a label #:width (max 0 (- slotsize barsize)) #:align 'right) #\]))
+        (mvwchgat stdscr sloty slotx slotsize 'Label 'Label)
+        (mvwchgat stdscr sloty slotx barsize 'MoreMsg 'MoreMsg)
+        (wmove stdscr (add1 sloty) 0))))
 
   (define rsyslog% : Console<%>
     (class window% (super-new)
@@ -207,21 +244,15 @@
         (and (vector-set-performance-stats! izuna-statistics #false) izuna-statistics))
       (define uptime : Positive-Fixnum (cast (- uptime/now uptime/base) Positive-Fixnum))
       (define pr+gctime : Positive-Fixnum (cast (- pr+gctime/now pr+gctime/base) Positive-Fixnum))
-      (define ~t : (-> Natural Natural String) (lambda [n w] (~r #:min-width w #:pad-string "0" n)))
-      (define ~m : (-> Natural String) (lambda [m] (~r #:precision '(= 3) (/ m 1024.0 1024.0))))
-      (define ~% : (-> Flonum String) (lambda [%] (~r #:precision '(= 2) (* 100.0 (max 0 %)))))
-      (let*-values ([(s) (quotient uptime 1000)]
-                    [(d s) (quotient/remainder s 86400)]
-                    [(h s) (quotient/remainder s 3600)]
-                    [(m s) (quotient/remainder s 60)])
-        (define status : String (~a #:align 'right #:width (max 0 (- (getmaxx stdbar) (string-length prefix)))
-                                    (format "~a ~a:~a:~a up, ~ams gc[~a], ~a% idle, ~aMB, ~a"
-                                            (~n_w d "day") (~t h 2) (~t m 2) (~t s 2) gctime/now gctimes
-                                            (~% (- 1.0 (/ pr+gctime uptime))) (~m (+ (current-memory-use) sysmem))
-                                            (parameterize ([date-display-format 'iso-8601])
-                                              (date->string (current-date) #true)))))
-        (mvwaddstr stdbar 0 0 (string-append prefix status))
-        (wrefresh stdbar))))
+      (define status : String (~a #:align 'right #:width (max 0 (- (getmaxx stdbar) (string-length prefix)))
+                                  (format "~a up, ~ams gc[~a], ~a% idle, ~a, ~a"
+                                          (~uptime (quotient uptime 1000)) gctime/now gctimes
+                                          (~% (- 1.0 (/ pr+gctime uptime)))
+                                          (~size (+ (current-memory-use) sysmem) 'Bytes)
+                                          (parameterize ([date-display-format 'iso-8601])
+                                            (date->string (current-date) #true)))))
+      (mvwaddstr stdbar 0 0 (string-append prefix status))
+      (wrefresh stdbar)))
   
   (define alert : (-> Symbol String [#:stdbar Window*] Any * Any)
     (lambda [#:stdbar [stdbar (:prefabwin 'cmdlinebar)] higroup fmt . contents]
