@@ -173,7 +173,7 @@
         (void))
 
       (define/private (visualize-slotbar [tag : String] [total : Natural] [free : Natural] [threshold-low : Flonum] [threshold-high : Flonum]) : Any
-        (define used% : Flonum (- 1.0 (/ free total)))
+        (define used% : Flonum (- 1.0 (with-handlers ([void (const 0.0)]) (/ free total))))
         (define label : String (format "~a/~a(~a%)"
                                        (~size (max 0 (- total free)) 'KB #:precision '(= 1))
                                        (~size total 'KB #:precision '(= 1))
