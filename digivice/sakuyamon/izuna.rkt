@@ -155,7 +155,8 @@
                                                        (format "~a: ~a" systype (~uptime (ksysinfo-uptime sample))))))
           (visualize-slotbar "DSK" (ksysinfo-fstotal sample) (ksysinfo-fsfree sample) 0.70 0.85)
           (visualize-slotbar "RAM" (ksysinfo-ramtotal sample) (ksysinfo-ramfree sample) 0.70 0.85)
-          (visualize-slotbar "SWP" (ksysinfo-swaptotal sample) (ksysinfo-swapfree sample) 0.70 0.85)))
+          (visualize-slotbar "SWP" (ksysinfo-swaptotal sample) (ksysinfo-swapfree sample) 0.70 0.85)
+          (visualize-infinitebar (list "NIO" "Received" "Sent") (list (ksysinfo-nic_received sample) (ksysinfo-nic_sent sample)) (list 'PmenuThumb 'WildMenu))))
       
       (define/override (resize y x lines cols)
         (super resize (add1 y) x (cast (sub1 lines) Positive-Integer) cols)
@@ -169,34 +170,54 @@
         (smart-refresh titlebar)
         (super refresh #:with smart-refresh))
 
-      (define/private (visualize-loadavg) : Any
-        (void))
-
       (define/private (visualize-slotbar [tag : String] [total : Natural] [free : Natural] [threshold-low : Flonum] [threshold-high : Flonum]) : Any
         (define used% : Flonum (- 1.0 (with-handlers ([void (const 0.0)]) (/ free total))))
         (define label : String (format "~a/~a(~a%)"
                                        (~size (max 0 (- total free)) 'KB #:precision '(= 1))
                                        (~size total 'KB #:precision '(= 1))
                                        (~% used% #:precision 0)))
-        (define sloty : Natural (getcury stdscr))
-        (define slotx : Natural (add1 (string-length tag)))
-        (define slotsize : Natural (max 0 (- (getmaxx stdscr) slotx 1)))
+        (define bary : Natural (getcury stdscr))
+        (define barx : Natural (add1 (string-length tag)))
+        (define slotsize : Natural (max 0 (- (getmaxx stdscr) barx 1)))
         (define usedsize : Natural (cast (exact-round (* slotsize used%)) Natural))
         (define barsize : Natural (cast (min (- slotsize (string-length label)) usedsize) Natural))
         (wattrset stdscr 'StorageClass)
-        (mvwaddstr stdscr sloty 0 tag)
+        (mvwaddstr stdscr bary 0 tag)
         (wattrset stdscr 'MatchParen)
-        (mvwaddstr stdscr sloty (cast (sub1 slotx) Nonnegative-Integer)
+        (mvwaddstr stdscr bary (cast (sub1 barx) Nonnegative-Integer)
                    (~a #\[ (make-string barsize #\*) (~a label #:width (max 0 (- slotsize barsize)) #:align 'right) #\]))
-        (mvwchgat stdscr sloty slotx slotsize 'Label 'Label)
-        (mvwchgat stdscr sloty slotx usedsize 'MoreMsg 'MoreMsg)
+        (mvwchgat stdscr bary barx slotsize 'Label 'Label)
+        (mvwchgat stdscr bary barx usedsize 'MoreMsg 'MoreMsg)
         (when (> used% threshold-low)
           (define lowsize : Natural (cast (exact-round (* slotsize threshold-low)) Natural))
-          (mvwchgat stdscr sloty (+ slotx lowsize) (max (- usedsize lowsize) 0) 'WarningMsg 'WarningMsg)
+          (mvwchgat stdscr bary (+ barx lowsize) (max (- usedsize lowsize) 0) 'WarningMsg 'WarningMsg)
           (when (> used% threshold-high)
             (define highsize : Natural (cast (exact-round (* slotsize threshold-high)) Natural))
-            (mvwchgat stdscr sloty (+ slotx highsize) (max (- usedsize highsize) 0) 'ErrorMsg 'ErrorMsg)))
-        (wmove stdscr (add1 sloty) 0))))
+            (mvwchgat stdscr bary (+ barx highsize) (max (- usedsize highsize) 0) 'ErrorMsg 'ErrorMsg)))
+        (wmove stdscr (add1 bary) 0))
+
+      (define/private (visualize-infinitebar [tags : (Listof String)] [data : (Listof Natural)] [colors : (Listof Symbol)]) : Any
+        (define bary : Natural (getcury stdscr))
+        (wattrset stdscr 'StorageClass)
+        (mvwaddstr stdscr bary 0 (car tags))
+        (wattrset stdscr 'MatchParen)
+        (waddch stdscr #\[)
+        (let render-next ([tag : (Listof String) (cdr tags)]
+                          [src : (Listof Natural) data]
+                          [clr : (Listof Symbol) colors]
+                          [barsize : Natural (max 0 (- (getmaxx stdscr) (string-length (car tags)) 2))])
+          (unless (null? src)
+            (define vsize : Natural (cast (with-handlers ([void (const 0)]) (exact-round (* barsize (/ (first src) (foldl + 0 src))))) Natural))
+            (define label : String (~a (car tag) #\: (~size (max 0 (car src)) 'KB #:precision '(= 2)) #:width vsize #:align 'center))
+            (wattrset stdscr (car clr))
+            (waddstr stdscr label)
+            (render-next (cdr tag) (cdr src) (cdr clr) (max 0 (- barsize vsize)))))
+        (wattrset stdscr 'MatchParen)
+        (waddch stdscr #\])
+        (wmove stdscr (add1 bary) 0))
+
+      (define/private (visualize-history [tag/lengend : String] [total : Natural] [free : Natural] [threshold-low : Flonum] [threshold-high : Flonum]) : Any
+        (void))))
 
   (define rsyslog% : Console<%>
     (class window% (super-new)
