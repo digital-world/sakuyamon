@@ -71,8 +71,8 @@ Note that @exec{sphere} will do nothing for those passwords that have already be
 
 @tamer-note['sphere]
 @chunk[|<testcsae: sphere in-place>|
-       (let-values ([{realm.dtkr} (path->string (path-replace-suffix realm.rktd ".dtkr"))]
-                    [{digest-in digest-out} (make-pipe #false 'digest-in 'digest-out)])
+       (let-values ([(realm.dtkr) (path->string (path-replace-suffix realm.rktd ".dtkr"))]
+                    [(digest-in digest-out) (make-pipe #false 'digest-in 'digest-out)])
          (test-spec "sakuyamon sphere --in-place"
                     #:before (thunk (copy-file realm.rktd realm.dtkr))
                     #:after (thunk (delete-file realm.dtkr))

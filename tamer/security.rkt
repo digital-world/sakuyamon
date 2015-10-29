@@ -34,8 +34,8 @@ then enjoy it yourself!
 @handbook-appendix[]
 
 @chunk[|<security:*>|
-       {module+ main (call-as-normal-termination tamer-prove)}
-       {module+ story
+       (module+ main (call-as-normal-termination tamer-prove))
+       (module+ story
          (define-tamer-suite I-am-a-teapot "Bad Users"
            #:before (check-port-ready? tamer-sakuyamon-port #:type todo)
-           |<testcase: I-am-a-teapot>|)}]
+           |<testcase: I-am-a-teapot>|))]

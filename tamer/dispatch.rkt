@@ -34,7 +34,7 @@ are relative to @racket[digimon-terminus].
 
 @chunk[|<testcase: dispatch main>|
        (test-case "HTTP OPTIONS"
-                  (match-let ([{list _ _ headers _} (curl "-X" "Options" (/htdocs "robots.txt"))])
+                  (match-let ([(list _ _ headers _) (curl "-X" "Options" (/htdocs "robots.txt"))])
                     (check-regexp-match #px"^((GET|HEAD|POST),?){3}$" (dict-ref headers 'allow))
                     (check-equal? (dict-ref headers 'terminus) "Main")))]
 
@@ -46,10 +46,10 @@ are relative to @racket[digimon-terminus].
 
 @chunk[|<check: function url>|
        (test-case (format "200: ~a@::1" (rhtdocs d-arc))
-                  (match-let ([{list status reason _ _} (curl (rhtdocs d-arc))])
+                  (match-let ([(list status reason _ _) (curl (rhtdocs d-arc))])
                     (check-eq? status 200 reason)))
        (test-case (format "403: ~a@127" (rhtdocs d-arc))
-                  (match-let ([{list status reason _ _} (127.curl (rhtdocs d-arc))])
+                  (match-let ([(list status reason _ _) (127.curl (rhtdocs d-arc))])
                     (check-eq? status 403 reason)))]
 
 @handbook-scenario{Per-Tamer Terminus}
@@ -63,7 +63,7 @@ and the rest parts are relative to its own @racket[digimon-terminus]s.
 
 @chunk[|<testcase: dispatch tamer>|
        (test-case "HTTP OPTIONS"
-                  (match-let ([{list _ _ headers _} (curl "-X" "Options" (/tamer "robots.txt"))])
+                  (match-let ([(list _ _ headers _) (curl "-X" "Options" (/tamer "robots.txt"))])
                     (check-regexp-match #px"^((GET|HEAD|POST),?){3}$" (dict-ref headers 'allow))
                     (check-equal? (dict-ref headers 'terminus) "Per-Tamer")))]
 
@@ -78,9 +78,9 @@ Although users could write their own servlets to protect their contents in a mor
 HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in the root of @itech{Kuzuhamon}.
 
 @chunk[|<testsuite: digest access authentication>|
-       (let*-values ([{type lhtdocs rhtdocs} (values 'digest ~tamer /tamer)]
-                     [{.realm.rktd} (simple-form-path (lhtdocs 'up ".realm.rktd"))]
-                     [{.realm-path} (path->string (file-name-from-path .realm.rktd))])
+       (let*-values ([(type lhtdocs rhtdocs) (values 'digest ~tamer /tamer)]
+                     [(.realm.rktd) (simple-form-path (lhtdocs 'up ".realm.rktd"))]
+                     [(.realm-path) (path->string (file-name-from-path .realm.rktd))])
          (test-suite "Digest Authentication"
                      |<authenticate: setup and teardown>|
                      |<testcase: authentication>|))]
@@ -88,13 +88,13 @@ HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in th
 @chunk[|<testcase: authentication>|
        (let ([rpath (rhtdocs .realm-path)])
          (test-case (format "200|503: guest@::1:~a" type)
-                    (match-let ([{list status reason _ _} (curl "--location" rpath)])
+                    (match-let ([(list status reason _ _) (curl "--location" rpath)])
                       (check-eq? status (if root? 503 200) reason)))
          (test-case (format "401|503: guest@127:~a" type)
-                    (match-let ([{list status reason _ _} (127.curl "--location" rpath)])
+                    (match-let ([(list status reason _ _) (127.curl "--location" rpath)])
                       (check-eq? status (if root? 503 401) reason)))
          (test-case (format "200|503: wargrey@127:~a" type)
-                    (match-let ([{list status reason _ _} (127.curl "--location" "--anyauth"
+                    (match-let ([(list status reason _ _) (127.curl "--location" "--anyauth"
                                                                     "-u" "wargrey:gyoudmon" rpath)])
                       (check-eq? status (if root? 503 200) reason))))]
 
@@ -124,7 +124,7 @@ where stores the auto-generated @itech{htdocs}.
 
 @chunk[|<testcase: dispatch digimon>|
        (test-case "HTTP OPTIONS"
-                  (match-let ([{list _ _ headers _} (curl "-X" "Options" (/digimon "robots.txt"))])
+                  (match-let ([(list _ _ headers _) (curl "-X" "Options" (/digimon "robots.txt"))])
                     (check-regexp-match #px"^((GET|HEAD),?){2}$" (dict-ref headers 'allow))
                     (check-equal? (dict-ref headers 'terminus) "Per-Digimon")))]
 
@@ -133,9 +133,9 @@ Nonetheless, @itech{Per-Digimon Terminus} do support HTTP @itech{BAA}, and a @it
 is required to work with @secref["dispatch-passwords" #:doc '(lib "web-server/scribblings/web-server-internal.scrbl")].
 
 @chunk[|<testsuite: basic access authentication>|
-       (let*-values ([{type lhtdocs rhtdocs} (values 'basic ~digimon /digimon)]
-                     [{.realm.rktd} (simple-form-path (lhtdocs 'up 'up ".realm.rktd"))]
-                     [{.realm-path} (path->string (file-name-from-path .realm.rktd))])
+       (let*-values ([(type lhtdocs rhtdocs) (values 'basic ~digimon /digimon)]
+                     [(.realm.rktd) (simple-form-path (lhtdocs 'up 'up ".realm.rktd"))]
+                     [(.realm-path) (path->string (file-name-from-path .realm.rktd))])
          (test-suite "Basic Authentication"
                      |<authenticate: setup and teardown>|
                      |<testcase: authentication>|))]
@@ -148,8 +148,8 @@ since the @itech{.realm.rktd} is checked every request.
 @handbook-appendix[]
 
 @chunk[|<dispatch:*>|
-       {module+ main (call-as-normal-termination tamer-prove)}
-       {module+ story
+       (module+ main (call-as-normal-termination tamer-prove))
+       (module+ story
          (define sakuyamon (parameterize ([current-command-line-arguments (vector)]
                                           [current-output-port /dev/null]
                                           [current-error-port /dev/null]
@@ -170,7 +170,7 @@ since the @itech{.realm.rktd} is checked every request.
          (define-tamer-suite dispatch-digimon "Per-Digimon Terminus"
            #:before (check-port-ready? tamer-sakuyamon-port #:type todo)
            |<testcase: dispatch digimon>|
-           |<testsuite: basic access authentication>|)}]
+           |<testsuite: basic access authentication>|))]
 
 @chunk[|<authenticate: setup and teardown>|
        #:before (thunk (unless root?
