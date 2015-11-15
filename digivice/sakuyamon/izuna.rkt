@@ -96,10 +96,11 @@
 
   (define ~size : (-> Nonnegative-Real Symbol [#:precision (U Integer (List '= Integer))] String)
     (lambda [size unit #:precision [prcs '(= 3)]]
-      (let try-next-unit : String ([s size] [us (cast (member unit (list 'Bytes 'KB 'MB 'GB 'TB)) (Listof Symbol))])
+      (define-type/enum units : Unit 'Bytes 'KB 'MB 'GB 'TB)
+      (let try-next-unit : String ([s size] [us (cast (member unit units) (Listof Unit))])
         (cond [(and (symbol=? (car us) 'Bytes) (< s 1024.0)) (~n_w (cast s Nonnegative-Integer) "Byte")]
               [(or (< s 1024.0) (zero? (sub1 (length us)))) (format "~a~a" (~r s #:precision prcs) (car us))]
-              [else (try-next-unit (/ s 1024.0) ((inst cdr Symbol Symbol) us))]))))
+              [else (try-next-unit (/ s 1024.0) ((inst cdr Unit Unit) us))]))))
   
   (define ~geolocation : (-> String String * String)
     (lambda [ip . whocares]

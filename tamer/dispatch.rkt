@@ -18,7 +18,7 @@ that serves 3 types of @deftech[#:key "terminus"]{termini}, or @deftech{htdocs}.
        |<dispatch:*>|]
 
 @para[#:style "GYDMWarning"]{For @hyperlink["http://en.wikipedia.org/wiki/Localhost"]{loopback addresses},
-                                 @itech{Sakuyamon} always trust @deftech[#:key "trustable"]@litchar{::1} and treat
+                                 @itech{Sakuyamon} always trust @deftech[#:key "trusted"]@litchar{::1} and treat
                                  @litchar{127.0.0.1} as a public one.}
 
 @tamer-action[(with-handlers ([exn:fail:user? (compose1 displayln exn-message)])
@@ -38,7 +38,7 @@ are relative to @racket[digimon-terminus].
                     (check-regexp-match #px"^((GET|HEAD|POST),?){3}$" (dict-ref headers 'allow))
                     (check-equal? (dict-ref headers 'terminus) "Main")))]
 
-@deftech{Function URL}s are dispatched only when the requests come from @itech{trustable} clients.
+@deftech{Function URL}s are dispatched only when the requests come from @itech{trusted} clients.
 
 @chunk[|<testcase: dispatch funtion URLs>|
        (for ([d-arc (in-list (list "d-arc/collect-garbage" "d-arc/refresh-servlet"))])
