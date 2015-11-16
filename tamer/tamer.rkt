@@ -21,9 +21,9 @@ exec racket -t "$0" -- ${1+"$@"}
 
 (provide (all-defined-out))
 (provide (all-from-out "../digitama/agent.rkt"))
-(provide (all-from-out "../digitama/digicore.rkt"))
-(provide (all-from-out "../../DigiGnome/digitama/tamer.rkt"))
 (provide (all-from-out net/head net/base64 web-server/http))
+(provide (except-out (all-from-out "../digitama/digicore.rkt" "../../DigiGnome/digitama/tamer.rkt")
+                     exn:break:hang-up? exn:break:terminate?))
 
 (unless (find-executable-path "racket")
   (void (putenv "PATH" (format "~a:~a" (find-console-bin-dir) (getenv "PATH")))))
