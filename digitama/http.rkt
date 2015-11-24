@@ -3,17 +3,14 @@
 @require{digicore.rkt}
 @require[(submod "posix.rkt" typed/ffi)]
 
-@require{typed/web-server/http.rkt}
-@require{typed/web-server/configuration/responders.rkt}
+(require typed/web-server/http)
+(require typed/web-server/configuration/responders)
 
 (require typed/net/url)
 (require typed/file/md5)
 
 (provide (except-out (all-defined-out) response:ddd))
 (provide (all-from-out typed/net/url))
-
-(provide (all-from-out "typed/web-server/http.rkt"
-                       "typed/web-server/configuration/responders.rkt"))
 
 (require/typed racket/base
                [srcloc->string (-> srcloc (Option String))]
