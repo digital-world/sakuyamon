@@ -8,7 +8,8 @@
 (require typed/file/md5)
 
 @require{digicore.rkt}
-@require{typed/web-server/http.rkt}
+
+(require typed/web-server/http)
 
 (define-type Headers (HashTable Symbol String))
 (define-type Client-Response (List Positive-Integer String Headers Input-Port))
