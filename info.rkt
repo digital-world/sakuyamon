@@ -4,7 +4,7 @@
 
 (define version "Baby")
 
-(define pkg-desc "A Lightweight HTTP Server that supports gyoudmon.org")
+(define pkg-desc "A Lightweight HTTP Server that serve the project")
 
 (define build-deps '{"base" "typed-racket-lib" "scribble-lib" "web-server-lib"})
 
