@@ -2,8 +2,6 @@
 
 @(require "tamer.rkt")
 
-@(require (for-syntax "tamer.rkt"))
-
 @handbook-story{Hello, Sakuyamon!}
 
 As the @deftech{digimon} @deftech{tamer}s, our story always starts with checking the
@@ -22,8 +20,8 @@ in order to make sure we could talk with the @itech{digimon}s as expected.
                         [current-error-port /dev/null]
                         [exit-handler void])
            (dynamic-require (build-path (digimon-digivice) "sakuyamon.rkt") 'main)))
-       
-       |<sakuyamon:*>|]
+
+       (module+ tamer |<sakuyamon:*>|)]
 
 @tamer-action[(parameterize ([exit-handler void])
                 (sakuyamon "help"))]
@@ -31,11 +29,7 @@ in order to make sure we could talk with the @itech{digimon}s as expected.
 @handbook-scenario{Sakuyamon, Realize!}
 
 @tamer-action[(parameterize ([exit-handler void])
-                (sakuyamon "realize" "--help"))
-              (parameterize ([exit-handler void])
-                (sakuyamon "realize" "--SSL"))
-              (code:comment @#,t{@hyperlink["https://letsencrypt.org"]{@racketcommentfont{Let@literal{'}s Encrypt}} is a kind of service})
-              (code:comment @#,t{that allow administrator enabling HTTPS esaily, freely and automatically.})]
+                (sakuyamon "realize" "--help"))]
 
 @itech{Sakuyamon} herself is designed as a daemon, hence the taming strategy is following this fact.
 If the @itech{tamer} is @italic{root}, she will not realize automatically since she should have already been deloyed
@@ -54,10 +48,9 @@ HTTP protocal has two alternatives, the
 @deftech[#:key "DAA"]{@hyperlink["http://en.wikipedia.org/wiki/Digest_access_authentication"]{Digest Access Authentication}}.
 As lightweight as they are, the only requirement is a @racket[read]able data file @deftech{.realm.rktd}.
 
-@para[#:style "GYDMComment"]{See @itech{Per-Digimon Terminus} and @itech{Per-Tamer Terminus}
-                                 to check how @itech{Sakuyamon} applies it.}
+@racketcommentfont{See @itech{Per-Digimon Terminus} and @itech{Per-Tamer Terminus} to check how @itech{Sakuyamon} applies it.}
 
-@tamer-racketbox[#:line-start-with 1 (build-path (digimon-stone) "realm.rktd")]
+@tamer-racketbox[(build-path (digimon-stone) "realm.rktd")]
 
 Like @hyperlink["http://en.wikipedia.org/wiki/Digest_access_authentication#The_.htdigest_file"]{@exec{htdigest}},
 @itech{Sakuyamon} has a tool @exec{sphere} to help users to digest their flat @itech{.realm.rktd}s.
@@ -71,20 +64,14 @@ Note that @exec{sphere} will do nothing for those passwords that have already be
 
 @tamer-note['sphere]
 @chunk[|<testcsae: sphere in-place>|
-       (let-values ([(realm.dtkr) (path->string (path-replace-suffix realm.rktd ".dtkr"))]
-                    [(digest-in digest-out) (make-pipe #false 'digest-in 'digest-out)])
-         (test-spec "sakuyamon sphere --in-place"
-                    #:before (thunk (copy-file realm.rktd realm.dtkr))
-                    #:after (thunk (delete-file realm.dtkr))
-                    (parameterize ([current-output-port digest-out]
-                                   [current-error-port digest-out])
-                      (check-equal? (parameterize ([exit-handler void])
-                                      (thread (thunk (sakuyamon "sphere" realm.dtkr)))
-                                      (read digest-in))
-                                    (parameterize ([exit-handler void])
-                                      (thread (thunk (and (sakuyamon "sphere" "--in-place" realm.dtkr)
-                                                          (sakuyamon "sphere" realm.dtkr))))
-                                      (read digest-in))))))]
+       (test-spec "sakuyamon sphere --in-place"
+                  #:before (let ([realm.dtkr (path->string (make-temporary-file "~a.dtkr" realm.rktd))])
+                             (thunk ($shell (thunk (sakuyamon "sphere" realm.dtkr)
+                                                   (sakuyamon "sphere" "--in-place" realm.dtkr)
+                                                   (sakuyamon "sphere" realm.dtkr)))))
+                  (parameterize ([current-input-port (open-input-bytes (get-output-bytes $out))])
+                    (check-pred zero? ($?) (get-output-string $err))
+                    (check-equal? (read) (read))))]
 
 @handbook-scenario{How is everything going?}
 
@@ -103,10 +90,9 @@ to monitor the logs just as MacOSX @exec{Console.app} does. Therefore here exist
        (test-spec "sakuyamon foxpipe"
                   (check-not-exn (check-port-ready? tamer-foxpipe-port #:type skip)))]
 
-@handbook-appendix[]
+@handbook-bibliography[]
 
 @chunk[|<sakuyamon:*>|
-       (module+ main (call-as-normal-termination tamer-prove))
        (module+ story
          (define-tamer-suite realize "Sakuyamon, Realize!" |<testcase: realize>|)
          (define-tamer-suite sphere "Keep Realms Safe!" |<testcsae: sphere in-place>|)

@@ -17,7 +17,7 @@
 
 (define-type Dispatcher-Interface-Version (U 'v1))
 (define-type Log-Format (U 'parenthesized-default 'extended 'apache-default))
-(define-type Read-Request (-> Connection Integer (-> Input-Port (Values String String)) (Option Any)))
+(define-type Read-Request (-> Connection Integer (-> Input-Port (Values String String)) (Values Request Boolean)))
 
 (define-type HTTP-Password (List* String #|domain|#
                                   String #|url regex|#
