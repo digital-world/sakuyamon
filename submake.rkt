@@ -5,9 +5,9 @@
 (require syntax/location)
 (require make)
 
-(define sakuyamon.plist "/System/Library/LaunchDaemons/org.gyoudmon.sakuyamon.plist")
+(define sakuyamon.plist "/Library/LaunchDaemons/org.gyoudmon.sakuyamon.plist")
 (define /sakuyamon/launchd.plist (build-path (digimon-stone) "sakuyamon" "launchd.plist"))
-(define foxpipe.plist "/System/Library/LaunchDaemons/org.gyoudmon.foxpipe.plist")
+(define foxpipe.plist "/Library/LaunchDaemons/org.gyoudmon.foxpipe.plist")
 (define /foxpipe/launchd.plist (build-path (digimon-stone) "foxpipe" "launchd.plist"))
 
 (define sakuyamon.smf "/lib/svc/manifest/network/sakuyamon.xml")
