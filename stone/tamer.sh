@@ -51,6 +51,7 @@ roletamer() {
             grep '/etc/rsyslog\.d/' /etc/rsyslog.conf;
             if test $? -ne 0; then
                 echo '$IncludeConfig /etc/rsyslog.d/*.conf' >> /etc/rsyslog.conf;
+                mkdir -p /etc/rsyslog.d;
             fi
 
             getent group $2 || groupadd $2;
