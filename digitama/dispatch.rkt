@@ -84,7 +84,8 @@
             [(? symbol?) #false]
             [(or "~:") (and (find-doc-dir) 'racket-docs)]
             [(? string? ~:?) (let ([~: (string-split ~:? #px":")])
-                               (and (regexp-match? #"^~.+$" (car ~:))
+                               (and (pair? ~:) ; string-split :: "" -> null
+                                    (regexp-match? #"^~.+$" (car ~:))
                                     (expand-user-path (car ~:))
                                     ~:))])))
       (define serve : Dispatcher
