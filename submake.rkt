@@ -10,9 +10,9 @@
 (define foxpipe.plist "/Library/LaunchDaemons/org.gyoudmon.foxpipe.plist")
 (define /foxpipe/launchd.plist (build-path (digimon-stone) "foxpipe" "launchd.plist"))
 
-(define sakuyamon.smf "/lib/svc/manifest/network/sakuyamon.xml")
+(define sakuyamon.smf "/var/svc/manifest/network/sakuyamon.xml")
 (define /sakuyamon/manifest.xml (build-path (digimon-stone) "sakuyamon" "manifest.xml"))
-(define foxpipe.smf "/lib/svc/manifest/network/foxpipe.xml")
+(define foxpipe.smf "/var/svc/manifest/network/foxpipe.xml")
 (define /foxpipe/manifest.xml (build-path (digimon-stone) "foxpipe" "manifest.xml"))
 
 (define sakuyamon.service "/lib/systemd/system/sakuyamon.service")
@@ -85,7 +85,10 @@
       (system (format "sh ~a ~a delete"
                       (build-path (digimon-stone) "tamer.sh")
                       (digimon-system)))
-      (for-each delete-file targets))))
+      (for ([dirty (in-list targets)])
+        (delete-file dirty)
+        (printf "submake: deleted ~a.~n"
+                (simplify-path dirty))))))
 
 (module+ postmake
   (when (string=? (current-tamer) "root")
