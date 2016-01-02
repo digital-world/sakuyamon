@@ -34,9 +34,9 @@
 
 (define targets
   (case (digimon-system)
-    [{illumos} (list sakuyamon.smf foxpipe.smf sakuyamon.rsyslog sakuyamon.logadm)]
-    [{macosx} (list sakuyamon.plist foxpipe.plist sakuyamon.asl)]
-    [{linux} (list sakuyamon.service foxpipe.service sakuyamon.rsyslog sakuyamon.logrotate)]))
+    [(illumos) (list sakuyamon.smf foxpipe.smf sakuyamon.rsyslog sakuyamon.logadm)]
+    [(macosx) (list sakuyamon.plist foxpipe.plist sakuyamon.asl)]
+    [(linux) (list sakuyamon.service foxpipe.service sakuyamon.rsyslog sakuyamon.logrotate)]))
 
 (module+ premake
   (when (string=? (current-tamer) "root")
@@ -47,7 +47,7 @@
 
 (module+ make:files 
   (module+ make
-    (define {sudo.make dest src [chown #false]}
+    (define (sudo.make dest src [chown #false])
       (and (with-output-to-file dest #:exists 'replace
              (thunk (and (putenv "destname" (path->string (file-name-from-path dest)))
                          (dynamic-require src #false))))
@@ -72,8 +72,9 @@
              [sakuyamon.rsyslog [/stone/sakuyamon.rsyslog (quote-source-file) (find-executable-path "racket")]
                                 (and (sudo.make sakuyamon.rsyslog /stone/sakuyamon.rsyslog "root:root")
                                      (case (digimon-system)
-                                       [{illumos} (system "svcadm restart system-log:rsyslog")]
-                                       [{linux} (system "systemctl restart rsyslog")]))]
+                                       [(illumos) (or (system "svcadm restart system-log:rsyslog") ; openindiana
+                                                      (system "svcadm restart rsyslog:default"))]  ; smartos
+                                       [(linux) (system "systemctl restart rsyslog")]))]
              [sakuyamon.logadm [/stone/sakuyamon.logadm (quote-source-file) (find-executable-path "racket")]
                                (sudo.make sakuyamon.logadm /stone/sakuyamon.logadm "root:sys")]
              [sakuyamon.logrotate [/stone/sakuyamon.logrotate (quote-source-file) (find-executable-path "racket")]
