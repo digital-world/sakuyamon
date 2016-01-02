@@ -3,9 +3,11 @@
 (provide (all-defined-out))
 (provide (all-from-out "../../DigiGnome/digitama/digicore.rkt"))
 (provide (all-from-out "../../DigiGnome/digitama/emoji.rkt"))
+(provide (all-from-out "../../DigiGnome/digitama/sysno.rkt"))
 
 @require{../../DigiGnome/digitama/digicore.rkt}
 @require{../../DigiGnome/digitama/emoji.rkt}
+@require{../../DigiGnome/digitama/sysno.rkt}
 
 (current-digimon "sakuyamon")
 
@@ -28,4 +30,3 @@
   ; for configfiles
   [[info-collection collection] : String]
   [[info-pkg-desc pkg-desc] : String])
-

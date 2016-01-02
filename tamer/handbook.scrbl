@@ -13,7 +13,7 @@ to be found than to be heard of. So you get it, I mean I like it and just for fu
 It is intentionally designed not to work with @exec{raco setup}, nor any other installing processes. Another good news is that, you
 are safe to run it as @bold{root}, after making as usual it will work properly.
 
-@italic{@bold{Have tested with MacOSX, OpenIndiana and Ubuntu.}}
+@italic{@bold{Have tested with MacOSX, OpenIndiana.}}
 
 @tamer-smart-summary[]
 @handbook-smart-table[]

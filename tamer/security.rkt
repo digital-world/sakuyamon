@@ -14,7 +14,7 @@ nonetheless, we can always choose to make things interesting.
 @chunk[|<security taming start>|
        (require "tamer.rkt")
        (tamer-taming-start)
-       |<security:*>|]
+       (module+ tamer |<security:*>|)]
 
 @handbook-scenario{Would you like a cup of tea?}
 
@@ -31,10 +31,9 @@ then enjoy it yourself!
                     (match-let ([{list status reason _ _} (curl (/htdocs rpath))])
                       (check-eq? status 418 reason))))]
 
-@handbook-appendix[]
+@handbook-bibliography[]
 
 @chunk[|<security:*>|
-       (module+ main (call-as-normal-termination tamer-prove))
        (module+ story
          (define-tamer-suite I-am-a-teapot "Bad Users"
            #:before (check-port-ready? tamer-sakuyamon-port #:type todo)

@@ -1,32 +1,18 @@
 #lang at-exp typed/racket
 
+(provide (except-out (all-defined-out) response:ddd))
+(provide (all-from-out typed/net/url typed/web-server/http))
+
 @require{digicore.rkt}
 @require[(submod "posix.rkt" typed/ffi)]
 
 (require typed/web-server/http)
-(require typed/web-server/configuration/responders)
 
 (require typed/net/url)
-(require typed/file/md5)
-
-(provide (except-out (all-defined-out) response:ddd))
-(provide (all-from-out typed/net/url))
 
 (require/typed racket/base
                [srcloc->string (-> srcloc (Option String))]
                [current-memory-use (->* [] [(Option Custodian)] Nonnegative-Integer)])
-
-(define make-md5-auth-header : (-> String String String Header)
-  (lambda [realm private-key0 opaque0]
-    (define private-key : Bytes (string->bytes/utf-8 private-key0))
-    (define timestamp : Bytes (string->bytes/utf-8 (number->string (current-seconds))))
-    (define nonce : Bytes  (md5 (bytes-append timestamp #" " (md5 (bytes-append timestamp #":" private-key)))))
-    (define opaque : Bytes (md5 (string->bytes/utf-8 opaque0)))
-    (header #"WWW-Authenticate"
-            (bytes-append #"Digest realm=\"" (string->bytes/utf-8 realm) #"\""
-                          #", qop=\"auth\""
-                          #", nonce=\"" nonce #"\""
-                          #", opaque=\"" opaque #"\""))))
 
 (define response:ddd : (-> Any Bytes String (Option Path-String) (Listof Header) Response)
   (lambda [code-sexp message desc ddd.html headers]
@@ -40,7 +26,7 @@
                                 `(html (head (title ,(bytes->string/utf-8 message))
                                              (link ([rel "stylesheet"] [href "/stone/error.css"])))
                                        (body (div ([class "section"])
-                                                  (div ([class "title"]) "Sakuyamon")
+                                                  (div ([class "title"]) ,(info-collection))
                                                   (p "> ((" (a ([href "http://racket-lang.org"]) "uncaught-exception-handler") ") "
                                                      ,(string-replace (format "~a" code-sexp) #px"\\s+" "" #:all? #true) ")"
                                                      (pre "» " ,(number->string status-code)
@@ -68,7 +54,7 @@
                     `(html (head (title "Collect Garbage")
                                  (link ([rel "stylesheet"] [href "/stone/error.css"])))
                            (body (div ([class "section"])
-                                      (div ([class "title"]) "Sakuyamon")
+                                      (div ([class "title"]) ,(info-collection))
                                       (p "> (" (a ([href "http://racket-lang.org"]) "collect-garbage") ")"
                                          (pre "» " ,message))))))))
 
@@ -80,7 +66,7 @@
                     `(html (head (title "Refresh Servlet")
                                  (link ([rel "stylesheet"] [href "/stone/error.css"])))
                            (body (div ([class "section"])
-                                      (div ([class "title"]) "Sakuyamon")
+                                      (div ([class "title"]) ,(info-collection))
                                       (p "> (" (a ([href "http://racket-lang.org"]) "refresh-servlet!") ")"
                                          (pre))))))))
 

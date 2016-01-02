@@ -46,7 +46,6 @@ exec racket -t "$0" -- ${1+"$@"}
 
 (define realm.rktd (path->string (build-path (digimon-stone) "realm.rktd")))
 
-(define ECONNREFUSED (case (digimon-system) [{illumos} 146] [{macosx} 61] [{linux} 111]))
 (define tamer-errmsg (make-hash))
 (define tamer-sakuyamon-port (if root? (or (sakuyamon-port) 80) 16180))
 (define tamer-foxpipe-port (sakuyamon-foxpipe-port))

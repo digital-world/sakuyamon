@@ -28,13 +28,16 @@
 
 (require/typed/provide web-server/private/connection-manager
                        [#:struct connection
-                                 ([id : Number]
+                                 ([id : Integer] ; useless but for debugging
                                   [timer : Timer]
                                   [i-port : Input-Port]
                                   [o-port : Output-Port]
                                   [custodian : Custodian]
                                   [close? : Boolean])
+                                 ;#:mutable
                                  #:extra-constructor-name make-connection]
+                       ;[start-connection-manager (-> Connection-Manager)]
+                       ;[new-connection (-> Connection-Manager Number Input-Port Output-Port Custodian Boolean Connection)]
                        [kill-connection! (-> Connection Void)]
                        [adjust-connection-timeout! (-> Connection Number Void)])
 

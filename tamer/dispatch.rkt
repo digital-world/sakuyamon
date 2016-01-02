@@ -2,8 +2,6 @@
 
 @(require "tamer.rkt")
 
-@(require (for-syntax "tamer.rkt"))
-
 @handbook-story{Dispatching and HTTP Access Authentication!}
 
 As an instance of @bold{Racket} @deftech{Web Server},
@@ -15,11 +13,11 @@ that serves 3 types of @deftech[#:key "terminus"]{termini}, or @deftech{htdocs}.
 @chunk[|<dispatch taming start>|
        (require "tamer.rkt")
        (tamer-taming-start)
-       |<dispatch:*>|]
+       (module+ tamer |<dispatch:*>|)]
 
-@para[#:style "GYDMWarning"]{For @hyperlink["http://en.wikipedia.org/wiki/Localhost"]{loopback addresses},
-                                 @itech{Sakuyamon} always trust @deftech[#:key "trusted"]@litchar{::1} and treat
-                                 @litchar{127.0.0.1} as a public one.}
+@racketcommentfont{For @hyperlink["http://en.wikipedia.org/wiki/Localhost"]{@racketcommentfont{loopback addresses}},
+                    @itech{@racketcommentfont{Sakuyamon}} always trust @deftech[#:key "trusted"]@litchar{::1} and treat
+                    @litchar{127.0.0.1} as a public one.}
 
 @tamer-action[(with-handlers ([exn:fail:user? (compose1 displayln exn-message)])
                 (curl "--help"))]
@@ -99,11 +97,11 @@ HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in th
                       (check-eq? status (if root? 503 200) reason))))]
 
 By the way, users can custom @hyperlink["http://en.wikipedia.org/wiki/HTTP_404"]{404 pages} by putting a
-@litchar{404.html} in their own @racket[racket-stone].
+@litchar{404.html} in their own @racket[digimon-stone].
 
-@para[#:style "GYDMError"]{After all the dynamic contents might be totally harmful for other
-                           @itech{tamer}s if they are members of the @litchar{tamer} group.
-                           Therefore enabling @itech{Per-Tamer Terminus} at your own risk!}
+@racketresultfont{After all the dynamic contents might be totally harmful for other
+                   @itech{@racketresultfont{tamer}}s if they are members of the @litchar{tamer} group.
+                   Therefore enabling @itech{@racketresultfont{Per-Tamer Terminus}} at your own risk!}
 
 @handbook-scenario{Per-Digimon Terminus}
 
@@ -114,11 +112,8 @@ The first @italic{path element} of URL always has the shape of @litchar{~usernam
 and the rest parts are relative to @litchar{compiled/handbook} within their own @racket[digimon-tamer]
 where stores the auto-generated @itech{htdocs}.
 
-@para[#:style "GYDMWarning"]{Note its @litchar{robots.txt} should be placed in @racket[digimon-tamer]
-                                      since it isn@literal{'}t the auto-generated resource.}
-
-@para[#:style "GYDMComment"]{@litchar{:} is a common separator works in lots of @italic{rc file}s
-                              such as @litchar{/etc/passwd} in @italic{@bold{Unix-like} OS}es.}
+@racketcommentfont{Note its @litchar{robots.txt} should be placed in @racket[digimon-tamer]
+                    since it isn@literal{'}t an auto-generated resource.}
 
 @tamer-note['dispatch-digimon]
 
@@ -143,12 +138,11 @@ is required to work with @secref["dispatch-passwords" #:doc '(lib "web-server/sc
 By the way, as you may guess, users don@literal{'}t need to refresh passwords manually
 since the @itech{.realm.rktd} is checked every request.
 
-@para[#:style "GYDMWarning"]{@itech{Per-Digimon Terminus} is disabled by default.}
+@racketcommentfont{@itech{@racketcommentfont{Per-Digimon Terminus}} is disabled by default.}
 
-@handbook-appendix[]
+@handbook-bibliography[]
 
 @chunk[|<dispatch:*>|
-       (module+ main (call-as-normal-termination tamer-prove))
        (module+ story
          (define sakuyamon (parameterize ([current-command-line-arguments (vector)]
                                           [current-output-port /dev/null]

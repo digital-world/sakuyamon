@@ -462,7 +462,7 @@
                                                (foxpipe_authenticate session username rsa.pub id_rsa passphrase)))
                                            (ssh-session))
                                     null))
-              (define maxinterval : Nonnegative-Real (+ (sakuyamon-foxpipe-sampling-interval) (/ (+ cputime gctime wallclock) 1000.0)))
+              (define maxinterval : Nonnegative-Real (max 0 (+ (sakuyamon-foxpipe-sampling-interval) (/ (+ cputime gctime wallclock) 1000.0))))
               (define-values (/dev/tcpin /dev/tcpout)
                 (cond [(foxpipe-session*? session) (foxpipe_direct_channel session host-seen-by-sshd service-seen-by-sshd)]
                       [else (let-values ([(whocares) (place-channel-put izunac (list sshd-host 'notify "connecting"))]

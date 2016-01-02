@@ -7,7 +7,7 @@
 @handbook-story{Search Engine Optimization}
 
 As a beginning practitioner of @deftech{@hyperlink["http://en.wikipedia.org/wiki/Search_engine_optimization"]{SEO}},
-I follows Google@literal{'}s guides.
+I follow Google@literal{'}s guides.
 
 Meanwhile, @hyperlink["http://en.wikipedia.org/wiki/Webserver_directory_index"]{directory indices}
 are @litchar{default.rkt} and @litchar{index.html}, respectively.
@@ -17,7 +17,7 @@ are @litchar{default.rkt} and @litchar{index.html}, respectively.
 @chunk[|<seo taming start>|
        (require "tamer.rkt")
        (tamer-taming-start)
-       |<seo:*>|]
+       (module+ tamer |<seo:*>|)]
 
 @handbook-scenario{Robots Exclusion Protocol}
 
@@ -65,10 +65,9 @@ The rendered @litchar{*.html}s will be placed within directories that up to 2 de
                       (check-eq? status 302 reason)
                       (check-regexp-match #px"/[^/.]+?(/|\\.html)$" (dict-ref headers 'location)))))]
 
-@handbook-appendix{SEO Auxiliaries}
+@handbook-bibliography[]
 
 @chunk[|<seo:*>|
-       (module+ main (call-as-normal-termination tamer-prove))
        (module+ story
          (define-tamer-suite robots.txt "/robots.txt"
            #:before (check-port-ready? tamer-sakuyamon-port #:type todo)

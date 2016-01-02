@@ -1,6 +1,6 @@
 #lang at-exp typed/racket
 
-(provide serve)
+(provide dispatch)
 
 @require{digicore.rkt}
 @require[(submod "posix.rkt" typed/ffi)]
@@ -17,6 +17,8 @@
 
 (define-type Terminus (U 'racket-docs (Listof String) False))
 (define-type Dispatchers (HashTable Terminus Dispatcher))
+
+(define initial-connection-timeout : Integer (sakuyamon-connection-timeout))
 
 (define /htdocs : Path-String (digimon-terminus))
 (define zone-stone : String (~a (find-relative-path (digimon-zone) (digimon-stone))))
@@ -67,12 +69,6 @@
                                    (for/list : (Listof (Pairof Symbol Any)) ([head (in-list (request-headers/raw req))])
                                      (cons (string->symbol (string-downcase (bytes->string/utf-8 (header-field head))))
                                            (header-value head)))))))))
-
-(define listen-ip : (Option String) #false)
-(define port : Integer (or (sakuyamon-port) 80)) ; Racket OpenSSL is buggy?
-(define max-waiting : Integer (sakuyamon-max-waiting))
-(define initial-connection-timeout : Integer (sakuyamon-connection-timeout))
-(define read-request : Read-Request (make-read-request #:connection-close? #false))
 
 (define dispatch : (-> Connection Request Void)
   (lambda [conn req]
@@ -172,7 +168,7 @@
                                                            (define private (symbol->string (gensym (current-digimon))))
                                                            (define opaque (symbol->string (gensym (current-digimon))))
                                                            (response:401 #:page (page 401) (request-uri req)
-                                                                         (make-md5-auth-header realm private opaque))))])))])
+                                                                         (make-digest-auth-header realm private opaque))))])))])
                     (servlet:make #:responders-servlet-loading (λ [[u : URL] [e : exn]] (response:exn u e #:page (page 500) #"Loading"))
                                   #:responders-servlet (λ [[u : URL] [e : exn]] (response:exn u e #:page (page 500) #"Handling"))
                                   url->servlet)
@@ -203,46 +199,41 @@
   
 (define realm.rktd->lookups : (-> Path-String (Values (-> String (Option String)) Username*Realm->Digest-HA1))
   (lambda [realm.rktd]
-    (define-type UserDB (HashTable Symbol Bytes))
+    (define-type UserDB (HashTable String Bytes))
     (define-type RealmDB (HashTable String (Pairof Regexp UserDB)))
-    (define realm-cache : (Vector Natural RealmDB) (vector 0 (make-hasheq)))
+    (define realm-cache : (Vector Natural RealmDB) (vector 0 (make-hash)))
     (define (update-realms!)
       (when (file-readable? realm.rktd)
         (let ([cur-mtime (file-or-directory-modify-seconds realm.rktd)])
           (when (> cur-mtime (vector-ref realm-cache 0))
             (define /etc/passwd : (Listof HTTP-Password)
-              (with-handlers ([exn? (λ [e] null)])
-                (cast (with-input-from-file realm.rktd read) (Listof HTTP-Password))))
+              (cadr (cast (with-input-from-file realm.rktd read) (List 'quote (Listof HTTP-Password)))))
             (define realms : RealmDB (vector-ref realm-cache 1))
-            (define realms/new : (Listof String)
+            (define new-realms : (Listof String)
               (for/list : (Listof String) ([record : HTTP-Password (in-list /etc/passwd)])
                 (match-define (list-rest realm pattern user.pwds) record)
-                (define users : UserDB (if (hash-has-key? realms realm) (cdr (hash-ref realms realm)) (make-hasheq)))
-                (define users/new : (Listof Symbol)
-                  (for/list : (Listof Symbol) ([u.p (in-list user.pwds)])
-                    (define username : Symbol (string->symbol (string-downcase (symbol->string (car u.p)))))
+                (define users : UserDB (if (hash-has-key? realms realm) (cdr (hash-ref realms realm)) (make-hash)))
+                (define new-users : (Listof String)
+                  (for/list : (Listof String) ([u.p (in-list user.pwds)])
+                    (define username : String (string-downcase (symbol->string (car u.p))))
                     (hash-set! users username (string->bytes/utf-8 (cadr u.p)))
                     username))
-                (for ([users/old : Symbol (in-list (hash-keys users))])
-                  (unless (member users/old realms/new) (hash-remove! users users/old)))
+                (for ([old-user : String (in-list (hash-keys users))])
+                  (unless (member old-user new-users) (hash-remove! users old-user)))
                 (hash-set! realms realm (cons (pregexp pattern) users))
                 realm))
-            (for ([realms/old : String (in-list (hash-keys realms))])
-              (unless (member realms/old realms/new) (hash-remove! realms realms/old)))
+            (for ([old-realm : String (in-list (hash-keys realms))])
+              (unless (member old-realm new-realms) (hash-remove! realms old-realm)))
             (vector-set! realm-cache 0 cur-mtime)))))
-    (values (lambda [[digest-uri : String]]
+    (values (lambda [[digest-uri : String]] ; lookup realm
               (update-realms!)
               (let/ec deny : String
                 (for ([(realm p.dict) (in-hash (vector-ref realm-cache 1))])
                   (when (regexp-match? (car p.dict) digest-uri)
                     (deny realm)))
                 #false))
-            (lambda [[username : String] [realm : String]]
+            (lambda [[username : String] [realm : String]] ; lookup SHA1
               (update-realms!)
               (or (let ([pxurl.dict (hash-ref (vector-ref realm-cache 1) realm #false)])
-                    (and pxurl.dict (hash-ref (cdr pxurl.dict) (string->symbol (string-downcase username)) #false)))
+                    (and pxurl.dict (hash-ref (cdr pxurl.dict) (string-downcase username) #false)))
                   #"denied")))))
-
-(define serve : (-> [#:confirmation-channel (Option  (Async-Channelof Any))] (-> Void))
-  (lambda [#:confirmation-channel [mailbox #false]]
-    (lambda [] (void))))
