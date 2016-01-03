@@ -142,7 +142,7 @@
   
 (define dispatch-tamer : (-> String Boolean Dispatcher)
   (lambda [real-tamer ::1?]
-    (define /zone : Path (build-path (expand-user-path real-tamer) "DigitalWorld" "Kuzuhamon"))
+    (define /zone : Path (build-path (expand-user-path real-tamer) "DigitalWorld" (digimon-kuzuhamon)))
     (define /htdocs : Path (build-path /zone zone-terminus))
     (define page : (-> Any Path) (λ [code] (build-path /zone zone-stone (format "~a.html" code))))
     (define realm.rktd : Path (build-path /zone ".realm.rktd"))

@@ -54,7 +54,7 @@ are relative to @racket[digimon-terminus].
 
 @deftech{Per-Tamer Terminus} is designed for system users to share and discuss their work on the internet
 if they organize it as a @hyperlink[(format "https://github.com/digital-world/~a#digital-world" (digimon-gnome))]{digimon}
-called @deftech{Kuzuhamon}. The first @italic{path element} of URL always has the shape of @litchar{~username}
+called @deftech{@(digimon-kuzuhamon)}. The first @italic{path element} of URL always has the shape of @litchar{~username}
 and the rest parts are relative to its own @racket[digimon-terminus]s.
 
 @tamer-note['dispatch-tamer]
@@ -73,7 +73,7 @@ So users should be responsible for their own @itech{function URL}s.
          (let ([rhtdocs /tamer]) |<check: function url>|))]
 
 Although users could write their own servlets to protect their contents in a more security way, they still have
-HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in the root of @itech{Kuzuhamon}.
+HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in the root of @itech{@(digimon-kuzuhamon)}.
 
 @chunk[|<testsuite: digest access authentication>|
        (let*-values ([(type lhtdocs rhtdocs) (values 'digest ~tamer /tamer)]

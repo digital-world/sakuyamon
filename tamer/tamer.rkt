@@ -41,7 +41,7 @@ exec racket -t "$0" -- ${1+"$@"}
 (define /digimon (curry format "/~~~a:~a/~a" (current-tamer) (current-digimon)))
 
 (define ~htdocs (curry build-path (digimon-terminus)))
-(define ~tamer (curry build-path (expand-user-path (format "~~~a" (current-tamer))) "DigitalWorld" "Kuzuhamon" "terminus"))
+(define ~tamer (curry build-path (expand-user-path (format "~~~a" (current-tamer))) "DigitalWorld" (digimon-kuzuhamon) "terminus"))
 (define ~digimon (curry build-path (digimon-tamer) (car (use-compiled-file-paths)) "handbook"))
 
 (define realm.rktd (path->string (build-path (digimon-stone) "realm.rktd")))
