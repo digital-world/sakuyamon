@@ -1,13 +1,13 @@
 #lang at-exp typed/racket
 
 (provide (all-defined-out))
-(provide (all-from-out "../../DigiGnome/digitama/digicore.rkt"))
-(provide (all-from-out "../../DigiGnome/digitama/emoji.rkt"))
-(provide (all-from-out "../../DigiGnome/digitama/sysno.rkt"))
+(provide (all-from-out "../../wisemon/digitama/digicore.rkt"))
+(provide (all-from-out "../../wisemon/digitama/emoji.rkt"))
+(provide (all-from-out "../../wisemon/digitama/sysno.rkt"))
 
-@require{../../DigiGnome/digitama/digicore.rkt}
-@require{../../DigiGnome/digitama/emoji.rkt}
-@require{../../DigiGnome/digitama/sysno.rkt}
+@require{../../wisemon/digitama/digicore.rkt}
+@require{../../wisemon/digitama/emoji.rkt}
+@require{../../wisemon/digitama/sysno.rkt}
 
 (current-digimon "sakuyamon")
 

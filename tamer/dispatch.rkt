@@ -53,7 +53,7 @@ are relative to @racket[digimon-terminus].
 @handbook-scenario{Per-Tamer Terminus}
 
 @deftech{Per-Tamer Terminus} is designed for system users to share and discuss their work on the internet
-if they organize it as a @hyperlink["https://github.com/digital-world/DigiGnome#digital-world"]{digimon}
+if they organize it as a @hyperlink[(format "https://github.com/digital-world/~a#digital-world" (digimon-gnome))]{digimon}
 called @deftech{Kuzuhamon}. The first @italic{path element} of URL always has the shape of @litchar{~username}
 and the rest parts are relative to its own @racket[digimon-terminus]s.
 
@@ -107,7 +107,7 @@ By the way, users can custom @hyperlink["http://en.wikipedia.org/wiki/HTTP_404"]
 
 @deftech{Per-Digimon Terminus} is designed for system users to publish their project wikis like
 @hyperlink["https://help.github.com/articles/what-are-github-pages/"]{Github Pages}, and projects
-should be organized in the @hyperlink["https://github.com/digital-world/DigiGnome#digital-world"]{Digital World}.
+should be organized in the @hyperlink[(format "https://github.com/digital-world/~a#digital-world" (digimon-gnome))]{Digital World}.
 The first @italic{path element} of URL always has the shape of @litchar{~username:digimon}
 and the rest parts are relative to @litchar{compiled/handbook} within their own @racket[digimon-tamer]
 where stores the auto-generated @itech{htdocs}.

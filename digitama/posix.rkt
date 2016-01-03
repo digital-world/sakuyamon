@@ -2,10 +2,10 @@
 
 ;;; To force makefile.rkt counting the required file
 @require{digicore.rkt}
-@require{../../DigiGnome/digitama/posix.rkt}
+@require{../../wisemon/digitama/posix.rkt}
 
 (provide (except-out (all-defined-out) define-posix define-digitama static:sysinfo))
-(provide (all-from-out "../../DigiGnome/digitama/posix.rkt"))
+(provide (all-from-out "../../wisemon/digitama/posix.rkt"))
 
 (define-ffi-definer define-posix (ffi-lib #false #:global? #true))
 (define-ffi-definer define-digitama (digimon-ffi-lib "posix" #:global? #true))
@@ -34,10 +34,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (module* typed/ffi typed/racket
   (provide (all-defined-out))
-  (provide (all-from-out (submod "../../DigiGnome/digitama/posix.rkt" typed/ffi)))
+  (provide (all-from-out (submod "../../wisemon/digitama/posix.rkt" typed/ffi)))
   (provide (all-from-out (submod ".." prefab:posix.c typed/ffi)))
 
-  (require (submod "../../DigiGnome/digitama/posix.rkt" typed/ffi))
+  (require (submod "../../wisemon/digitama/posix.rkt" typed/ffi))
   (require (submod ".." prefab:posix.c typed/ffi))
 
   (require/typed/provide (submod "..")

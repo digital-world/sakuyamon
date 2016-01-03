@@ -5,7 +5,7 @@
 @handbook-story{Hello, Sakuyamon!}
 
 As the @deftech{digimon} @deftech{tamer}s, our story always starts with checking the
-@deftech{@hyperlink["http://gyoudmon.org/~wargrey:DigiGnome/digivice.rkt"]{digivice}}
+@deftech{@hyperlink[(format "http://gyoudmon.org/~~wargrey:~a/digivice.rkt" (digimon-gnome))]{digivice}}
 in order to make sure we could talk with the @itech{digimon}s as expected.
 
 @tamer-smart-summary[]

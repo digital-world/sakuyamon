@@ -9,7 +9,7 @@ exec racket -t "$0" -- ${1+"$@"}
 
 @require{../digitama/agent.rkt}
 @require{../digitama/digicore.rkt}
-@require{../../DigiGnome/digitama/tamer.rkt}
+@require{../../wisemon/digitama/tamer.rkt}
 
 (require file/md5)
 (require net/head)
@@ -22,7 +22,7 @@ exec racket -t "$0" -- ${1+"$@"}
 (provide (all-defined-out))
 (provide (all-from-out "../digitama/agent.rkt"))
 (provide (all-from-out net/head net/base64 web-server/http))
-(provide (except-out (all-from-out "../digitama/digicore.rkt" "../../DigiGnome/digitama/tamer.rkt")
+(provide (except-out (all-from-out "../digitama/digicore.rkt" "../../wisemon/digitama/tamer.rkt")
                      exn:break:hang-up? exn:break:terminate?))
 
 (unless (find-executable-path "racket")
