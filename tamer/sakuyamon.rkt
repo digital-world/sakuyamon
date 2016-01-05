@@ -90,7 +90,7 @@ to monitor the logs just as MacOSX @exec{Console.app} does. Therefore here exist
        (test-spec "sakuyamon foxpipe"
                   (check-not-exn (check-port-ready? tamer-foxpipe-port #:type skip)))]
 
-@handbook-bibliography[]
+@handbook-reference[]
 
 @chunk[|<sakuyamon:*>|
        (module+ story

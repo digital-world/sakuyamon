@@ -140,7 +140,7 @@ since the @itech{.realm.rktd} is checked every request.
 
 @racketcommentfont{@itech{@racketcommentfont{Per-Digimon Terminus}} is disabled by default.}
 
-@handbook-bibliography[]
+@handbook-reference[]
 
 @chunk[|<dispatch:*>|
        (module+ story

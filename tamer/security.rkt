@@ -31,7 +31,7 @@ then enjoy it yourself!
                     (match-let ([{list status reason _ _} (curl (/htdocs rpath))])
                       (check-eq? status 418 reason))))]
 
-@handbook-bibliography[]
+@handbook-reference[]
 
 @chunk[|<security:*>|
        (module+ story
