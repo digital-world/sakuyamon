@@ -22,3 +22,5 @@ are safe to run it as @bold{root}, after making as usual it will work properly.
 @include-section[(submod "dispatch.rkt" doc)]
 @include-section[(submod "seo.rkt" doc)]
 @include-section[(submod "security.rkt" doc)]
+
+@handbook-appendix[#:index? #true]
