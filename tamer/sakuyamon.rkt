@@ -4,9 +4,9 @@
 
 @handbook-story{Hello, Sakuyamon!}
 
-As the @deftech{digimon} @deftech{tamer}s, our story always starts with checking the
+As the @deftech{digimon} @deftech{tamers}, our story always starts with checking the
 @deftech{@hyperlink[(format "http://gyoudmon.org/~~wargrey:~a/digivice.rkt" (digimon-gnome))]{digivice}}
-in order to make sure we could talk with the @itech{digimon}s as expected.
+in order to make sure we could talk with the @tech{digimons} as expected.
 
 @tamer-smart-summary[]
 
@@ -23,16 +23,15 @@ in order to make sure we could talk with the @itech{digimon}s as expected.
 
        (module+ tamer |<sakuyamon:*>|)]
 
-@tamer-action[(parameterize ([exit-handler void])
-                (sakuyamon "help"))]
+@tamer-action[(parameterize ([exit-handler void]) (sakuyamon))]
 
 @handbook-scenario{Sakuyamon, Realize!}
 
 @tamer-action[(parameterize ([exit-handler void])
                 (sakuyamon "realize" "--help"))]
 
-@itech{Sakuyamon} herself is designed as a daemon, hence the taming strategy is following this fact.
-If the @itech{tamer} is @italic{root}, she will not realize automatically since she should have already been deloyed
+@tech{@#%digimon} herself is designed as a daemon, hence the taming strategy is following this fact.
+If the @tech{tamer} is @italic{root}, she will not realize automatically since she should have already been deloyed
 and listen on port @racket[80], otherwise she will realize and listen on port @racket[16180] during the taming process.
 
 @tamer-note['realize]
@@ -48,12 +47,12 @@ HTTP protocal has two alternatives, the
 @deftech[#:key "DAA"]{@hyperlink["http://en.wikipedia.org/wiki/Digest_access_authentication"]{Digest Access Authentication}}.
 As lightweight as they are, the only requirement is a @racket[read]able data file @deftech{.realm.rktd}.
 
-@racketcommentfont{See @itech{Per-Digimon Terminus} and @itech{Per-Tamer Terminus} to check how @itech{Sakuyamon} applies it.}
+@racketcommentfont{See @tech{Per-Digimon Terminus} and @tech{Per-Tamer Terminus} to check how @tech{@#%digimon} applies it.}
 
 @tamer-racketbox[(build-path (digimon-stone) "realm.rktd")]
 
 Like @hyperlink["http://en.wikipedia.org/wiki/Digest_access_authentication#The_.htdigest_file"]{@exec{htdigest}},
-@itech{Sakuyamon} has a tool @exec{sphere} to help users to digest their flat @itech{.realm.rktd}s.
+@tech{@#%digimon} has a tool @exec{sphere} to help users to digest their flat @tech{.realm.rktd}s.
 
 @tamer-action[(parameterize ([exit-handler void])
                 (sakuyamon "sphere" "--help"))

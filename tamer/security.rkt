@@ -19,7 +19,7 @@ nonetheless, we can always choose to make things interesting.
 @handbook-scenario{Would you like a cup of tea?}
 
 This is, or is not, an Apirl Fools@literal{'} joke.
-If @itech{Sakuyamon} thinks you are a bad guy, she will send you
+If @tech{@#%digimon} thinks you are a bad guy, she will send you
 @hyperlink["http://en.wikipedia.org/wiki/Hyper_Text_Coffee_Pot_Control_Protocol"]{a cup of tea},
 then enjoy it yourself!
 

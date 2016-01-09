@@ -5,7 +5,7 @@
 @handbook-story{Dispatching and HTTP Access Authentication!}
 
 As an instance of @bold{Racket} @deftech{Web Server},
-@itech{Sakuyamon} is just a configuration of a dispatching server
+@tech{@#%digimon} is just a configuration of a dispatching server
 that serves 3 types of @deftech[#:key "terminus"]{termini}, or @deftech{htdocs}.
 
 @tamer-smart-summary[]
@@ -16,7 +16,7 @@ that serves 3 types of @deftech[#:key "terminus"]{termini}, or @deftech{htdocs}.
        (module+ tamer |<dispatch:*>|)]
 
 @racketcommentfont{For @hyperlink["http://en.wikipedia.org/wiki/Localhost"]{@racketcommentfont{loopback addresses}},
-                    @itech{@racketcommentfont{Sakuyamon}} always trust @deftech[#:key "trusted"]@litchar{::1} and treat
+                    @tech{@racketcommentfont{Sakuyamon}} always trust @deftech[#:key "trusted"]@litchar{::1} and treat
                     @litchar{127.0.0.1} as a public one.}
 
 @tamer-action[(with-handlers ([exn:fail:user? (compose1 displayln exn-message)])
@@ -24,8 +24,8 @@ that serves 3 types of @deftech[#:key "terminus"]{termini}, or @deftech{htdocs}.
 
 @handbook-scenario{Main Terminus}
 
-@deftech{Main Terminus} is the major one shipped with @itech{Sakuyamon},
-all URL paths other than ones of @itech{Per-Tamer Terminus} and @itech{Per-Digimon Terminus}
+@deftech{Main Terminus} is the major one shipped with @tech{@#%digimon},
+all URL paths other than ones of @tech{Per-Tamer Terminus} and @tech{Per-Digimon Terminus}
 are relative to @racket[digimon-terminus].
 
 @tamer-note['dispatch-main]
@@ -36,7 +36,7 @@ are relative to @racket[digimon-terminus].
                     (check-regexp-match #px"^((GET|HEAD|POST),?){3}$" (dict-ref headers 'allow))
                     (check-equal? (dict-ref headers 'terminus) "Main")))]
 
-@deftech{Function URL}s are dispatched only when the requests come from @itech{trusted} clients.
+@deftech{Function URL}s are dispatched only when the requests come from @tech{trusted} clients.
 
 @chunk[|<testcase: dispatch funtion URLs>|
        (for ([d-arc (in-list (list "d-arc/collect-garbage" "d-arc/refresh-servlet"))])
@@ -54,7 +54,7 @@ are relative to @racket[digimon-terminus].
 
 @deftech{Per-Tamer Terminus} is designed for system users to share and discuss their work on the internet
 if they organize it as a @hyperlink[(format "https://github.com/digital-world/~a#digital-world" (digimon-gnome))]{digimon}
-called @deftech{@(digimon-kuzuhamon)}. The first @italic{path element} of URL always has the shape of @litchar{~username}
+called @tech{@(digimon-kuzuhamon)}. The first @italic{path element} of URL always has the shape of @litchar{~username}
 and the rest parts are relative to its own @racket[digimon-terminus]s.
 
 @tamer-note['dispatch-tamer]
@@ -65,15 +65,15 @@ and the rest parts are relative to its own @racket[digimon-terminus]s.
                     (check-regexp-match #px"^((GET|HEAD|POST),?){3}$" (dict-ref headers 'allow))
                     (check-equal? (dict-ref headers 'terminus) "Per-Tamer")))]
 
-Note that @itech{Per-Tamer Terminus} does support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].
-So users should be responsible for their own @itech{function URL}s.
+Note that @tech{Per-Tamer Terminus} does support @secref["stateless" #:doc '(lib "web-server/scribblings/web-server.scrbl")].
+So users should be responsible for their own @tech{function URL}s.
 
 @chunk[|<testcase: dispatch-tamer-funtion-URLs>|
        (for ([d-arc (in-list (list "d-arc/refresh-servlet"))])
          (let ([rhtdocs /tamer]) |<check: function url>|))]
 
 Although users could write their own servlets to protect their contents in a more security way, they still have
-HTTP @itech{DAA} to live a lazy life after putting the @itech{.realm.rktd} in the root of @itech{@(digimon-kuzuhamon)}.
+HTTP @tech{DAA} to live a lazy life after putting the @tech{.realm.rktd} in the root of @tech{@(digimon-kuzuhamon)}.
 
 @chunk[|<testsuite: digest access authentication>|
        (let*-values ([(type lhtdocs rhtdocs) (values 'digest ~tamer /tamer)]
@@ -100,8 +100,8 @@ By the way, users can custom @hyperlink["http://en.wikipedia.org/wiki/HTTP_404"]
 @litchar{404.html} in their own @racket[digimon-stone].
 
 @racketresultfont{After all the dynamic contents might be totally harmful for other
-                   @itech{@racketresultfont{tamer}}s if they are members of the @litchar{tamer} group.
-                   Therefore enabling @itech{@racketresultfont{Per-Tamer Terminus}} at your own risk!}
+                   @tech{@racketresultfont{tamer}s} if they are members of the @litchar{tamer} group.
+                   Therefore enabling @tech{@racketresultfont{Per-Tamer Terminus}} at your own risk!}
 
 @handbook-scenario{Per-Digimon Terminus}
 
@@ -110,7 +110,7 @@ By the way, users can custom @hyperlink["http://en.wikipedia.org/wiki/HTTP_404"]
 should be organized in the @hyperlink[(format "https://github.com/digital-world/~a#digital-world" (digimon-gnome))]{Digital World}.
 The first @italic{path element} of URL always has the shape of @litchar{~username:digimon}
 and the rest parts are relative to @litchar{compiled/handbook} within their own @racket[digimon-tamer]
-where stores the auto-generated @itech{htdocs}.
+where stores the auto-generated @tech{htdocs}.
 
 @racketcommentfont{Note its @litchar{robots.txt} should be placed in @racket[digimon-tamer]
                     since it isn@literal{'}t an auto-generated resource.}
@@ -124,7 +124,7 @@ where stores the auto-generated @itech{htdocs}.
                     (check-equal? (dict-ref headers 'terminus) "Per-Digimon")))]
 
 Sometimes, users may not want to publish their projects@literal{'} documentation, although this is not recommended.
-Nonetheless, @itech{Per-Digimon Terminus} do support HTTP @itech{BAA}, and a @itech{.realm.rktd} within @racket[digimon-tamer]
+Nonetheless, @tech{Per-Digimon Terminus} do support HTTP @tech{BAA}, and a @tech{.realm.rktd} within @racket[digimon-tamer]
 is required to work with @secref["dispatch-passwords" #:doc '(lib "web-server/scribblings/web-server-internal.scrbl")].
 
 @chunk[|<testsuite: basic access authentication>|
@@ -136,9 +136,9 @@ is required to work with @secref["dispatch-passwords" #:doc '(lib "web-server/sc
                      |<testcase: authentication>|))]
 
 By the way, as you may guess, users don@literal{'}t need to refresh passwords manually
-since the @itech{.realm.rktd} is checked every request.
+since the @tech{.realm.rktd} is checked every request.
 
-@racketcommentfont{@itech{@racketcommentfont{Per-Digimon Terminus}} is disabled by default.}
+@racketcommentfont{@tech{@racketcommentfont{Per-Digimon Terminus}} is disabled by default.}
 
 @handbook-reference[]
 
