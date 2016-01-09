@@ -6,7 +6,7 @@
 (define pkg-desc "A Lightweight HTTP Server")
 (define pkg-authors '("WarGrey Ju"))
 
-(define build-deps '{"base" "typed-racket-lib" "scribble-lib" "web-server-lib"})
+(define build-deps '{"base" "math-lib" "typed-racket-lib" "scribble-lib" "rackunit-lib" "web-server-lib"})
 
 (define compile-omit-paths (list "stone"))
 (define test-omit-paths 'all)
